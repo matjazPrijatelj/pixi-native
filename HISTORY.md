@@ -90,3 +90,17 @@
 - Corrected packed vertex enum values to Electrobun/Dawn’s 1-based WGPU numbering after native validation identified the initial zero-based table.
 
 - Corrected the compatibility table to Dawn’s current enum numbering, which includes scalar 8/16-bit vertex formats before the packed variants.
+
+
+## Animation frame fallback — 2026-08-30
+
+- Added a native-first RAF scheduler that uses `GpuWindow.onFrame()` when exposed by Electrobun.
+- Added an idle-aware, drift-corrected 60 Hz timer fallback for unsupported native/compositor APIs.
+- RAF callbacks are coalesced per frame, cancellable, and pending timers stop when idle.
+
+
+## Ubuntu 24 scope — 2026-08-30
+
+- The RAF scheduler is now GTK-ready and reports `gtk` when Electrobun exposes `GpuWindow.onFrame()`.
+- Ubuntu 26 and Windows 11 remain future validation targets; no platform-specific native code was added for them.
+- Electrobun 2.0.1 currently exposes no GTK frame callback, so Ubuntu 24 uses the documented timer fallback until the native API is available upstream.

@@ -36,6 +36,52 @@ export class ElectrobunDOMAdapter {
     public fetch(url: RequestInfo, options?: RequestInit): Promise<Response> { return globalThis.fetch(url, options); }
     public parseXML(): never { throw new Error("XML parsing is not implemented in the native WGPU PoC"); }
 
+    private installFrameScheduler(): void {
+        type FrameCallback = (timestamp: number) => void;
+        const callbacks = new Map<number, FrameCallback>();
+        let nextId = 1;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let deadline = performance.now();
+        const source = typeof (this.gpuWindow as any).onFrame === "function" ? "gtk" : "timer";
+        console.log({ animationFrameSource: source });
+
+        const dispatch = (timestamp: number): void => {
+            timer = undefined;
+            const pending = [...callbacks.entries()];
+            callbacks.clear();
+            for (const [, callback] of pending) callback(timestamp);
+            if (source === "timer") schedule();
+        };
+        const schedule = (): void => {
+            if (!callbacks.size || timer !== undefined) return;
+            if (source === "gtk") return;
+            const now = performance.now();
+            deadline = Math.max(deadline + 1000 / 60, now);
+            const delay = Math.min(1000, Math.max(0, deadline - now));
+            timer = setTimeout(() => dispatch(performance.now()), delay);
+        };
+
+        if (source === "gtk") {
+            const onFrame = (this.gpuWindow as any).onFrame.bind(this.gpuWindow);
+            onFrame((timestamp: number) => {
+                if (callbacks.size) dispatch(timestamp);
+            });
+        }
+        (globalThis as any).requestAnimationFrame = (callback: FrameCallback): number => {
+            const id = nextId++;
+            callbacks.set(id, callback);
+            schedule();
+            return id;
+        };
+        (globalThis as any).cancelAnimationFrame = (id: number): void => {
+            callbacks.delete(id);
+            if (!callbacks.size && timer !== undefined) {
+                clearTimeout(timer);
+                timer = undefined;
+            }
+        };
+    }
+
     public install(): void {
         const canvas2d = this.createCanvas().getContext("2d");
         if (!canvas2d) throw new Error("Skia Canvas2D backend is unavailable");
@@ -68,8 +114,7 @@ export class ElectrobunDOMAdapter {
             };
             const body = makeElement("body");
             if (!(globalThis as any).requestAnimationFrame) {
-                (globalThis as any).requestAnimationFrame = (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16);
-                (globalThis as any).cancelAnimationFrame = (id: number) => clearTimeout(id);
+                this.installFrameScheduler();
             }
             (globalThis as any).document = {
                 baseURI: "file:///",
