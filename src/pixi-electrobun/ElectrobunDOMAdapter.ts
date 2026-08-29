@@ -1,7 +1,29 @@
 import { DOMAdapter } from "pixi.js";
+import { fileURLToPath } from "node:url";
 import type { GpuWindow } from "electrobun/main";
 import { webgpu } from "electrobun/main";
 import { ElectrobunTextCanvas } from "./ElectrobunTextCanvas.ts";
+import { Canvas, Image as SkiaImage } from "skia-canvas";
+
+class ElectrobunImage extends SkiaImage {
+    private pixelCanvas?: Canvas;
+    public override get src(): string { return super.src; }
+    public override set src(value: string | URL | Buffer) {
+        const normalized = value instanceof URL
+            ? (value.protocol === "file:" ? fileURLToPath(value) : value)
+            : (typeof value === "string" && value.startsWith("file:") ? fileURLToPath(value) : value);
+        this.pixelCanvas = undefined;
+        super.src = normalized as never;
+    }
+    public getContext(type: string): unknown {
+        if (type !== "2d") return null;
+        if (!this.pixelCanvas) {
+            this.pixelCanvas = new Canvas(Math.max(1, this.width), Math.max(1, this.height));
+            this.pixelCanvas.getContext("2d").drawImage(this, 0, 0);
+        }
+        return this.pixelCanvas.getContext("2d");
+    }
+}
 
 /** Minimal Pixi environment adapter for Electrobun's native WGPU runtime. */
 export class ElectrobunDOMAdapter {
@@ -29,7 +51,7 @@ export class ElectrobunDOMAdapter {
         return { userAgent: "Electrobun Native WGPU", gpu: webgpu.navigator };
     }
 
-    public createImage(): never { throw new Error("Image loading is not implemented in the native WGPU PoC"); }
+    public createImage(): HTMLImageElement { return new ElectrobunImage() as unknown as HTMLImageElement; }
     public getWebGLRenderingContext(): never { throw new Error("WebGL is intentionally unsupported in this PoC"); }
     public getBaseUrl(): string { return "file:///"; }
     public getFontFaceSet(): null { return null; }
@@ -86,6 +108,8 @@ export class ElectrobunDOMAdapter {
         const canvas2d = this.createCanvas().getContext("2d");
         if (!canvas2d) throw new Error("Skia Canvas2D backend is unavailable");
         DOMAdapter.set(this as never);
+        const globalObject = globalThis as any;
+        if (!globalObject.HTMLCanvasElement) globalObject.HTMLCanvasElement = ElectrobunTextCanvas;
         const globals: Record<string, Record<string, number>> = {
             GPUTextureUsage: { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, STORAGE_BINDING: 8, RENDER_ATTACHMENT: 16 },
             GPUBufferUsage: { MAP_READ: 1, MAP_WRITE: 2, COPY_SRC: 4, COPY_DST: 8, INDEX: 16, VERTEX: 32, UNIFORM: 64, STORAGE: 128, INDIRECT: 256, QUERY_RESOLVE: 512 },
@@ -108,7 +132,8 @@ export class ElectrobunDOMAdapter {
                     contains(child: any) { return element.children.includes(child); },
                     remove() { element.parentNode?.removeChild(element); },
                     addEventListener() {},
-                    removeEventListener() {}
+                    removeEventListener() {},
+                    canPlayType() { return ""; }
                 };
                 return element;
             };

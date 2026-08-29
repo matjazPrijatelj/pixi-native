@@ -104,3 +104,101 @@
 - The RAF scheduler is now GTK-ready and reports `gtk` when Electrobun exposes `GpuWindow.onFrame()`.
 - Ubuntu 26 and Windows 11 remain future validation targets; no platform-specific native code was added for them.
 - Electrobun 2.0.1 currently exposes no GTK frame callback, so Ubuntu 24 uses the documented timer fallback until the native API is available upstream.
+
+
+## Assets texture test — 2026-08-30
+
+- Added a local `assets/test-texture.png` and configured Electrobun to copy it into the packaged app.
+- Implemented Skia-backed `createImage()` so Pixi `Assets.load()` can decode the native image.
+- Demo Sprite now renders the loaded texture instead of `Texture.WHITE`.
+
+- Added the minimal `video.canPlayType()` DOM response required by Pixi Assets loader detection; no video/WebView fallback is enabled.
+
+- Resolved bundled asset URLs from `import.meta.url` so Pixi does not resolve `file:///assets/...` against the host filesystem root.
+
+- Converted the bundled `file://` URL to a filesystem path for Skia Image decoding, matching skia-canvas v3 native loader behavior.
+
+- Replaced `assets/test-texture.png` with a generated Chuck Norris portrait texture for Sprite/Assets validation.
+
+
+## Pixi Assets file URL fix — 2026-08-30
+
+- Updated the Skia-backed `createImage()` adapter to normalize local `file://` URLs with `fileURLToPath()` before decoding.
+- Pixi’s standard `Assets.load()` loader remains unchanged and continues to own caching, retries, and parsing.
+
+- Added a Skia-backed `getContext("2d")` on native images so the existing RGBA texture upload path can consume `Assets.load()` results.
+
+
+## Sprite visibility — 2026-08-30
+
+- Removed the demo tint and increased the loaded Chuck Norris texture Sprite to 220×220 so the image is visually unmistakable during native smoke tests.
+
+
+## Skia Sprite upload fix — 2026-08-30
+
+- Wrapped Electrobun’s existing `copyExternalImageToTexture()` so Skia-backed images use the verified RGBA `writeTexture()` path.
+- Non-Skia sources continue using the native copy implementation.
+
+- Set the loaded Sprite above demo Graphics with an explicit z-index to make texture visibility unambiguous.
+
+
+## Canvas texture bridge — 2026-08-30
+
+- Kept Pixi `Assets.load()` as the standard file loader, then rasterize its Skia image into `ElectrobunTextCanvas` before creating the Sprite texture.
+- This avoids Electrobun’s native Image copy path while preserving the existing RGBA Canvas upload fallback.
+
+- Registered the native canvas wrapper as `HTMLCanvasElement` for Pixi’s standard `Texture.from()` source detection.
+
+
+## Sprite batch control — 2026-08-30
+
+- Added a visible green `Texture.WHITE` control Sprite to distinguish Pixi Sprite batch failures from image texture upload failures.
+
+
+## CanvasSource dimensions fix — 2026-08-30
+
+- Fixed Canvas texture uploads receiving Pixi’s `CanvasSource` wrapper: the fallback now reads `resource`, dimensions, and 2D pixels from the wrapped native canvas instead of uploading a transparent 1×1 texture.
+
+- Fixed CanvasSource uploads that reported a 1×1 copy size: native resource dimensions now take precedence, preserving the full 128×128 Sprite image.
+
+
+## Switchable native tests — 2026-08-30
+
+- Split the demo into independent Graphics, Sprite, and Text test scenes.
+- Added native `GpuWindow` key handling: `1`, `2`, `3` select a test and Space advances to the next one.
+- Each switch recreates the selected scene from its initial state and animates only the active test.
+
+
+## Linux keycode compatibility — 2026-08-30
+
+- Extended test switching to accept both ASCII/GDK keyvals and common X11 hardware keycodes for `1`, `2`, `3`, and Space.
+- Added a one-time key event diagnostic to confirm the native payload on Ubuntu.
+
+
+## Separated visual tests — 2026-08-30
+
+- Moved Graphics, Sprite, and Text test scenes into `src/demo/test/`.
+- Expanded the Text test with multiple sizes, fills, thin outlines, and an unoutlined comparison.
+- Reduced outline widths to keep Skia-rasterized text readable.
+
+
+## FFmpeg decoder foundation — 2026-08-30
+
+- Added `NativeVideoDecoder` with an FFmpeg subprocess RGBA frame stream, dimensions, timestamps, pause/play, and close lifecycle.
+- FFmpeg is not installed in the current environment, so video playback wiring remains opt-in until a local test video and FFmpeg runtime are available.
+
+
+## ffmpeg-static dependency — 2026-08-30
+
+- Added `ffmpeg-static@5.3.0` as a pnpm dependency for platform-specific Linux/Windows/macOS FFmpeg binaries.
+- `NativeVideoDecoder` now discovers the packaged binary automatically while retaining an explicit `ffmpegPath` override.
+- The package is GPL-3.0-or-later; bundled FFmpeg license files remain alongside the binary.
+
+
+## Video demo test — 2026-08-30
+
+- Added the local Big Buck Bunny 720p/10s sample under `assets/` and copied it into Electrobun bundles.
+- Added test 4, which decodes FFmpeg RGBA frames into a Skia canvas and refreshes a Pixi Sprite texture.
+- Space cycles through Graphics, Sprite, Text, and Video; key `4` selects the video test directly.
+- Bundled the platform FFmpeg executable alongside the app; the decoder prefers it and falls back to the package/system binary.
+- Video playback is software-decoded and silent; pause/seek/audio and Windows 11/Ubuntu 26 validation remain future work.

@@ -11,16 +11,23 @@ export async function createPixiRenderer(window: GpuWindow): Promise<Application
     const device = await adapter.requestDevice();
     installWebGPUDiagnostics(device);
     const queue = device.queue as any;
-    if (typeof queue.copyExternalImageToTexture !== "function") {
-        queue.copyExternalImageToTexture = ({ source }: any, destination: any, copySize: any) => {
-            const width = Math.max(1, Number(copySize?.width ?? copySize?.[0] ?? source?.width ?? destination?.texture?.width ?? 1) || 1);
-            const height = Math.max(1, Number(copySize?.height ?? copySize?.[1] ?? source?.height ?? destination?.texture?.height ?? 1) || 1);
-            const context = source.getContext?.("2d");
-            if (!context?.getImageData) throw new Error("Canvas source cannot provide RGBA pixels");
-            const pixels = context.getImageData(0, 0, width, height).data;
-            queue.writeTexture(destination, pixels, { bytesPerRow: width * 4, rowsPerImage: height }, { width, height, depthOrArrayLayers: 1 });
-        };
-    }
+    const nativeCopyExternalImageToTexture = queue.copyExternalImageToTexture?.bind(queue);
+    queue.copyExternalImageToTexture = ({ source }: any, destination: any, copySize: any) => {
+        const resource = source?.resource ?? source;
+        const context = resource?.getContext?.("2d") ?? source?.getContext?.("2d");
+        if (!context?.getImageData) {
+            if (!nativeCopyExternalImageToTexture) throw new Error("Canvas source cannot provide RGBA pixels");
+            return nativeCopyExternalImageToTexture({ source }, destination, copySize);
+        }
+        const width = Math.max(1, Number(resource?.width ?? source?.width ?? copySize?.width ?? copySize?.[0] ?? destination?.texture?.width ?? 1) || 1);
+        const height = Math.max(1, Number(resource?.height ?? source?.height ?? copySize?.height ?? copySize?.[1] ?? destination?.texture?.height ?? 1) || 1);
+        const pixels = context.getImageData(0, 0, width, height).data;
+        if ((queue.__externalImageUploadCount ?? 0) < 8) {
+            queue.__externalImageUploadCount = (queue.__externalImageUploadCount ?? 0) + 1;
+            console.log({ externalImageUpload: true, sourceKeys: Object.keys(source ?? {}), resourceKeys: Object.keys(resource ?? {}), resourceWidth: resource?.width, resourceHeight: resource?.height, width, height, firstPixel: Array.from(pixels.slice(0, 4)), textureFormat: destination?.texture?.format, textureSize: [destination?.texture?.width, destination?.texture?.height] });
+        }
+        queue.writeTexture(destination, pixels, { bytesPerRow: width * 4, rowsPerImage: height }, { width, height, depthOrArrayLayers: 1 });
+    };
     const format = webgpu.navigator.getPreferredCanvasFormat();
     created.context.configure({ device, format, alphaMode: "premultiplied" });
 
