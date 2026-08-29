@@ -1,0 +1,36 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# Electrobun, Hutch, and generated build output
+build/
+artifacts/
+.hutch/
+.cottontail-tmp/
+
+# Coverage and temporary caches
+coverage/
+.cache/
+.tmp/
+tmp/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db

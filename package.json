@@ -1,0 +1,25 @@
+{
+    "name": "pixi-electrobun-wgpu",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "electrobun dev",
+        "build": "electrobun build",
+        "typecheck": "tsc --noEmit",
+        "test": "node --test"
+    },
+    "dependencies": {
+        "electrobun": "2.0.1",
+        "pixi.js": "8.20.0",
+        "skia-canvas": "3.0.8"
+    },
+    "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.7.2"
+    },
+    "engines": {
+        "bun": ">=1.4.0"
+    },
+    "packageManager": "pnpm@9.15.9"
+}
