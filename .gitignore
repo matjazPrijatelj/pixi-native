@@ -2,11 +2,8 @@
 node_modules/
 .pnpm-store/
 
-# Electrobun, Hutch, and generated build output
+# Generated build output
 build/
-artifacts/
-.hutch/
-.cottontail-tmp/
 
 # Coverage and temporary caches
 coverage/
@@ -34,3 +31,18 @@ bun-debug.log*
 # Operating-system metadata
 .DS_Store
 Thumbs.db
+
+# Native addon build output
+native/**/target/
+native/**/build/
+native/**/dawn/
+native/**/depot_tools/
+
+# Keep the Linux x64 prebuilt addon; ignore any other generated dist files
+native/**/dist/
+!native/gpu/dist/
+!native/gpu/dist/dawn.node
+
+# Crash dumps
+core
+core.*

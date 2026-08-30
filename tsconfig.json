@@ -6,8 +6,8 @@
         "strict": true,
         "skipLibCheck": true,
         "noEmit": true,
-        "types": ["bun"],
+        "types": ["node"],
         "allowImportingTsExtensions": true
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "electrobun.config.ts"]
+    "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

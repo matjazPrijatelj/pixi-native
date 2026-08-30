@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, Sprite } from "pixi.js";
 import { createGraphicsTest } from "./test/GraphicsTest.ts";
 import { createSpriteTest } from "./test/SpriteTest.ts";
 import { createTextTest } from "./test/TextTest.ts";

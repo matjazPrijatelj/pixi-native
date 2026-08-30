@@ -1,0 +1,14 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a31c6a90..70584fd6 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -27,6 +27,9 @@ project(absl LANGUAGES CXX)
+ set(ABSL_SOVERSION 0)
+ include(CTest)
+ 
++set(CMAKE_CXX_VISIBILITY_PRESET hidden)
++set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
++
+ # Output directory is correct by default for most build setups. However, when
+ # building Abseil as a DLL, it is important to have the DLL in the same
+ # directory as the executable using it. Thus, we put all executables in a single

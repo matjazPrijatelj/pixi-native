@@ -1,73 +1,65 @@
-import { GpuWindow } from "electrobun/main";
 import { fileURLToPath } from "node:url";
-import { Assets, Texture } from "pixi.js";
-import { createPixiRenderer } from "./pixi-electrobun/createPixiRenderer.ts";
-import { ElectrobunTextCanvas } from "./pixi-electrobun/ElectrobunTextCanvas.ts";
-import { animateDemoScene, createGraphicsTest, createSpriteTest, createTextTest, createVideoTest } from "./demo/DemoScene.ts";
 
-const win = new GpuWindow({ title: "PixiJS Native WGPU", frame: { width: 1280, height: 720 } });
-const app = await createPixiRenderer(win);
+if (!(globalThis as any).navigator) {
+    Object.defineProperty(globalThis, "navigator", { value: { userAgent: "Node Native WebGPU" }, configurable: true });
+}
+const { Assets, Texture } = await import("pixi.js");
+const { createPixiRenderer } = await import("./pixi-node/createPixiRenderer.ts");
+const { NodeTextCanvas } = await import("./pixi-node/NodeTextCanvas.ts");
+const { animateDemoScene, createGraphicsTest, createSpriteTest, createTextTest, createVideoTest } = await import("./demo/DemoScene.ts");
+const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
+const { getSceneIndexForKey } = await import("./demo/sceneNavigation.ts");
+const { app, native } = await createPixiRenderer();
 const texturePath = fileURLToPath(new URL("../assets/test-texture.png", import.meta.url));
-const loadedTexture = await Assets.load(texturePath);
-const image = (loadedTexture as any).source?.resource;
-const canvas = new ElectrobunTextCanvas(loadedTexture.width, loadedTexture.height);
-const canvasContext = canvas.getContext("2d") as any;
-if (!image || !canvasContext?.drawImage) throw new Error("Assets image cannot be rasterized into native Canvas2D");
-canvasContext.drawImage(image, 0, 0, loadedTexture.width, loadedTexture.height);
-const texture = Texture.from(canvas as any);
-console.log({ asset: texturePath, loadedWidth: loadedTexture.width, loadedHeight: loadedTexture.height, spriteTextureWidth: texture.width, spriteTextureHeight: texture.height, sourceResource: image.constructor?.name });
-const testFactories = [
-    () => createGraphicsTest(),
-    () => createSpriteTest(texture),
-    () => createTextTest(),
-    () => createVideoTest(fileURLToPath(new URL("../assets/Big_Buck_Bunny_720_10s_20MB.mp4", import.meta.url)))
-] as const;
-const testNames = ["graphics", "sprite", "text", "video"] as const;
-let activeTestIndex = 0;
-let scene = testFactories[activeTestIndex]();
+const loaded = await Assets.load(texturePath);
+const image = (loaded as any).source?.resource;
+const textCanvas = new NodeTextCanvas(loaded.width, loaded.height);
+const context = textCanvas.getContext("2d") as any;
+if (!image || !context?.drawImage) throw new Error("Native image cannot be rasterized");
+context.drawImage(image, 0, 0, loaded.width, loaded.height);
+const texture = Texture.from(textCanvas as never);
+const videoPath = fileURLToPath(new URL("../assets/Big_Buck_Bunny_1080_30s.mp4", import.meta.url));
+const scenes = [() => createGraphicsTest(), () => createSpriteTest(texture), () => createTextTest(), () => createVideoTest(videoPath, { width: native.canvas.width, height: native.canvas.height })];
+let index = 0;
+let scene = scenes[index]();
 app.stage.addChild(scene);
-const selectTest = (index: number): void => {
-    activeTestIndex = (index + testFactories.length) % testFactories.length;
-    app.stage.removeChild(scene);
-    scene = testFactories[activeTestIndex]();
-    app.stage.addChild(scene);
-    console.log({ activeTest: testNames[activeTestIndex] });
+const fpsOverlay = new FpsOverlay();
+app.stage.addChild(fpsOverlay);
+fpsOverlay.alignRight(native.canvas.width);
+const resizeActiveScene = (): void => {
+    const resizable = scene as typeof scene & { resize?: (width: number, height: number) => void };
+    resizable.resize?.(native.canvas.width, native.canvas.height);
+    fpsOverlay.alignRight(native.canvas.width);
 };
-let loggedKeyEvent = false;
-win.on("keyDown", (event: any) => {
-    const data = event?.data ?? event;
-    if (!loggedKeyEvent) {
-        loggedKeyEvent = true;
-        console.log({ keyEvent: data });
-    }
-    if (data?.isRepeat) return;
-    const keyCode = Number(data?.keyCode);
-    if (keyCode === 49 || keyCode === 0x31 || keyCode === 10) selectTest(0);
-    else if (keyCode === 50 || keyCode === 0x32 || keyCode === 11) selectTest(1);
-    else if (keyCode === 51 || keyCode === 0x33 || keyCode === 12) selectTest(2);
-    else if (keyCode === 52 || keyCode === 0x34 || keyCode === 13) selectTest(3);
-    else if (keyCode === 32 || keyCode === 0x20 || keyCode === 65) selectTest(activeTestIndex + 1);
+const selectScene = (nextIndex: number): void => {
+    if (nextIndex === index) return;
+    app.stage.removeChild(scene);
+    index = nextIndex;
+    scene = scenes[index]();
+    app.stage.addChild(scene);
+};
+native.window.on("resize", resizeActiveScene);
+native.window.on("keyDown", (event) => {
+    const nextIndex = getSceneIndexForKey(event.key, index, scenes.length, event.repeat);
+    if (nextIndex !== null) selectScene(nextIndex);
 });
-console.log({ activeTest: testNames[activeTestIndex], controls: "1 Graphics  2 Sprite  3 Text  4 Video  Space Next" });
-
-let frames = 0;
-let total = 0;
-let max = 0;
-let previous = performance.now();
 app.ticker.add((ticker) => {
     animateDemoScene(scene, ticker.deltaMS);
-    const now = performance.now();
-    const frameTime = now - previous;
-    previous = now;
-    frames += 1;
-    total += frameTime;
-    max = Math.max(max, frameTime);
+    fpsOverlay.tick(ticker.deltaMS);
+    app.renderer.render(app.stage);
+    native.renderer.swap();
 });
-setInterval(() => {
-    console.log({ fps: frames / 5, averageFrameTimeMs: frames ? total / frames : 0, maxFrameTimeMs: max, renderer: "webgpu" });
-    frames = 0;
-    total = 0;
-    max = 0;
-}, 5000);
-
-win.show();
+app.ticker.start();
+let shuttingDown = false;
+const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    app.ticker.stop();
+    const queue = native.device.queue as GPUQueue & { onSubmittedWorkDone?: () => Promise<void> };
+    await queue.onSubmittedWorkDone?.();
+    app.destroy(true);
+    native.destroy();
+    process.exit(0);
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
