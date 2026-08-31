@@ -9,9 +9,11 @@ export class NodeDOMAdapter {
     public readonly isOffscreenCanvasSupported = false;
 
     private readonly gpu: NodeGPUInstance;
+    private readonly refreshRateHz: number;
 
-    public constructor(gpu: NodeGPUInstance) {
+    public constructor(gpu: NodeGPUInstance, refreshRateHz = 60) {
         this.gpu = gpu;
+        this.refreshRateHz = normalizeRefreshRate(refreshRateHz);
     }
 
     public createCanvas(width = 1, height = 1): HTMLCanvasElement {
@@ -42,8 +44,13 @@ export class NodeDOMAdapter {
     public parseXML(): never { throw new Error("XML parsing is not implemented in the native WGPU PoC"); }
 
     private installFrameScheduler(): void {
-        const scheduler = new FrameScheduler();
-        console.log({ animationFrameSource: "timer" });
+        const scheduler = new FrameScheduler({
+            frameIntervalMS: 1000 / this.refreshRateHz,
+        });
+        console.log({
+            animationFrameSource: "deadline timer",
+            refreshRateHz: this.refreshRateHz,
+        });
         (globalThis as any).requestAnimationFrame = (callback: FrameRequestCallback): number =>
             scheduler.request(callback);
         (globalThis as any).cancelAnimationFrame = (id: number): void => {
@@ -105,4 +112,12 @@ export class NodeDOMAdapter {
         }
         if (!globalThis.requestAnimationFrame) this.installFrameScheduler();
     }
+}
+
+export function normalizeRefreshRate(refreshRateHz: number): number {
+    return Number.isFinite(refreshRateHz) &&
+        refreshRateHz >= 24 &&
+        refreshRateHz <= 360
+        ? refreshRateHz
+        : 60;
 }

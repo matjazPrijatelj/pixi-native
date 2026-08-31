@@ -413,12 +413,12 @@ fn consume_ffmpeg_output(
     let frame_bytes = nv12_frame_bytes(width, height)?;
     let start_timestamp_us = (start_time * 1_000_000.0).round() as i64;
     let mut frame_index = 0_i64;
+    let mut data = vec![0_u8; frame_bytes];
     let read_result = loop {
         if state.closed.load(Ordering::SeqCst) {
             break Ok(());
         }
 
-        let mut data = vec![0_u8; frame_bytes];
         match stdout.read_exact(&mut data) {
             Ok(()) => {
                 let timestamp_us =
@@ -427,11 +427,11 @@ fn consume_ffmpeg_output(
                 state.decoded_frames.fetch_add(1, Ordering::SeqCst);
 
                 if let Ok(mut latest) = state.latest.lock() {
-                    if latest
-                        .replace(PendingFrame { timestamp_us, data })
-                        .is_some()
-                    {
+                    if let Some(previous) = latest.replace(PendingFrame { timestamp_us, data }) {
+                        data = previous.data;
                         state.dropped_frames.fetch_add(1, Ordering::SeqCst);
+                    } else {
+                        data = vec![0_u8; frame_bytes];
                     }
                 }
             }

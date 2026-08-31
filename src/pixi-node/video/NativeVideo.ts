@@ -443,7 +443,11 @@ export class VideoFpsMeter {
     }
 
     public observe(timestampMs: number): number | null {
-        if (this.startedAtMs === undefined) this.startedAtMs = timestampMs;
+        if (this.startedAtMs === undefined) {
+            this.startedAtMs = timestampMs;
+            this.frameCount = 0;
+            return null;
+        }
         this.frameCount++;
         const elapsedMs = timestampMs - this.startedAtMs;
         if (elapsedMs < this.sampleWindowMs) return null;

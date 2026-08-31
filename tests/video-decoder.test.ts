@@ -146,7 +146,7 @@ test("VideoFpsMeter reports measured FPS after its sample window", () => {
     const meter = new VideoFpsMeter(500);
     assert.equal(meter.observe(1000), null);
     assert.equal(meter.observe(1100), null);
-    assert.equal(meter.observe(1500), 6);
+    assert.equal(meter.observe(1500), 4);
 });
 
 class FakeDecoderFactory implements NativeVideoDependencies {

@@ -9,6 +9,7 @@ export function prepareRgbaPixelsForUpload(
     source: Uint8Array | Uint8ClampedArray,
     format: RgbaUploadFormat,
     premultiplyAlpha: boolean,
+    reusableDestination?: Uint8Array,
 ): Uint8Array {
     if (source.byteLength % 4 !== 0) {
         throw new Error(
@@ -27,7 +28,12 @@ export function prepareRgbaPixelsForUpload(
         );
     }
 
-    const destination = new Uint8Array(source.byteLength);
+    const destination = reusableDestination ?? new Uint8Array(source.byteLength);
+    if (destination.byteLength !== source.byteLength) {
+        throw new Error(
+            `RGBA destination has ${destination.byteLength} bytes; expected ${source.byteLength}`,
+        );
+    }
 
     if (!premultiplyAlpha && source.byteOffset % 4 === 0) {
         const sourceWords = new Uint32Array(
@@ -62,4 +68,17 @@ export function prepareRgbaPixelsForUpload(
     }
 
     return destination;
+}
+
+/** Returns one bounded staging allocation for each encountered pixel-buffer size. */
+export function getReusableUploadBuffer(
+    buffers: Map<number, Uint8Array>,
+    byteLength: number,
+): Uint8Array {
+    let buffer = buffers.get(byteLength);
+    if (!buffer) {
+        buffer = new Uint8Array(byteLength);
+        buffers.set(byteLength, buffer);
+    }
+    return buffer;
 }

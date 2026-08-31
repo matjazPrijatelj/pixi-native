@@ -17,6 +17,7 @@ const {
   createSpriteTest,
   createTextTest,
   createVideoTest,
+  disposeDemoScene,
 } = await import("./demo/DemoScene.ts");
 
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
@@ -44,15 +45,21 @@ const texture = Texture.from({
   format: "rgba8unorm",
 });
 
-const videoFiles = [
-  "Big_Buck_Bunny_1080_10s_5MB.mp4",
-  "Big_Buck_Bunny_1080_30s.mp4",
-  "Big_Buck_Bunny_720_10s_20MB.mp4",
-  "cutting_orange_tuil_8s_3484kbps_2160p_59.94fps_h264.mp4",
-  "water_netflix_15000kbps_2160p_59.94fps_h264.mp4",
+const videos = [
+  { file: "Big_Buck_Bunny_1080_10s_5MB.mp4", fps: 60 },
+  { file: "Big_Buck_Bunny_1080_30s.mp4", fps: 24 },
+  { file: "Big_Buck_Bunny_720_10s_20MB.mp4", fps: 30 },
+  {
+    file: "cutting_orange_tuil_8s_3484kbps_2160p_59.94fps_h264.mp4",
+    fps: 60_000 / 1_001,
+  },
+  {
+    file: "water_netflix_15000kbps_2160p_59.94fps_h264.mp4",
+    fps: 19_001 / 317,
+  },
 ];
 
-const videoPaths = videoFiles.map((file) =>
+const videoPaths = videos.map(({ file }) =>
   fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
 );
 
@@ -73,7 +80,8 @@ if (videoSceneIndex !== null) {
     createVideoTest(
       videoPaths[videoIndex],
       { width: native.canvas.width, height: native.canvas.height },
-      videoFiles[videoIndex],
+      videos[videoIndex].file,
+      videos[videoIndex].fps,
     ),
   );
 }
@@ -87,7 +95,7 @@ fpsOverlay.alignRight(native.canvas.width);
 
 const selectScene = (nextIndex: number): void => {
   if (nextIndex === index) return;
-  app.stage.removeChild(scene);
+  disposeDemoScene(scene);
   index = nextIndex;
   scene = scenes[index]();
   app.stage.addChild(scene);
@@ -95,7 +103,7 @@ const selectScene = (nextIndex: number): void => {
 
 const selectVideo = (nextVideoIndex: number): void => {
   if (index !== videoSceneIndex || nextVideoIndex === videoIndex) return;
-  app.stage.removeChild(scene);
+  disposeDemoScene(scene);
   videoIndex = nextVideoIndex;
   scene = scenes[index]();
   app.stage.addChild(scene);
@@ -165,11 +173,16 @@ const shutdown = async (): Promise<void> => {
   if (shuttingDown) return;
   shuttingDown = true;
   app.ticker.stop();
+  disposeDemoScene(scene);
   const queue = native.device.queue as GPUQueue & {
     onSubmittedWorkDone?: () => Promise<void>;
   };
   await queue.onSubmittedWorkDone?.();
-  app.destroy({ removeView: true });
+  texture.destroy(true);
+  app.destroy(
+    { removeView: true },
+    { children: true, context: true, style: true },
+  );
   native.destroy();
   process.exit(0);
 };
@@ -188,6 +201,7 @@ const restartApp = async (): Promise<void> => {
   shuttingDown = true;
 
   app.ticker.stop();
+  disposeDemoScene(scene);
 
   try {
     const queue = native.device.queue as GPUQueue & {
@@ -198,7 +212,11 @@ const restartApp = async (): Promise<void> => {
   } catch {}
 
   try {
-    app.destroy({ removeView: true });
+    texture.destroy(true);
+    app.destroy(
+      { removeView: true },
+      { children: true, context: true, style: true },
+    );
   } catch {}
 
   try {

@@ -51,7 +51,7 @@ The preflight runs before any generated native directories are removed and repor
 
 ## Demo
 
-The demo cycles through Graphics, Sprite, normal Pixi Text, and native video on Windows x64 and Linux x64. It shows a continuously updated FPS overlay in the upper-right corner and logs renderer, backend, adapter, and presentation format. The Sprite uses `assets/test-texture.png`; image and normal Text rasterization use the native Skia-backed `NodeCanvas` adapter.
+The demo cycles through Graphics, Sprite, normal Pixi Text, and native video on Windows x64 and Linux x64. It shows FPS, average frame time, and frame-time jitter in the upper-right corner and logs renderer, backend, adapter, display refresh rate, and presentation format. RAF uses deadline-based timers matched to SDL's current display refresh rate, while FIFO presentation provides vsync. The Sprite uses `assets/test-texture.png`; image and normal Text rasterization use the native Skia-backed `NodeCanvas` adapter.
 
 The video scene uses FFmpeg D3D11VA on Windows and VA-API on Linux, with an automatic CPU fallback when the hardware decoder cannot handle a source. Set `FFMPEG_VAAPI_DEVICE` to override the default Linux device `/dev/dri/renderD128`. The 4K High 4:2:2 samples in `assets` may use the fallback on hardware that supports only 4:2:0 decode.
 
@@ -72,7 +72,9 @@ FFmpeg executable lookup uses this order:
 
 Production packaging may place a verified FFmpeg executable in the app-relative location above. The binary is intentionally not downloaded or committed by this repository; the distributor must include the license and comply with the selected FFmpeg build's LGPL/GPL configuration.
 
-`NativeVideo` provides `play()`, `pause()`, writable `currentTime`, `paused`, `ended`, backend/error state, and decode/presentation/drop statistics. Pause and seek restart the subprocess at the selected position. Audio, duration metadata, looping, and a shared audio/video clock are planned separately. On the video scene, use Up/Down to cycle through all MP4 files in `assets`.
+`NativeVideo` provides `play()`, `pause()`, writable `currentTime`, `paused`, `ended`, backend/error state, and decode/presentation/drop statistics. Pause and seek restart the subprocess at the selected position. The demo supplies each bundled asset's real 24/30/59.94/60 fps to FFmpeg instead of forcing a common output cadence. Applications should likewise pass the source frame rate in `NativeVideoOptions`. Audio, duration metadata, looping, automatic stream probing, and a shared audio/video clock are planned separately. On the video scene, use Up/Down to cycle through all MP4 files in `assets`.
+
+Demo scene transitions use strict ownership rather than caching: the outgoing scene recursively destroys its Pixi renderables, Text GPU data, and owned Graphics contexts. Video scenes additionally close FFmpeg and release both NV12 texture planes, shader bind groups, geometry, and vertex/index buffers. Shared application textures are retained until application shutdown.
 
 Scenes are selected with `1`–`4`. Use the left and right arrow keys to move between scenes. Key-repeat events are ignored.
 

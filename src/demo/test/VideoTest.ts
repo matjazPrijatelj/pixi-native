@@ -5,18 +5,19 @@ import {
     VideoFpsMeter,
 } from "../../pixi-node/video/index.ts";
 import { fitVideoRect } from "../videoLayout.ts";
+import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 
 const WIDTH = 1280;
 const HEIGHT = 720;
-const FPS = 24;
 const VIDEO_TOP_INSET = 92;
 
 export function createVideoTest(
     source: string,
     viewport: { width: number; height: number },
     label = source,
-): Container {
-    const scene = new Container();
+    fps = 30,
+): DisposableDemoScene {
+    const scene = new Container() as DisposableDemoScene;
     const fileName = label.split(/[\\/]/).pop() ?? label;
     scene.addChild(
         new Text({
@@ -33,7 +34,7 @@ export function createVideoTest(
     const video = new NativeVideo(source, {
         width: WIDTH,
         height: HEIGHT,
-        fps: FPS,
+        fps,
     });
     const sprite = new NativeVideoSprite(video);
     const uploadFpsMeter = new VideoFpsMeter();
@@ -52,7 +53,7 @@ export function createVideoTest(
     });
     status.position.set(24, 60);
 
-    const videoScene = scene as Container & {
+    const videoScene = scene as DisposableDemoScene & {
         resize(width: number, height: number): void;
         update(): void;
     };
@@ -89,7 +90,7 @@ export function createVideoTest(
                 ? "paused"
                 : `${video.currentTime.toFixed(2)} s`;
         status.text =
-            `NV12 BT.709 limited / ${video.backend}` +
+            `NV12 BT.709 limited / ${video.backend} / ${fps.toFixed(2)} fps` +
             ` | UP: ${uploadFps}` +
             ` | decoded/presented/dropped: ${stats.decodedFrames}/` +
             `${stats.presentedFrames}/${stats.droppedFrames}` +
@@ -97,15 +98,19 @@ export function createVideoTest(
             ` | ${state}`;
     };
 
+    let disposed = false;
     void video.play().catch((error: unknown) => {
+        if (disposed) return;
         const message = error instanceof Error ? error.message : String(error);
         status.text = `Video error: ${message}`;
         console.error("[VideoTest] FFmpeg NV12 decoder failed", error);
     });
 
-    scene.on("removed", () => {
+    videoScene.dispose = () => {
+        if (disposed) return;
+        disposed = true;
+        videoScene.update = (): void => undefined;
         video.destroy();
-        sprite.destroy();
-    });
+    };
     return videoScene;
 }

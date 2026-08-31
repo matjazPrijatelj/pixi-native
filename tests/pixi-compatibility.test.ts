@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { FrameScheduler } from "../src/pixi-node/FrameScheduler.ts";
-import { prepareRgbaPixelsForUpload } from "../src/pixi-node/rgbaUpload.ts";
+import {
+    getReusableUploadBuffer,
+    prepareRgbaPixelsForUpload,
+} from "../src/pixi-node/rgbaUpload.ts";
 import { normalizeGpuBindGroupIndex } from "../src/pixi-node/gpuCompatibility.ts";
 
 test("Canvas RGBA pixels are reordered for BGRA textures", () => {
@@ -34,6 +37,23 @@ test("Canvas pixels retain RGBA order and support premultiplied alpha", () => {
     );
 });
 
+test("Canvas conversion reuses bounded staging buffers by byte length", () => {
+    const buffers = new Map<number, Uint8Array>();
+    const first = getReusableUploadBuffer(buffers, 4);
+    const second = getReusableUploadBuffer(buffers, 4);
+    const converted = prepareRgbaPixelsForUpload(
+        new Uint8Array([10, 20, 30, 255]),
+        "bgra8unorm",
+        false,
+        first,
+    );
+
+    assert.equal(first, second);
+    assert.equal(converted, first);
+    assert.deepEqual(Array.from(converted), [30, 20, 10, 255]);
+    assert.equal(buffers.size, 1);
+});
+
 test("native Dawn bind-group indices are normalized to numbers", () => {
     assert.equal(normalizeGpuBindGroupIndex("2"), 2);
     assert.equal(normalizeGpuBindGroupIndex(1), 1);
@@ -64,8 +84,34 @@ test("frame scheduler skips missed slots without an immediate catch-up frame", (
     timers[0].callback();
 
     assert.deepEqual(timestamps, [35]);
-    assert.equal(timers[1].delayMS, 5);
+    assert.equal(timers[1].delayMS, 9.5);
     assert.ok(timers[1].delayMS > 0);
+});
+
+test("frame scheduler rearms when a timer fires before its deadline", () => {
+    let now = 0;
+    const timers: Array<{ callback: () => void; delayMS: number }> = [];
+    const timestamps: number[] = [];
+    const scheduler = new FrameScheduler({
+        now: () => now,
+        frameIntervalMS: 10,
+        earlyToleranceMS: 0,
+        setTimer: (callback, delayMS) => {
+            timers.push({ callback, delayMS });
+            return timers.length;
+        },
+    });
+
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    now = 8;
+    timers[0].callback();
+
+    assert.deepEqual(timestamps, []);
+    assert.equal(timers[1].delayMS, 2);
+
+    now = 10;
+    timers[1].callback();
+    assert.deepEqual(timestamps, [10]);
 });
 
 test("canceling the final frame request clears its timer", () => {

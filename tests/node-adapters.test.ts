@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { NodeDOMAdapter } from "../src/pixi-node/NodeDOMAdapter.ts";
+import {
+    NodeDOMAdapter,
+    normalizeRefreshRate,
+} from "../src/pixi-node/NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "../src/pixi-node/NodeGPUCanvas.ts";
 import { NodeCanvas } from "../src/pixi-node/NodeCanvas.ts";
 
@@ -67,4 +70,11 @@ test("NodeDOMAdapter loads a local image into a Canvas2D context", async () => {
     const context = canvas.getContext("2d") as CanvasRenderingContext2D;
     context.drawImage(image, 0, 0);
     assert.equal(context.getImageData(0, 0, 1, 1).data.length, 4);
+});
+
+test("display refresh rates are validated for frame scheduling", () => {
+    assert.equal(normalizeRefreshRate(59.94), 59.94);
+    assert.equal(normalizeRefreshRate(144), 144);
+    assert.equal(normalizeRefreshRate(0), 60);
+    assert.equal(normalizeRefreshRate(Number.NaN), 60);
 });

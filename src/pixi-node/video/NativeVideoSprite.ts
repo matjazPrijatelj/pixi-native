@@ -133,7 +133,7 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
         this.onRender = null;
         super.destroy();
         this.ownedShader.destroy(false);
-        this.ownedGeometry.destroy();
+        this.ownedGeometry.destroy(true);
         this.ownedTexture.destroy(true);
         this.uvSource.destroy();
     }

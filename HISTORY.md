@@ -2,6 +2,12 @@
 
 ## 2026-08-31
 
+- Fixed Text/Video scene-switch resource retention by replacing remove-only transitions with recursive scene disposal, explicitly closing video decoders, destroying owned mesh buffers, and fully cleaning the active scene during restart and shutdown.
+- Added bounded reusable RGBA-to-BGRA staging buffers for native Canvas/Text uploads while preserving externally owned Sprite textures during scene disposal.
+- Verified 36 Node tests, TypeScript, Rust tests and Clippy, the native-video release build, and D3D12 resource cleanup: Text registrations return to zero and video managed textures return from three to the single renderer baseline after disposal.
+- Smoothed native animation pacing by matching RAF deadlines to the SDL display refresh rate, rejecting early Node timer callbacks, enabling WebGPU MSAA, and retaining missed-frame skipping without catch-up bursts.
+- Preserved each demo video's real 24/30/59.94/60 fps instead of forcing all FFmpeg output to 24 fps, corrected upload-FPS measurement, and reused superseded native NV12 buffers to reduce decoder allocation pressure.
+- Verified the optimized path with 32 Node tests, TypeScript, Rust tests and Clippy, a D3D12/FIFO runtime launch at the detected 60 Hz refresh rate, and a 60 fps D3D11VA decode smoke test with 104 decoded, 102 presented, and 2 dropped frames.
 - Replaced per-frame CPU RGBA conversion and upload with packed NV12 delivery, zero-copy N-API Y/UV views, `r8unorm`/`rg8unorm` textures, and a Pixi WebGPU Mesh shader for BT.709 limited-range conversion.
 - Added `NativeVideo` and `NativeVideoSprite` with play, pause/resume, writable `currentTime` seek, latest-frame-wins delivery, backend/error state, and decoded/presented/dropped frame statistics.
 - Enabled the native video path on Windows/D3D11VA and Linux/VA-API with CPU fallback, plus app-relative bundled FFmpeg lookup after explicit and environment overrides.

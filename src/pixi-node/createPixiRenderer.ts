@@ -1,7 +1,10 @@
 import { Application, VERSION } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
-import { NodeDOMAdapter } from "./NodeDOMAdapter.ts";
+import {
+  NodeDOMAdapter,
+  normalizeRefreshRate,
+} from "./NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
 import { NodeCanvas } from "./NodeCanvas.ts";
 import type {
@@ -11,6 +14,7 @@ import type {
 } from "./nativeTypes.ts";
 import { resolveGpuBackend } from "./platform.ts";
 import {
+  getReusableUploadBuffer,
   prepareRgbaPixelsForUpload,
   type RgbaUploadFormat,
 } from "./rgbaUpload.ts";
@@ -52,6 +56,7 @@ export async function createPixiRenderer(): Promise<{
   const device = await adapter.requestDevice();
 
   const queue = device.queue as any;
+  const rgbaUploadBuffers = new Map<number, Uint8Array>();
   const nativeCopyExternalImageToTexture =
     queue.copyExternalImageToTexture?.bind(queue);
 
@@ -130,10 +135,17 @@ export async function createPixiRenderer(): Promise<{
         `Native Canvas upload does not support ${format} textures`,
       );
     }
+    const requiresStagingBuffer =
+      format === "bgra8unorm" ||
+      format === "bgra8unorm-srgb" ||
+      (premultiplyAlpha && !premultipliedPixels);
     const pixels = prepareRgbaPixelsForUpload(
       canvasPixels,
       format as RgbaUploadFormat,
       premultiplyAlpha && !premultipliedPixels,
+      requiresStagingBuffer
+        ? getReusableUploadBuffer(rgbaUploadBuffers, canvasPixels.byteLength)
+        : undefined,
     );
     queue.writeTexture(
       destination,
@@ -155,7 +167,8 @@ export async function createPixiRenderer(): Promise<{
     window.pixelHeight,
   );
 
-  new NodeDOMAdapter(instance).install();
+  const refreshRateHz = normalizeRefreshRate(window.display.frequency);
+  new NodeDOMAdapter(instance, refreshRateHz).install();
 
   const app = new Application();
   await app.init({
@@ -165,7 +178,7 @@ export async function createPixiRenderer(): Promise<{
     height: canvas.height,
     background: 0x101544,
     resolution: 1,
-    antialias: false,
+    antialias: true,
     autoStart: false,
     gpu: {
       adapter,
@@ -209,6 +222,7 @@ export async function createPixiRenderer(): Promise<{
     format: renderer.getPreferredFormat(),
     size: [canvas.width, canvas.height],
     devicePixelRatio: 1,
+    refreshRateHz,
     adapter: adapter.info?.device ?? adapter.info?.description ?? "unknown",
   });
 
@@ -216,6 +230,7 @@ export async function createPixiRenderer(): Promise<{
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
+    rgbaUploadBuffers.clear();
     renderer.destroy();
     device.destroy();
 

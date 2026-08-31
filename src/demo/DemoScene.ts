@@ -10,6 +10,7 @@ export {
   createTextTest,
   createVideoTest,
 };
+export * from "./sceneLifecycle.ts";
 
 export function animateDemoScene(
   scene: Container,
