@@ -9,7 +9,7 @@ Minimal proof of concept for rendering PixiJS 8 directly into a native SDL windo
 - PixiJS 8.20.0
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
-- Skia-backed `@napi-rs/canvas` only for normal Pixi `Text` rasterization
+- Skia-backed `NodeCanvas` using `@napi-rs/canvas` for Canvas2D text and image rasterization
 - Rust/napi-rs video bridge for native FFmpeg stdout frame delivery
 - CMake, a C++ compiler, and Go 1.26+ for rebuilding the addon
 
@@ -49,7 +49,7 @@ The preflight runs before any generated native directories are removed and repor
 
 ## Demo
 
-The demo cycles through Graphics, Sprite, and normal Pixi Text on every supported platform. It shows a continuously updated FPS overlay in the upper-right corner and logs renderer, backend, adapter, and presentation format. The Sprite uses `assets/test-texture.png`; normal Text uses the native Skia-backed `@napi-rs/canvas` adapter.
+The demo cycles through Graphics, Sprite, and normal Pixi Text on every supported platform. It shows a continuously updated FPS overlay in the upper-right corner and logs renderer, backend, adapter, and presentation format. The Sprite uses `assets/test-texture.png`; image and normal Text rasterization use the native Skia-backed `NodeCanvas` adapter.
 
 On Linux, the demo also includes an FFmpeg VA-API video scene. It requires a system FFmpeg with VA-API support and an H.264 VA-API decode device. Set `FFMPEG_PATH` to override the executable and `FFMPEG_VAAPI_DEVICE` to override the default `/dev/dri/renderD128` device. The 4K High 4:2:2 samples in `assets` are not supported by the UHD 620 VA-API decoder; the bridge automatically falls back to the CPU decoder for those files and shows the active backend in the video status.
 

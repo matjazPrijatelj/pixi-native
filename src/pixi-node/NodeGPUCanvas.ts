@@ -46,19 +46,13 @@ export class NodeGPUCanvas {
     _type: string,
     _listener: EventListenerOrEventListenerObject,
     _options?: boolean | AddEventListenerOptions,
-  ): void {
-    console.warn(`NodeGPUCanvas: addEventListener is not supported: ${_type}`);
-  }
+  ): void {}
 
   public removeEventListener(
     _type: string,
     _listener: EventListenerOrEventListenerObject,
     _options?: boolean | EventListenerOptions,
-  ): void {
-    console.warn(
-      `NodeGPUCanvas: removeEventListener is not supported: ${_type}`,
-    );
-  }
+  ): void {}
 
   public getContext(type: string): unknown {
     if (type !== "webgpu") return null;

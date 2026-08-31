@@ -1,7 +1,8 @@
 import { DOMAdapter } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import type { NodeGPUInstance } from "./nativeTypes.ts";
-import { NodeTextCanvas } from "./NodeTextCanvas.ts";
+import { NodeCanvas } from "./NodeCanvas.ts";
+import { FrameScheduler } from "./FrameScheduler.ts";
 
 /** Minimal Pixi environment adapter for Node's native WGPU runtime. */
 export class NodeDOMAdapter {
@@ -14,14 +15,14 @@ export class NodeDOMAdapter {
     }
 
     public createCanvas(width = 1, height = 1): HTMLCanvasElement {
-        return new NodeTextCanvas(width, height) as unknown as HTMLCanvasElement;
+        return new NodeCanvas(width, height) as unknown as HTMLCanvasElement;
     }
 
     public getCanvasRenderingContext2D(): { prototype: object } {
-        const context = new NodeTextCanvas().getContext("2d") as object;
+        const context = new NodeCanvas().getContext("2d") as object;
         const contextPrototype = Object.getPrototypeOf(context);
         class ContextConstructor {
-            public constructor(canvas: NodeTextCanvas) {
+            public constructor(canvas: NodeCanvas) {
                 return canvas.getContext("2d") as never;
             }
         }
@@ -41,40 +42,12 @@ export class NodeDOMAdapter {
     public parseXML(): never { throw new Error("XML parsing is not implemented in the native WGPU PoC"); }
 
     private installFrameScheduler(): void {
-        type FrameCallback = (timestamp: number) => void;
-        const callbacks = new Map<number, FrameCallback>();
-        let nextId = 1;
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        let deadline = performance.now();
-        const source = "timer";
-        console.log({ animationFrameSource: source });
-
-        const dispatch = (timestamp: number): void => {
-            timer = undefined;
-            const pending = [...callbacks.entries()];
-            callbacks.clear();
-            for (const [, callback] of pending) callback(timestamp);
-            if (source === "timer") schedule();
-        };
-        const schedule = (): void => {
-            if (!callbacks.size || timer !== undefined) return;
-            const now = performance.now();
-            deadline = Math.max(deadline + 1000 / 60, now);
-            const delay = Math.min(1000, Math.max(0, deadline - now));
-            timer = setTimeout(() => dispatch(performance.now()), delay);
-        };
-        (globalThis as any).requestAnimationFrame = (callback: FrameCallback): number => {
-            const id = nextId++;
-            callbacks.set(id, callback);
-            schedule();
-            return id;
-        };
+        const scheduler = new FrameScheduler();
+        console.log({ animationFrameSource: "timer" });
+        (globalThis as any).requestAnimationFrame = (callback: FrameRequestCallback): number =>
+            scheduler.request(callback);
         (globalThis as any).cancelAnimationFrame = (id: number): void => {
-            callbacks.delete(id);
-            if (!callbacks.size && timer !== undefined) {
-                clearTimeout(timer);
-                timer = undefined;
-            }
+            scheduler.cancel(id);
         };
     }
 
@@ -83,7 +56,7 @@ export class NodeDOMAdapter {
         if (!canvas2d) throw new Error("Native Canvas2D backend is unavailable");
         DOMAdapter.set(this as never);
         const globalObject = globalThis as any;
-        if (!globalObject.HTMLCanvasElement) globalObject.HTMLCanvasElement = NodeTextCanvas;
+        if (!globalObject.HTMLCanvasElement) globalObject.HTMLCanvasElement = NodeCanvas;
         const globals: Record<string, Record<string, number>> = {
             GPUTextureUsage: { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, STORAGE_BINDING: 8, RENDER_ATTACHMENT: 16 },
             GPUBufferUsage: { MAP_READ: 1, MAP_WRITE: 2, COPY_SRC: 4, COPY_DST: 8, INDEX: 16, VERTEX: 32, UNIFORM: 64, STORAGE: 128, INDIRECT: 256, QUERY_RESOLVE: 512 },

@@ -3,13 +3,17 @@ import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
 import { NodeDOMAdapter } from "./NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
-import { NodeTextCanvas } from "./NodeTextCanvas.ts";
+import { NodeCanvas } from "./NodeCanvas.ts";
 import type {
   NodeGPUApi,
   NodeGPUInstance,
   NodeWindowRenderer,
 } from "./nativeTypes.ts";
 import { resolveGpuBackend } from "./platform.ts";
+import {
+  prepareRgbaPixelsForUpload,
+  type RgbaUploadFormat,
+} from "./rgbaUpload.ts";
 import * as sdl from "@kmamal/sdl";
 import type { Sdl } from "@kmamal/sdl";
 
@@ -58,17 +62,18 @@ export async function createPixiRenderer(): Promise<{
 
   queue.copyExternalImageToTexture = ((
     sourceInfo: { source?: unknown },
-    destination: GPUImageCopyTexture,
+    destination: GPUImageCopyTexture & { premultipliedAlpha?: boolean },
     copySize: GPUExtent3D,
   ) => {
     type PixelResource = {
       width?: number;
       height?: number;
       getContext?: (type: string) => unknown;
+      getPremultipliedRgbaPixels?: () => Uint8Array;
     };
     const source = sourceInfo?.source as
       { resource?: PixelResource } | PixelResource | undefined;
-    const resource = (
+    let resource = (
       source && "resource" in source ? source.resource : source
     ) as PixelResource | undefined;
 
@@ -95,9 +100,11 @@ export async function createPixiRenderer(): Promise<{
     );
 
     if (!context?.getImageData && resource instanceof Image) {
-      const pixelCanvas = new NodeTextCanvas(width, height);
+      const image = resource;
+      const pixelCanvas = new NodeCanvas(width, height);
+      resource = pixelCanvas;
       context = pixelCanvas.getContext("2d") as typeof context;
-      context?.drawImage?.(resource, 0, 0);
+      context?.drawImage?.(image, 0, 0);
     }
 
     if (!context?.getImageData) {
@@ -110,7 +117,29 @@ export async function createPixiRenderer(): Promise<{
       );
     }
 
-    const pixels = context.getImageData(0, 0, width, height).data;
+    const premultiplyAlpha = destination.premultipliedAlpha === true;
+    const premultipliedPixels = premultiplyAlpha
+      ? resource?.getPremultipliedRgbaPixels?.()
+      : undefined;
+    const canvasPixels =
+      premultipliedPixels ??
+      context.getImageData(0, 0, width, height).data;
+    const format = destination.texture.format;
+    if (
+      format !== "rgba8unorm" &&
+      format !== "rgba8unorm-srgb" &&
+      format !== "bgra8unorm" &&
+      format !== "bgra8unorm-srgb"
+    ) {
+      throw new Error(
+        `Native Canvas upload does not support ${format} textures`,
+      );
+    }
+    const pixels = prepareRgbaPixelsForUpload(
+      canvasPixels,
+      format as RgbaUploadFormat,
+      premultiplyAlpha && !premultipliedPixels,
+    );
     queue.writeTexture(
       destination,
       pixels,

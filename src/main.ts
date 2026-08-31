@@ -9,8 +9,7 @@ if (!(globalThis as any).navigator) {
 const { Assets, Texture } = await import("pixi.js");
 const { createPixiRenderer } =
   await import("./pixi-node/createPixiRenderer.ts");
-const { NodeTextCanvas } = await import("./pixi-node/NodeTextCanvas.ts");
-const { NodeGPUCanvas } = await import("./pixi-node/NodeGPUCanvas.ts");
+const { NodeCanvas } = await import("./pixi-node/NodeCanvas.ts");
 const {
   animateDemoScene,
   createGraphicsTest,
@@ -31,16 +30,18 @@ const texturePath = fileURLToPath(
 
 const loaded = await Assets.load(texturePath);
 const image = (loaded as any).source?.resource;
-const textCanvas = new NodeTextCanvas(loaded.width, loaded.height);
-// const gpuCanvas = new NodeGPUCanvas(loaded.width, loaded.height);
-const context = textCanvas.getContext("2d") as any;
+const imageCanvas = new NodeCanvas(loaded.width, loaded.height);
+const context = imageCanvas.getContext("2d") as any;
 
 if (!image || !context?.drawImage) {
   throw new Error("Native image cannot be rasterized");
 }
 
 context.drawImage(image, 0, 0, loaded.width, loaded.height);
-const texture = Texture.from(textCanvas as never);
+const texture = Texture.from({
+  resource: imageCanvas as unknown as HTMLCanvasElement,
+  format: "rgba8unorm",
+});
 
 const videoFiles = [
   "Big_Buck_Bunny_1080_10s_5MB.mp4",
@@ -162,7 +163,7 @@ const shutdown = async (): Promise<void> => {
     onSubmittedWorkDone?: () => Promise<void>;
   };
   await queue.onSubmittedWorkDone?.();
-  app.destroy(true);
+  app.destroy({ removeView: true });
   native.destroy();
   process.exit(0);
 };
@@ -191,7 +192,7 @@ const restartApp = async (): Promise<void> => {
   } catch {}
 
   try {
-    app.destroy(true);
+    app.destroy({ removeView: true });
   } catch {}
 
   try {
