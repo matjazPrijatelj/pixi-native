@@ -2,6 +2,9 @@
 
 ## 2026-08-31
 
+- Added a native Howler-compatible audio layer over SDL playback with a worker-thread stereo 48 kHz mixer, overlapping voices, audio sprites, pause/stop/seek, looping, per-sound/global volume and mute, fades, events, preload, and explicit cache/worker/device teardown.
+- Added bounded FFmpeg PCM streaming for `html5` sounds and embedded video audio, retained decoded caching for short effects/music sprites, and made audio the master clock that holds early NV12 frames while video-only or audio-failure playback falls back safely.
+- Added Audio scene `6`, a deterministic generated stereo WAV sprite fixture, BitmapText audio diagnostics, video audio status, and audio/A-V lifecycle tests.
 - Added a GSAP-powered Sprite stress test: Up creates ten independently randomized, continuously animated sprites, Down removes the latest ten, and scene disposal or resize kills and rebuilds timelines without retaining removed Pixi objects.
 - Added generated transparent 512×512 bat-hero and 256×256 platform-mascot PNG assets, retained the original texture, and moved the live Sprite count to the shared BitmapText metrics atlas.
 - Verified TypeScript, all 46 Node tests, asset dimensions/transparency, tween cleanup, and a Windows WebGPU/D3D12 runtime interaction with three +10 batches followed by one -10 batch on the DXGI-paced RAF path.

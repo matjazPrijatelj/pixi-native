@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import type { SpriteTestScene } from "./demo/test/SpriteTest.ts";
+import type { AudioTestScene } from "./demo/test/AudioTest.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -19,12 +20,14 @@ const {
   createSpriteTest,
   createTextTest,
   createVideoTest,
+  createAudioTest,
   disposeDemoScene,
   DYNAMIC_BITMAP_FONT_NAME,
   installDynamicBitmapTextFont,
 } = await import("./demo/DemoScene.ts");
 
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
+const { Howler } = await import("./pixi-node/audio/index.ts");
 const {
   getSceneIndexForKey,
   getSpriteCountDeltaForKey,
@@ -119,6 +122,8 @@ if (videoSceneIndex !== null) {
   );
 }
 
+scenes.push(() => createAudioTest());
+
 let index = 0;
 let scene = scenes[index]();
 app.stage.addChild(scene);
@@ -164,6 +169,9 @@ native.window.on("keyDown", (event) => {
     restartApp();
     return;
   }
+
+  const audioScene = scene as unknown as Partial<AudioTestScene>;
+  if (audioScene.handleKey?.(event.key, event.repeat)) return;
 
   const spriteScene = scene as unknown as Partial<SpriteTestScene>;
   const spriteCountDelta = getSpriteCountDeltaForKey(
@@ -249,6 +257,7 @@ const shutdown = async (): Promise<void> => {
     { children: true, context: true, style: true },
   );
   await destroyBitmapFonts();
+  Howler.unload();
   native.destroy();
   process.exit(0);
 };
@@ -287,6 +296,10 @@ const restartApp = async (): Promise<void> => {
 
   try {
     await destroyBitmapFonts();
+  } catch {}
+
+  try {
+    Howler.unload();
   } catch {}
 
   try {

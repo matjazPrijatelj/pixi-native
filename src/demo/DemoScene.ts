@@ -4,6 +4,7 @@ import { createSpriteTest } from "./test/SpriteTest.ts";
 import { createTextTest } from "./test/TextTest.ts";
 import { createBitmapTextTest } from "./test/BitmapTextTest.ts";
 import { createVideoTest } from "./test/VideoTest.ts";
+import { createAudioTest } from "./test/AudioTest.ts";
 
 export {
   createGraphicsTest,
@@ -11,7 +12,9 @@ export {
   createTextTest,
   createBitmapTextTest,
   createVideoTest,
+  createAudioTest,
 };
+export type { AudioTestScene } from "./test/AudioTest.ts";
 export type { SpriteTestScene } from "./test/SpriteTest.ts";
 export * from "./bitmapFonts.ts";
 export * from "./sceneLifecycle.ts";

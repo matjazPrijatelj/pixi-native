@@ -81,13 +81,18 @@ export function createVideoTest(
         : video.paused
           ? "paused"
           : `${video.currentTime.toFixed(2)} s`;
+    const audioState = video.audioError
+      ? `audio fallback: ${video.audioError.message}`
+      : video.muted
+        ? "audio muted"
+        : `audio ${(video.volume * 100).toFixed(0)}%`;
     status.text =
       `NV12 BT.709 limited / ${video.backend} / ${fps.toFixed(2)} fps` +
       ` | UP: ${uploadFps}` +
       ` | decoded/presented/dropped: ${stats.decodedFrames}/` +
       `${stats.presentedFrames}/${stats.droppedFrames}` +
       ` | ${(stats.bytesPerFrame / 1_000_000).toFixed(3)} MB/frame` +
-      ` | ${state}`;
+      ` | ${audioState} | ${state}`;
   };
 
   let disposed = false;

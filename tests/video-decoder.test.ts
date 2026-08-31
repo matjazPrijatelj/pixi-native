@@ -10,6 +10,7 @@ import {
     type NativeVideoDecoderLike,
     type NativeVideoDecoderOptions,
     type NativeVideoDependencies,
+    type NativeVideoAudioLike,
     type NativeVideoFrame,
 } from "../src/pixi-node/video/NativeVideo.ts";
 
@@ -142,6 +143,39 @@ test("NativeVideo records end and latest-frame decoder statistics", async () => 
     });
 });
 
+test("NativeVideo uses audio as its playback clock and holds early frames", async () => {
+    const factory = new FakeAudioVideoFactory();
+    const video = new NativeVideo(
+        "video-with-audio.mp4",
+        { width: 2, height: 2, volume: 0.7 },
+        factory,
+    );
+
+    await video.play();
+    const audio = factory.audios[0];
+    assert.equal(audio.played, true);
+    assert.equal(video.currentTime, 0);
+
+    factory.decoders[0].frame = createFrame(1_000_000);
+    audio.currentTime = 0.5;
+    assert.equal(video.takeLatestFrame(), null);
+    audio.currentTime = 0.99;
+    assert.equal(video.takeLatestFrame()?.timestampUs, 1_000_000);
+
+    video.volume = 0.35;
+    video.muted = true;
+    assert.equal(audio.volume, 0.35);
+    assert.equal(audio.muted, true);
+
+    factory.decoders[0].finished = true;
+    assert.equal(video.takeLatestFrame(), null);
+    assert.equal(video.ended, false);
+    audio.ended = true;
+    assert.equal(video.takeLatestFrame(), null);
+    assert.equal(video.ended, true);
+    assert.equal(audio.destroyed, true);
+});
+
 test("VideoFpsMeter reports measured FPS after its sample window", () => {
     const meter = new VideoFpsMeter(500);
     assert.equal(meter.observe(1000), null);
@@ -158,6 +192,48 @@ class FakeDecoderFactory implements NativeVideoDependencies {
         const decoder = new FakeDecoder();
         this.decoders.push(decoder);
         return decoder;
+    }
+}
+
+class FakeAudioVideoFactory extends FakeDecoderFactory {
+    public readonly audios: FakeAudio[] = [];
+
+    public createAudio(
+        _source: string,
+        startTime: number,
+        volume: number,
+        muted: boolean,
+    ): FakeAudio {
+        const audio = new FakeAudio(startTime, volume, muted);
+        this.audios.push(audio);
+        return audio;
+    }
+}
+
+class FakeAudio implements NativeVideoAudioLike {
+    public ended = false;
+    public played = false;
+    public destroyed = false;
+    public currentTime: number;
+    public volume: number;
+    public muted: boolean;
+
+    public constructor(
+        currentTime: number,
+        volume: number,
+        muted: boolean,
+    ) {
+        this.currentTime = currentTime;
+        this.volume = volume;
+        this.muted = muted;
+    }
+
+    public async play(): Promise<void> {
+        this.played = true;
+    }
+
+    public destroy(): void {
+        this.destroyed = true;
     }
 }
 

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { Howl } from "../audio/index.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -53,6 +54,9 @@ export interface NativeVideoOptions {
     readonly fps?: number;
     readonly ffmpegPath?: string;
     readonly vaapiDevice?: string;
+    readonly audio?: boolean;
+    readonly volume?: number;
+    readonly muted?: boolean;
 }
 
 export interface NativeVideoDecoderOptions extends NativeVideoOptions {
@@ -79,6 +83,16 @@ export interface NativeVideoDecoderLike {
 
 export interface NativeVideoDependencies {
     createDecoder(options: NativeVideoDecoderOptions): NativeVideoDecoderLike;
+    createAudio?(source: string, startTime: number, volume: number, muted: boolean): NativeVideoAudioLike;
+}
+
+export interface NativeVideoAudioLike {
+    readonly currentTime: number;
+    readonly ended: boolean;
+    volume: number;
+    muted: boolean;
+    play(): Promise<void>;
+    destroy(): void;
 }
 
 export interface ResolveFfmpegPathOptions {
@@ -245,7 +259,82 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
 
 const DEFAULT_DEPENDENCIES: NativeVideoDependencies = {
     createDecoder: (options) => new NativeVideoDecoder(options),
+    createAudio: (source, startTime, volume, muted) =>
+        new HowlVideoAudio(source, startTime, volume, muted),
 };
+
+class HowlVideoAudio implements NativeVideoAudioLike {
+    private readonly howl: Howl;
+    private readonly startTime: number;
+    private id = -1;
+    private hasEnded = false;
+    private currentVolume: number;
+    private currentMuted: boolean;
+
+    public constructor(
+        source: string,
+        startTime: number,
+        volume: number,
+        muted: boolean,
+    ) {
+        this.startTime = startTime;
+        this.currentVolume = volume;
+        this.currentMuted = muted;
+        this.howl = new Howl({
+            src: [source],
+            sprite: { __video: [startTime * 1000, 86_400_000] },
+            volume,
+            mute: muted,
+            preload: false,
+            html5: true,
+        });
+    }
+
+    public get currentTime(): number {
+        return this.id === -1
+            ? 0
+            : this.startTime + (this.howl.seek(this.id) as number);
+    }
+
+    public get ended(): boolean {
+        return this.hasEnded;
+    }
+
+    public get volume(): number {
+        return this.currentVolume;
+    }
+
+    public set volume(value: number) {
+        this.currentVolume = value;
+        this.howl.volume(value, this.id === -1 ? undefined : this.id);
+    }
+
+    public get muted(): boolean {
+        return this.currentMuted;
+    }
+
+    public set muted(value: boolean) {
+        this.currentMuted = value;
+        this.howl.mute(value, this.id === -1 ? undefined : this.id);
+    }
+
+    public play(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const onPlay = (): void => resolve();
+            const onError = (_id?: number, message?: string): void =>
+                reject(new Error(message ?? "Video audio failed to start"));
+            this.howl.once("play", onPlay);
+            this.howl.once("playerror", onError);
+            this.howl.once("end", () => { this.hasEnded = true; });
+            this.id = this.howl.play("__video");
+            if (this.id === -1) reject(new Error("Video audio failed to start"));
+        });
+    }
+
+    public destroy(): void {
+        this.howl.unload();
+    }
+}
 
 export class NativeVideo {
     public readonly src: string;
@@ -265,6 +354,12 @@ export class NativeVideo {
     private decodedFrameBase = 0;
     private droppedFrameBase = 0;
     private presentedFrameCount = 0;
+    private audio?: NativeVideoAudioLike;
+    private lastAudioError: Error | null = null;
+    private pendingFrame: NativeVideoFrame | null = null;
+    private audioVolume: number;
+    private audioMuted: boolean;
+    private playbackGeneration = 0;
 
     public constructor(
         src: string,
@@ -284,6 +379,8 @@ export class NativeVideo {
         this.fps = fps;
         this.options = options;
         this.dependencies = dependencies;
+        this.audioVolume = options.volume ?? 1;
+        this.audioMuted = options.muted ?? false;
     }
 
     public get paused(): boolean {
@@ -302,8 +399,35 @@ export class NativeVideo {
         return this.lastError;
     }
 
+    public get audioError(): Error | null {
+        return this.lastAudioError;
+    }
+
+    public get volume(): number {
+        return this.audio?.volume ?? this.audioVolume;
+    }
+
+    public set volume(value: number) {
+        if (!Number.isFinite(value) || value < 0 || value > 1) {
+            throw new RangeError("Video volume must be between 0 and 1");
+        }
+        this.audioVolume = value;
+        if (this.audio) this.audio.volume = value;
+    }
+
+    public get muted(): boolean {
+        return this.audio?.muted ?? this.audioMuted;
+    }
+
+    public set muted(value: boolean) {
+        this.audioMuted = value;
+        if (this.audio) this.audio.muted = value;
+    }
+
     public get currentTime(): number {
-        return this.positionSeconds;
+        return this.audio && !this.audio.ended
+            ? this.audio.currentTime
+            : this.positionSeconds;
     }
 
     public set currentTime(value: number) {
@@ -313,11 +437,16 @@ export class NativeVideo {
         }
 
         this.positionSeconds = value;
+        this.pendingFrame = null;
         this.hasEnded = false;
         this.lastError = null;
         if (!this.isPaused) {
             try {
-                this.startDecoder(value);
+                if (this.shouldUseAudio()) {
+                    void this.restartWithAudio(value, ++this.playbackGeneration);
+                } else {
+                    this.startDecoder(value);
+                }
             } catch (error) {
                 this.isPaused = true;
                 this.lastError = asError(error);
@@ -346,7 +475,12 @@ export class NativeVideo {
         this.hasEnded = false;
         this.lastError = null;
         this.isPaused = false;
+        const generation = ++this.playbackGeneration;
         try {
+            if (this.shouldUseAudio()) {
+                await this.startAudio(this.positionSeconds, generation);
+            }
+            if (generation !== this.playbackGeneration || this.isPaused) return;
             this.startDecoder(this.positionSeconds);
         } catch (error) {
             this.isPaused = true;
@@ -358,7 +492,10 @@ export class NativeVideo {
     public pause(): void {
         this.assertUsable();
         if (this.isPaused) return;
+        this.positionSeconds = this.currentTime;
+        this.playbackGeneration++;
         this.stopDecoder();
+        this.stopAudio();
         this.isPaused = true;
     }
 
@@ -373,16 +510,28 @@ export class NativeVideo {
             return null;
         }
 
-        const frame = this.decoder.pollLatest();
+        const frame = this.pendingFrame ?? this.decoder.pollLatest();
         if (frame) {
+            const audioTime = this.audio && !this.audio.ended
+                ? this.audio.currentTime
+                : undefined;
+            if (audioTime !== undefined && frame.timestampUs / 1_000_000 > audioTime + 0.02) {
+                this.pendingFrame = frame;
+                this.positionSeconds = audioTime;
+                return null;
+            }
+            this.pendingFrame = null;
             this.positionSeconds = frame.timestampUs / 1_000_000;
             return frame;
         }
 
         if (this.decoder.isFinished()) {
-            this.stopDecoder();
-            this.isPaused = true;
-            this.hasEnded = true;
+            if (!this.audio || this.audio.ended) {
+                this.stopDecoder();
+                this.stopAudio();
+                this.isPaused = true;
+                this.hasEnded = true;
+            }
         }
         return null;
     }
@@ -393,7 +542,9 @@ export class NativeVideo {
 
     public destroy(): void {
         if (this.destroyed) return;
+        this.playbackGeneration++;
         this.stopDecoder();
+        this.stopAudio();
         this.isPaused = true;
         this.destroyed = true;
     }
@@ -414,6 +565,57 @@ export class NativeVideo {
             decoder.close();
             throw error;
         }
+    }
+
+    private shouldUseAudio(): boolean {
+        return this.options.audio !== false && this.dependencies.createAudio !== undefined;
+    }
+
+    private async startAudio(startTime: number, generation: number): Promise<void> {
+        this.stopAudio();
+        this.lastAudioError = null;
+        const audio = this.dependencies.createAudio!(
+            this.src,
+            startTime,
+            this.audioVolume,
+            this.audioMuted,
+        );
+        this.audio = audio;
+        try {
+            await audio.play();
+            if (generation !== this.playbackGeneration || this.destroyed || this.isPaused) {
+                audio.destroy();
+                if (this.audio === audio) this.audio = undefined;
+            }
+        } catch (error) {
+            this.lastAudioError = asError(error);
+            audio.destroy();
+            if (this.audio === audio) this.audio = undefined;
+        }
+    }
+
+    private async restartWithAudio(startTime: number, generation: number): Promise<void> {
+        try {
+            this.stopDecoder();
+            await this.startAudio(startTime, generation);
+            if (
+                generation === this.playbackGeneration &&
+                !this.isPaused &&
+                !this.destroyed
+            ) {
+                this.startDecoder(startTime);
+            }
+        } catch (error) {
+            if (generation !== this.playbackGeneration || this.destroyed) return;
+            this.lastError = asError(error);
+            this.isPaused = true;
+            this.stopAudio();
+        }
+    }
+
+    private stopAudio(): void {
+        this.audio?.destroy();
+        this.audio = undefined;
     }
 
     private stopDecoder(): void {
