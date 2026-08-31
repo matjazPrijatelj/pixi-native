@@ -9,3 +9,11 @@ export function getSceneIndexForKey(key: string | null, currentIndex: number, sc
     if (key === "right") return (currentIndex + 1) % sceneCount;
     return null;
 }
+
+/** Returns the next video index for a non-repeating up/down press, or null otherwise. */
+export function getVideoIndexForKey(key: string | null, currentIndex: number, videoCount: number, repeat = false): number | null {
+    if (repeat || videoCount <= 0) return null;
+    if (key === "up") return (currentIndex - 1 + videoCount) % videoCount;
+    if (key === "down") return (currentIndex + 1) % videoCount;
+    return null;
+}

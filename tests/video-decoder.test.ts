@@ -5,7 +5,8 @@ import type { NativeVideoDecoderInfo } from "../src/video/NativeVideoDecoder.ts"
 
 test("FFmpeg command requires VA-API hardware decoding", () => {
     const args = buildFfmpegArgs("video.mp4", { width: 1280, height: 720, fps: 30, vaapiDevice: "/dev/dri/test" });
-    assert.deepEqual(args.slice(0, 10), ["-hide_banner", "-loglevel", "error", "-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/test", "-hwaccel_output_format", "vaapi", "-re"]);
+    assert.deepEqual(args.slice(0, 11), ["-hide_banner", "-loglevel", "error", "-nostdin", "-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/test", "-hwaccel_output_format", "vaapi", "-re"]);
+    assert.equal(args.includes("-re"), true);
     assert.ok(args.includes("hwdownload,format=nv12,scale=1280:720:flags=fast_bilinear,format=rgba"));
     assert.equal(args.at(-1), "pipe:1");
 });

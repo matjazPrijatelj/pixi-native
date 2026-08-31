@@ -8,7 +8,7 @@ const { createPixiRenderer } = await import("./pixi-node/createPixiRenderer.ts")
 const { NodeTextCanvas } = await import("./pixi-node/NodeTextCanvas.ts");
 const { animateDemoScene, createGraphicsTest, createSpriteTest, createTextTest, createVideoTest } = await import("./demo/DemoScene.ts");
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
-const { getSceneIndexForKey } = await import("./demo/sceneNavigation.ts");
+const { getSceneIndexForKey, getVideoIndexForKey } = await import("./demo/sceneNavigation.ts");
 const { app, native } = await createPixiRenderer();
 const texturePath = fileURLToPath(new URL("../assets/test-texture.png", import.meta.url));
 const loaded = await Assets.load(texturePath);
@@ -18,8 +18,21 @@ const context = textCanvas.getContext("2d") as any;
 if (!image || !context?.drawImage) throw new Error("Native image cannot be rasterized");
 context.drawImage(image, 0, 0, loaded.width, loaded.height);
 const texture = Texture.from(textCanvas as never);
-const videoPath = fileURLToPath(new URL("../assets/Big_Buck_Bunny_1080_30s.mp4", import.meta.url));
-const scenes = [() => createGraphicsTest(), () => createSpriteTest(texture), () => createTextTest(), () => createVideoTest(videoPath, { width: native.canvas.width, height: native.canvas.height })];
+const videoFiles = [
+    "Big_Buck_Bunny_1080_10s_5MB.mp4",
+    "Big_Buck_Bunny_1080_30s.mp4",
+    "Big_Buck_Bunny_720_10s_20MB.mp4",
+    "cutting_orange_tuil_8s_3484kbps_2160p_59.94fps_h264.mp4",
+    "water_netflix_15000kbps_2160p_59.94fps_h264.mp4"
+];
+const videoPaths = videoFiles.map((file) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)));
+let videoIndex = 1;
+const scenes = [
+    () => createGraphicsTest(),
+    () => createSpriteTest(texture),
+    () => createTextTest(),
+    () => createVideoTest(videoPaths[videoIndex], { width: native.canvas.width, height: native.canvas.height }, native.uploadRgbaTexture, videoFiles[videoIndex])
+];
 let index = 0;
 let scene = scenes[index]();
 app.stage.addChild(scene);
@@ -38,8 +51,20 @@ const selectScene = (nextIndex: number): void => {
     scene = scenes[index]();
     app.stage.addChild(scene);
 };
+const selectVideo = (nextVideoIndex: number): void => {
+    if (index !== 3 || nextVideoIndex === videoIndex) return;
+    app.stage.removeChild(scene);
+    videoIndex = nextVideoIndex;
+    scene = scenes[index]();
+    app.stage.addChild(scene);
+};
 native.window.on("resize", resizeActiveScene);
 native.window.on("keyDown", (event) => {
+    const nextVideoIndex = getVideoIndexForKey(event.key, videoIndex, videoPaths.length, event.repeat);
+    if (nextVideoIndex !== null) {
+        selectVideo(nextVideoIndex);
+        return;
+    }
     const nextIndex = getSceneIndexForKey(event.key, index, scenes.length, event.repeat);
     if (nextIndex !== null) selectScene(nextIndex);
 });

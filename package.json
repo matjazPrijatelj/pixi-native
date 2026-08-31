@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "native:build": "node native/gpu/scripts/build.mjs",
+        "native:video:build": "node native/video/scripts/build.mjs",
         "dev": "node --enable-source-maps src/main.ts",
         "build": "tsc --noEmit",
         "typecheck": "tsc --noEmit",

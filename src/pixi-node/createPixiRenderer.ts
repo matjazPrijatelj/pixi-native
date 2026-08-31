@@ -1,4 +1,4 @@
-import { Application, VERSION } from "pixi.js";
+import { Application, VERSION, type TextureSource } from "pixi.js";
 import { createRequire } from "node:module";
 import { NodeDOMAdapter } from "./NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
@@ -15,6 +15,7 @@ export interface NodeRendererContext {
     readonly window: NodeSDLWindow;
     readonly renderer: NodeWindowRenderer;
     readonly canvas: NodeGPUCanvas;
+    readonly uploadRgbaTexture: (source: TextureSource, data: Uint8Array, width: number, height: number) => void;
     readonly destroy: () => void;
 }
 
@@ -59,6 +60,20 @@ export async function createPixiRenderer(): Promise<{ app: Application; native: 
         app.destroy(true);
         throw new Error(`WebGPU is required; Pixi selected ${app.renderer.name}`);
     }
+    const textureSystem = app.renderer.texture as unknown as { getGpuSource(source: TextureSource): GPUTexture };
+    const uploadRgbaTexture = (source: TextureSource, data: Uint8Array, width: number, height: number): void => {
+        const expectedBytes = width * height * 4;
+        if (data.byteLength !== expectedBytes) throw new Error(`RGBA video frame has ${data.byteLength} bytes; expected ${expectedBytes}`);
+        // Copy the external napi-rs memory once into a V8-owned typed-array view.
+        const pixels = new Uint8Array(data);
+        const texture = textureSystem.getGpuSource(source);
+        device.queue.writeTexture(
+            { texture },
+            pixels as unknown as GPUAllowSharedBufferSource,
+            { bytesPerRow: width * 4, rowsPerImage: height },
+            { width, height, depthOrArrayLayers: 1 }
+        );
+    };
     window.on("resize", () => {
         canvas.resize(window.pixelWidth, window.pixelHeight);
         app.renderer.resize(window.pixelWidth, window.pixelHeight);
@@ -73,5 +88,5 @@ export async function createPixiRenderer(): Promise<{ app: Application; native: 
         if (!window.destroyed) window.destroy();
         gpu.destroy(instance);
     };
-    return { app, native: { gpu: instance, adapter, device, window, renderer, canvas, destroy } };
+    return { app, native: { gpu: instance, adapter, device, window, renderer, canvas, uploadRgbaTexture, destroy } };
 }

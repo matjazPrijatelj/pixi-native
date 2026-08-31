@@ -10,6 +10,7 @@ Minimal proof of concept for rendering PixiJS 8 directly into a native SDL windo
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
 - Skia Canvas2D only for normal Pixi `Text` rasterization
+- Rust/napi-rs video bridge for native FFmpeg stdout frame delivery
 - CMake, a C++ compiler, Go 1.26+, and `libx11-xcb-dev` for rebuilding the addon
 
 The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }`. Pixi is initialized with `preference: ["webgpu"]`, so initialization fails instead of falling back to WebGL.
@@ -26,12 +27,20 @@ The first native build downloads a pinned Dawn source tree and creates the Linux
 
 ## Demo
 
-The demo cycles through Graphics, Sprite, normal Pixi Text, and an FFmpeg VA-API video scene. It shows a continuously updated FPS overlay in the upper-right corner and logs renderer, adapter, and presentation format. The Sprite uses `assets/test-texture.png`; Text and video frames use the native Skia Canvas2D adapter.
+The demo cycles through Graphics, Sprite, normal Pixi Text, and an FFmpeg VA-API video scene. It shows a continuously updated FPS overlay in the upper-right corner and logs renderer, adapter, and presentation format. The Sprite uses `assets/test-texture.png`; normal Text uses the native Skia Canvas2D adapter, while video frames use the native RGBA upload path.
 
-The video test requires a system FFmpeg with VA-API support and an H.264 VA-API decode device. Set `FFMPEG_PATH` to override the executable and `FFMPEG_VAAPI_DEVICE` to override the default `/dev/dri/renderD128` device.
+The video test requires a system FFmpeg with VA-API support and an H.264 VA-API decode device. Set `FFMPEG_PATH` to override the executable and `FFMPEG_VAAPI_DEVICE` to override the default `/dev/dri/renderD128` device. The 4K High 4:2:2 samples in `assets` are not supported by the UHD 620 VA-API decoder; the bridge automatically falls back to the CPU decoder for those files and shows the active backend in the video status.
+
+Build the video bridge once before running the demo:
+
+```sh
+pnpm native:video:build
+```
+
+The bridge starts FFmpeg from Rust, reads complete RGBA frames into native-owned buffers, and exposes each buffer to Node without an additional JS copy. The FFmpeg process pipe and WebGPU staging upload remain, so this is not end-to-end zero-copy. On the video scene, use Up/Down to cycle through all MP4 files in `assets`.
 
 Scenes are selected with `1`–`4`; use the left and right arrow keys to move between scenes. Key-repeat events are ignored.
 
 ## Current limitation
 
-The checked-in prebuilt addon targets Linux x64 and Vulkan. Other platforms need their own native build. The native window, renderer, ticker, Sprite, Graphics, and Text path are isolated from the desktop host runtime; there is no WebView or WebGL fallback.
+The checked-in prebuilt addon targets Linux x64 and Vulkan. Other platforms need their own native build. The native window, renderer, ticker, Sprite, Graphics, Text, and video paths are isolated from the desktop host runtime; there is no WebView or WebGL fallback.

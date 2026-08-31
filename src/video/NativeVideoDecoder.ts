@@ -1,5 +1,6 @@
-import { spawn, type ChildProcessByStdio } from "node:child_process";
-import type { Readable } from "node:stream";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 export interface VideoFrameData {
     width: number;
@@ -7,6 +8,16 @@ export interface VideoFrameData {
     timestampUs: number;
     data: Uint8Array;
     pixelFormat: "rgba";
+}
+
+interface NativeVideoModule {
+    NativeVideoDecoder: new (options: NativeVideoDecoderOptions) => {
+        open(source: string): void;
+        pollLatest(): VideoFrameData | null;
+        pollError(): string | null;
+        backend(): string;
+        close(): void;
+    };
 }
 
 export interface NativeVideoDecoderOptions {
@@ -27,7 +38,7 @@ export function buildFfmpegArgs(source: string, options: NativeVideoDecoderOptio
     const fps = options.fps ?? 30;
     const device = options.vaapiDevice ?? process.env.FFMPEG_VAAPI_DEVICE ?? "/dev/dri/renderD128";
     return [
-        "-hide_banner", "-loglevel", "error", "-hwaccel", "vaapi", "-hwaccel_device", device,
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-hwaccel", "vaapi", "-hwaccel_device", device,
         "-hwaccel_output_format", "vaapi", "-re", "-i", source, "-an",
         "-vf", `hwdownload,format=nv12,scale=${options.width}:${options.height}:flags=fast_bilinear,format=rgba`,
         "-r", String(fps), "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"
@@ -81,9 +92,8 @@ export class VideoFpsMeter {
 
 /** FFmpeg decoder that requires VA-API hardware H.264 decoding. */
 export class NativeVideoDecoder {
-    private process?: ChildProcessByStdio<null, Readable, Readable>;
+    private nativeDecoder?: NativeVideoModule["NativeVideoDecoder"] extends new (...args: never[]) => infer T ? T : never;
     private closed = false;
-    private readonly assembler: RawVideoFrameAssembler;
     private readonly options: NativeVideoDecoderOptions;
     public readonly info: NativeVideoDecoderInfo;
     public constructor(options: NativeVideoDecoderOptions) {
@@ -92,30 +102,36 @@ export class NativeVideoDecoder {
         if (options.width <= 0 || options.height <= 0) throw new Error("Video dimensions must be positive");
         const fps = options.fps ?? 30;
         if (fps <= 0) throw new Error("Video FPS must be positive");
-        this.assembler = new RawVideoFrameAssembler(options.width, options.height, fps);
     }
     public async open(source: string, onFrame: (frame: VideoFrameData) => void, onError?: (error: Error) => void): Promise<void> {
-        if (this.process) throw new Error("Video decoder is already open");
-        const ffmpegPath = this.options.ffmpegPath ?? process.env.FFMPEG_PATH ?? "ffmpeg";
-        const child = spawn(ffmpegPath, buildFfmpegArgs(source, this.options), { stdio: ["ignore", "pipe", "pipe"] });
-        this.process = child; this.closed = false;
-        let stderr = "";
-        child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-        child.on("error", (error) => { if (!this.closed) onError?.(error instanceof Error ? error : new Error(String(error))); });
-        await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
-        void this.readFrames(child, onFrame, onError, () => stderr);
-    }
-    private async readFrames(child: ChildProcessByStdio<null, Readable, Readable>, onFrame: (frame: VideoFrameData) => void, onError?: (error: Error) => void, getStderr = (): string => ""): Promise<void> {
+        if (this.nativeDecoder) throw new Error("Video decoder is already open");
+        this.closed = false;
         try {
-            for await (const chunk of child.stdout) {
-                if (this.closed) break;
-                for (const frame of this.assembler.append(new Uint8Array(chunk))) onFrame(frame);
-            }
-            if (!this.closed) {
-                const code = await new Promise<number | null>((resolve) => child.once("close", resolve));
-                if (code !== 0) onError?.(new Error(`FFmpeg VA-API decoder exited with code ${code}: ${getStderr().trim()}`));
-            }
-        } catch (error) { if (!this.closed) onError?.(error instanceof Error ? error : new Error(String(error))); }
+            const nativeVideo = require("../../native/video/src/index.js") as NativeVideoModule;
+            const ffmpegPath = this.options.ffmpegPath ?? process.env.FFMPEG_PATH;
+            this.nativeDecoder = new nativeVideo.NativeVideoDecoder({ ...this.options, ffmpegPath });
+            this.nativeDecoder.open(source);
+            this.onFrame = onFrame;
+            this.onError = onError;
+        } catch (error) {
+            this.closed = true;
+            onError?.(error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
     }
-    public close(): void { this.closed = true; this.process?.kill(); this.process = undefined; }
+    private onFrame?: (frame: VideoFrameData) => void;
+    private onError?: (error: Error) => void;
+    public pollLatest(): boolean {
+        if (this.closed || !this.nativeDecoder) return false;
+        const message = this.nativeDecoder.pollError();
+        if (message) this.onError?.(new Error(message));
+        const frame = this.nativeDecoder.pollLatest();
+        if (!frame) return false;
+        this.onFrame?.({ ...frame, pixelFormat: "rgba" });
+        return true;
+    }
+    public getBackend(): string {
+        return this.nativeDecoder?.backend() ?? "unknown";
+    }
+    public close(): void { this.closed = true; this.nativeDecoder?.close(); this.nativeDecoder = undefined; this.onFrame = undefined; this.onError = undefined; }
 }
