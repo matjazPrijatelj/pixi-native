@@ -50,6 +50,9 @@ const bitmapFontPath = fileURLToPath(
     import.meta.url,
   ),
 );
+const drumTexturePath = fileURLToPath(
+  new URL("../assets/drum-kit.png", import.meta.url),
+);
 
 installDynamicBitmapTextFont();
 await Assets.load(bitmapFontPath);
@@ -75,6 +78,7 @@ const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
 const spriteTextures = (await Promise.all(
   texturePaths.map(loadNativeTexture),
 )) as [PixiTexture, PixiTexture, PixiTexture];
+const drumTexture = await loadNativeTexture(drumTexturePath);
 
 const videos = [
   { file: "Big_Buck_Bunny_1080_10s_5MB.mp4", fps: 60 },
@@ -122,7 +126,12 @@ if (videoSceneIndex !== null) {
   );
 }
 
-scenes.push(() => createAudioTest());
+scenes.push(() =>
+  createAudioTest(drumTexture, {
+    width: native.canvas.width,
+    height: native.canvas.height,
+  }),
+);
 
 let index = 0;
 let scene = scenes[index]();
@@ -240,6 +249,8 @@ const destroyBitmapFonts = async (): Promise<void> => {
 const destroySpriteTextures = async (): Promise<void> => {
   for (const texture of spriteTextures) texture.destroy(true);
   await Promise.all(texturePaths.map((path) => Assets.unload(path)));
+  drumTexture.destroy(true);
+  await Assets.unload(drumTexturePath);
 };
 
 const shutdown = async (): Promise<void> => {

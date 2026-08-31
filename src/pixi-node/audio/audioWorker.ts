@@ -13,11 +13,12 @@ interface Voice {
     readonly stream?: StreamState;
     readonly spriteOffsetSeconds: number;
     positionFrames: number;
+    renderedFrames: number;
     volume: number;
     muted: boolean;
     loop: boolean;
     playing: boolean;
-    fade?: { from: number; to: number; startFrame: number; durationFrames: number };
+    fade?: { from: number; to: number; startFrame: number; durationFrames: number; version: number };
 }
 
 interface StreamState {
@@ -33,7 +34,7 @@ type WorkerCommand =
     | { type: "createVoice"; ownerId: number; id: number; source: string; ffmpegPath: string; offsetSeconds: number; durationSeconds?: number; volume: number; muted: boolean; loop: boolean; streaming: boolean }
     | { type: "preload"; ownerId: number; requestId: number; source: string; ffmpegPath: string; offsetSeconds: number; durationSeconds?: number }
     | { type: "render"; frames: number; globalVolume: number; globalMuted: boolean }
-    | { type: "command"; ownerId: number; id?: number; command: "play" | "pause" | "stop" | "volume" | "mute" | "loop" | "seek" | "fade"; value?: number | boolean; from?: number; to?: number; durationMs?: number }
+    | { type: "command"; ownerId: number; id?: number; command: "play" | "pause" | "stop" | "volume" | "mute" | "loop" | "seek" | "fade"; value?: number | boolean; from?: number; to?: number; durationMs?: number; fadeVersion?: number }
     | { type: "unloadOwner"; ownerId: number }
     | { type: "clear" }
     | { type: "shutdown" };
@@ -162,6 +163,7 @@ async function createVoice(command: Extract<WorkerCommand, { type: "createVoice"
             data,
             spriteOffsetSeconds: command.offsetSeconds,
             positionFrames: 0,
+            renderedFrames: 0,
             volume: command.volume,
             muted: command.muted,
             loop: command.loop,
@@ -206,6 +208,7 @@ function createStreamingVoice(command: Extract<WorkerCommand, { type: "createVoi
         stream,
         spriteOffsetSeconds: command.offsetSeconds,
         positionFrames: 0,
+        renderedFrames: 0,
         volume: command.volume,
         muted: command.muted,
         loop: false,
@@ -323,12 +326,13 @@ function applyCommand(command: Extract<WorkerCommand, { type: "command" }>): voi
                 postEvent(voice.ownerId, "seek", voice.id);
                 break;
             case "fade":
-                voice.volume = command.from ?? voice.volume;
+                voice.volume = voice.fade ? voice.volume : (command.from ?? voice.volume);
                 voice.fade = {
                     from: voice.volume,
                     to: command.to ?? voice.volume,
-                    startFrame: voice.positionFrames,
+                    startFrame: voice.renderedFrames,
                     durationFrames: Math.max(1, Math.round((command.durationMs ?? 0) * SAMPLE_RATE / 1000)),
+                    version: command.fadeVersion ?? 0,
                 };
                 break;
         }
@@ -337,7 +341,13 @@ function applyCommand(command: Extract<WorkerCommand, { type: "command" }>): voi
 
 function render(frames: number, globalVolume: number, globalMuted: boolean): void {
     const output = new Float32Array(frames * CHANNELS);
-    const events: Array<{ ownerId: number; event: string; id: number }> = [];
+    const events: Array<{
+        ownerId: number;
+        event: string;
+        id: number;
+        fadeVersion?: number;
+        final?: boolean;
+    }> = [];
     for (let frame = 0; frame < frames; frame++) {
         let left = 0;
         let right = 0;
@@ -347,10 +357,10 @@ function render(frames: number, globalVolume: number, globalMuted: boolean): voi
             if (voice.data && voice.positionFrames >= sourceFrames) {
                 if (voice.loop) {
                     voice.positionFrames = 0;
-                    events.push({ ownerId: voice.ownerId, event: "end", id: voice.id });
+                    events.push({ ownerId: voice.ownerId, event: "end", id: voice.id, final: false });
                 } else {
                     voices.delete(voice.id);
-                    events.push({ ownerId: voice.ownerId, event: "end", id: voice.id });
+                    events.push({ ownerId: voice.ownerId, event: "end", id: voice.id, final: true });
                     continue;
                 }
             }
@@ -358,18 +368,24 @@ function render(frames: number, globalVolume: number, globalMuted: boolean): voi
             if (voice.stream && !streamFrame) {
                 if (voice.stream.ended) {
                     voices.delete(voice.id);
-                    events.push({ ownerId: voice.ownerId, event: "end", id: voice.id });
+                    events.push({ ownerId: voice.ownerId, event: "end", id: voice.id, final: true });
                 }
                 continue;
             }
             if (voice.fade) {
-                const elapsed = voice.positionFrames - voice.fade.startFrame;
+                const elapsed = voice.renderedFrames - voice.fade.startFrame;
                 const progress = Math.min(1, Math.max(0, elapsed / voice.fade.durationFrames));
                 voice.volume = voice.fade.from + (voice.fade.to - voice.fade.from) * progress;
                 if (progress >= 1) {
+                    const fadeVersion = voice.fade.version;
                     voice.volume = voice.fade.to;
                     voice.fade = undefined;
-                    events.push({ ownerId: voice.ownerId, event: "fade", id: voice.id });
+                    events.push({
+                        ownerId: voice.ownerId,
+                        event: "fade",
+                        id: voice.id,
+                        fadeVersion,
+                    });
                 }
             }
             const gain = voice.muted || globalMuted ? 0 : voice.volume * globalVolume;
@@ -377,6 +393,7 @@ function render(frames: number, globalVolume: number, globalMuted: boolean): voi
             left += (streamFrame?.[0] ?? voice.data![sampleIndex]) * gain;
             right += (streamFrame?.[1] ?? voice.data![sampleIndex + 1]) * gain;
             voice.positionFrames++;
+            voice.renderedFrames++;
         }
         output[frame * CHANNELS] = Math.max(-1, Math.min(1, left));
         output[frame * CHANNELS + 1] = Math.max(-1, Math.min(1, right));
@@ -386,6 +403,7 @@ function render(frames: number, globalVolume: number, globalMuted: boolean): voi
         ownerId: voice.ownerId,
         seconds: voice.spriteOffsetSeconds + voice.positionFrames / SAMPLE_RATE,
         playing: voice.playing,
+        volume: voice.volume,
     }));
     port!.postMessage(
         { type: "chunk", buffer: output.buffer, frames, positions, events },

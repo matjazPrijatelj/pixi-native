@@ -1,0 +1,130 @@
+{
+  "src": [
+    "drum-kit-atlas.mp3"
+  ],
+  "texture": "../drum-kit.png",
+  "sprite": {
+    "crash": [
+      250,
+      1400
+    ],
+    "closedHat": [
+      1900,
+      350
+    ],
+    "ride": [
+      2500,
+      1200
+    ],
+    "highTom": [
+      3950,
+      750
+    ],
+    "snare": [
+      4950,
+      600
+    ],
+    "kick": [
+      5800,
+      550
+    ],
+    "floorTom": [
+      6600,
+      850
+    ],
+    "openHat": [
+      7700,
+      1000
+    ]
+  },
+  "pads": [
+    {
+      "key": "u",
+      "sprite": "crash",
+      "label": "Crash",
+      "hit": {
+        "x": 0.15,
+        "y": 0.13,
+        "radiusX": 0.13,
+        "radiusY": 0.1
+      }
+    },
+    {
+      "key": "i",
+      "sprite": "closedHat",
+      "label": "Closed hi-hat",
+      "hit": {
+        "x": 0.35,
+        "y": 0.17,
+        "radiusX": 0.085,
+        "radiusY": 0.055
+      }
+    },
+    {
+      "key": "o",
+      "sprite": "ride",
+      "label": "Ride",
+      "hit": {
+        "x": 0.63,
+        "y": 0.13,
+        "radiusX": 0.13,
+        "radiusY": 0.1
+      }
+    },
+    {
+      "key": "p",
+      "sprite": "highTom",
+      "label": "High tom",
+      "hit": {
+        "x": 0.86,
+        "y": 0.17,
+        "radiusX": 0.09,
+        "radiusY": 0.08
+      }
+    },
+    {
+      "key": "j",
+      "sprite": "snare",
+      "label": "Snare",
+      "hit": {
+        "x": 0.23,
+        "y": 0.57,
+        "radiusX": 0.105,
+        "radiusY": 0.085
+      }
+    },
+    {
+      "key": "k",
+      "sprite": "kick",
+      "label": "Kick",
+      "hit": {
+        "x": 0.49,
+        "y": 0.68,
+        "radiusX": 0.145,
+        "radiusY": 0.19
+      }
+    },
+    {
+      "key": "l",
+      "sprite": "floorTom",
+      "label": "Floor tom",
+      "hit": {
+        "x": 0.74,
+        "y": 0.62,
+        "radiusX": 0.105,
+        "radiusY": 0.12
+      }
+    },
+    {
+      "key": "č",
+      "sprite": "openHat",
+      "label": "Open hi-hat",
+      "hit": {
+        "x": 0.9,
+        "y": 0.48,
+        "radiusX": 0.085,
+        "radiusY": 0.06
+      }
+    }
+  ]
+}

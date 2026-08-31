@@ -42,6 +42,7 @@ interface VoicePosition {
     readonly seconds: number;
     readonly outputFrame: number;
     readonly playing: boolean;
+    readonly volume: number;
 }
 
 function resolveFfmpegPath(): string {
@@ -60,6 +61,8 @@ function resolveFfmpegPath(): string {
 export class NativeAudioEngine {
     private readonly owners = new Map<number, NativeAudioEventTarget>();
     private readonly positions = new Map<number, VoicePosition>();
+    private readonly voiceOwners = new Map<number, number>();
+    private readonly fadeVersions = new Map<number, number>();
     private readonly eventTimers = new Set<ReturnType<typeof setTimeout>>();
     private worker?: Worker;
     private device?: sdl.Sdl.Audio.AudioPlaybackInstance;
@@ -84,11 +87,17 @@ export class NativeAudioEngine {
         for (const [id, position] of this.positions) {
             if (position.ownerId === ownerId) this.positions.delete(id);
         }
+        for (const [id, voiceOwnerId] of this.voiceOwners) {
+            if (voiceOwnerId !== ownerId) continue;
+            this.voiceOwners.delete(id);
+            this.fadeVersions.delete(id);
+        }
     }
 
     public createVoice(ownerId: number, options: CreateVoiceOptions): number {
         this.ensureStarted();
         const id = this.nextVoiceId++;
+        this.voiceOwners.set(id, ownerId);
         this.worker!.postMessage({
             type: "createVoice",
             ownerId,
@@ -131,8 +140,26 @@ export class NativeAudioEngine {
         id?: number,
         values: Record<string, unknown> = {},
     ): void {
-        this.worker?.postMessage({ type: "command", ownerId, id, command, ...values });
-        if (command === "stop" && id !== undefined) this.positions.delete(id);
+        let fadeVersion: number | undefined;
+        if (
+            id !== undefined &&
+            (command === "fade" || command === "volume" || command === "seek" || command === "stop")
+        ) {
+            fadeVersion = (this.fadeVersions.get(id) ?? 0) + 1;
+            this.fadeVersions.set(id, fadeVersion);
+        }
+        this.worker?.postMessage({
+            type: "command",
+            ownerId,
+            id,
+            command,
+            ...values,
+            fadeVersion,
+        });
+        if (command === "stop" && id !== undefined) {
+            this.positions.delete(id);
+            this.voiceOwners.delete(id);
+        }
     }
 
     public currentTime(id: number): number | undefined {
@@ -142,6 +169,10 @@ export class NativeAudioEngine {
         const queuedFrames = this.device.queued / (CHANNELS * BYTES_PER_SAMPLE);
         const audibleFrame = this.submittedFrames - queuedFrames;
         return Math.max(0, position.seconds - (position.outputFrame - audibleFrame) / SAMPLE_RATE);
+    }
+
+    public currentVolume(id: number): number | undefined {
+        return this.positions.get(id)?.volume;
     }
 
     public get volume(): number {
@@ -173,6 +204,8 @@ export class NativeAudioEngine {
     public stopAll(): void {
         this.worker?.postMessage({ type: "clear" });
         this.positions.clear();
+        this.voiceOwners.clear();
+        this.fadeVersions.clear();
         this.device?.clearQueue();
         this.submittedFrames = 0;
     }
@@ -245,6 +278,7 @@ export class NativeAudioEngine {
                 seconds: position.seconds,
                 outputFrame: this.submittedFrames,
                 playing: position.playing,
+                volume: position.volume,
             });
         }
         const audibleDelayMs =
@@ -253,7 +287,17 @@ export class NativeAudioEngine {
         for (const event of message.events) {
             const timer = setTimeout(() => {
                 this.eventTimers.delete(timer);
-                if (event.event === "end") this.positions.delete(event.id);
+                if (
+                    event.event === "fade" &&
+                    event.fadeVersion !== this.fadeVersions.get(event.id)
+                ) {
+                    return;
+                }
+                if (event.event === "end" && event.final !== false) {
+                    this.positions.delete(event.id);
+                    this.voiceOwners.delete(event.id);
+                    this.fadeVersions.delete(event.id);
+                }
                 this.dispatch(event.ownerId, event.event, event.id);
             }, audibleDelayMs);
             timer.unref();

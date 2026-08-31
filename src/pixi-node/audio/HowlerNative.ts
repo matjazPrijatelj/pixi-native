@@ -42,6 +42,7 @@ interface SoundState {
     muted: boolean;
     loop: boolean;
     paused: boolean;
+    fadeTarget?: number;
 }
 
 const OPTION_EVENTS: ReadonlyArray<readonly [keyof HowlOptions, NativeAudioEvent]> = [
@@ -192,15 +193,19 @@ export class Howl implements NativeAudioEventTarget {
     }
 
     public volume(): number;
+    public volume(volume: undefined, id: number): number;
     public volume(volume: number, id?: number): this;
     public volume(volume?: number, id?: number): number | this {
         if (volume === undefined) return id === undefined
             ? this.groupVolume
-            : (this.sounds.get(id)?.volume ?? this.groupVolume);
+            : (nativeAudioEngine.currentVolume(id) ??
+              this.sounds.get(id)?.volume ??
+              this.groupVolume);
         const normalized = clampVolume(volume);
         if (id === undefined) this.groupVolume = normalized;
         this.forSounds(id, (sound, soundId) => {
             sound.volume = normalized;
+            sound.fadeTarget = undefined;
             nativeAudioEngine.command(this.ownerId, "volume", soundId, { value: normalized });
         });
         return this;
@@ -264,7 +269,8 @@ export class Howl implements NativeAudioEventTarget {
             throw new RangeError("Fade duration must be non-negative and finite");
         }
         this.forSounds(id, (sound, soundId) => {
-            sound.volume = normalizedTo;
+            sound.volume = nativeAudioEngine.currentVolume(soundId) ?? sound.volume;
+            sound.fadeTarget = normalizedTo;
             nativeAudioEngine.command(this.ownerId, "fade", soundId, {
                 from: normalizedFrom,
                 to: normalizedTo,
@@ -353,6 +359,13 @@ export class Howl implements NativeAudioEventTarget {
         if (event === "end" || event === "stop") {
             const sound = id === undefined ? undefined : this.sounds.get(id);
             if (sound && !sound.loop) this.sounds.delete(id!);
+        }
+        if (event === "fade" && id !== undefined) {
+            const sound = this.sounds.get(id);
+            if (sound?.fadeTarget !== undefined) {
+                sound.volume = sound.fadeTarget;
+                sound.fadeTarget = undefined;
+            }
         }
         const listeners = [...(this.listeners.get(event) ?? [])];
         for (const listener of listeners) {

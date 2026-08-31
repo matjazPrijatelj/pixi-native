@@ -1,5 +1,11 @@
 # Development history
 
+## 2026-09-01
+
+- Added a transparent illustrated drum-kit texture and a synthesized eight-sound MP3 audio atlas with normalized hit regions for future pointer input; scene `6` maps U/I/O/P/J/K/L/Č to the kit and flashes each struck component.
+- Made repeated per-voice fades latest-wins from the actual mixer volume, suppressed stale delayed fade events with generation tokens, and moved fade timing to a monotonic voice clock so it remains correct across music-loop boundaries.
+- Added MP3 atlas, texture-alpha, key-map, eight-voice overlap, repeated-fade, and loop-boundary regression coverage.
+
 ## 2026-08-31
 
 - Added a native Howler-compatible audio layer over SDL playback with a worker-thread stereo 48 kHz mixer, overlapping voices, audio sprites, pause/stop/seek, looping, per-sound/global volume and mute, fades, events, preload, and explicit cache/worker/device teardown.
