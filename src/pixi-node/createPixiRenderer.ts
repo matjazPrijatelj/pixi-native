@@ -1,7 +1,9 @@
 import { Application, VERSION, type TextureSource } from "pixi.js";
+import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
 import { NodeDOMAdapter } from "./NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
+import { NodeTextCanvas } from "./NodeTextCanvas.ts";
 import type {
   NodeGPUApi,
   NodeGPUInstance,
@@ -12,8 +14,7 @@ import type {
 import { resolveGpuBackend } from "./platform.ts";
 
 const require = createRequire(import.meta.url);
-// const gpu = require("../../native/gpu") as NodeGPUApi;
-const gpu = require("@kmamal/gpu") as NodeGPUApi;
+const gpu = require("../../native/gpu") as NodeGPUApi;
 const sdl = require("@kmamal/sdl") as NodeSDLApi;
 
 export interface NodeRendererContext {
@@ -67,8 +68,9 @@ export async function createPixiRenderer(): Promise<{
     const resource = (
       source && "resource" in source ? source.resource : source
     ) as PixelResource | undefined;
-    const context = resource?.getContext?.("2d") as
+    let context = resource?.getContext?.("2d") as
       | {
+          drawImage?: (image: unknown, x: number, y: number) => void;
           getImageData?: (
             x: number,
             y: number,
@@ -77,6 +79,19 @@ export async function createPixiRenderer(): Promise<{
           ) => { data: Uint8Array };
         }
       | undefined;
+    const width = Math.max(
+      1,
+      Number(resource?.width ?? (copySize as GPUExtent3DDict).width ?? 1),
+    );
+    const height = Math.max(
+      1,
+      Number(resource?.height ?? (copySize as GPUExtent3DDict).height ?? 1),
+    );
+    if (!context?.getImageData && resource instanceof Image) {
+      const pixelCanvas = new NodeTextCanvas(width, height);
+      context = pixelCanvas.getContext("2d") as typeof context;
+      context?.drawImage?.(resource, 0, 0);
+    }
     if (!context?.getImageData) {
       if (!nativeCopyExternalImageToTexture)
         throw new Error("Native image source cannot provide RGBA pixels");
@@ -86,14 +101,6 @@ export async function createPixiRenderer(): Promise<{
         copySize,
       );
     }
-    const width = Math.max(
-      1,
-      Number(resource?.width ?? (copySize as GPUExtent3DDict).width ?? 1),
-    );
-    const height = Math.max(
-      1,
-      Number(resource?.height ?? (copySize as GPUExtent3DDict).height ?? 1),
-    );
     const pixels = context.getImageData(0, 0, width, height).data;
     queue.writeTexture(
       destination,
@@ -122,6 +129,7 @@ export async function createPixiRenderer(): Promise<{
     height: canvas.height,
     background: 0x101522,
     resolution: 1,
+    antialias: true,
     autoStart: false,
     gpu: { adapter, device },
   } as never);
@@ -170,7 +178,7 @@ export async function createPixiRenderer(): Promise<{
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
-    // renderer.destroy();
+    renderer.destroy();
     device.destroy();
     if (!window.destroyed) {
       window.destroy();

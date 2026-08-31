@@ -1,28 +1,7 @@
 import { DOMAdapter } from "pixi.js";
-import { fileURLToPath } from "node:url";
+import { Image } from "@napi-rs/canvas";
 import type { NodeGPUInstance } from "./nativeTypes.ts";
 import { NodeTextCanvas } from "./NodeTextCanvas.ts";
-import { Canvas, Image as SkiaImage } from "skia-canvas";
-
-class NodeImage extends SkiaImage {
-    private pixelCanvas?: Canvas;
-    public override get src(): string { return super.src; }
-    public override set src(value: string | URL | Buffer) {
-        const normalized = value instanceof URL
-            ? (value.protocol === "file:" ? fileURLToPath(value) : value)
-            : (typeof value === "string" && value.startsWith("file:") ? fileURLToPath(value) : value);
-        this.pixelCanvas = undefined;
-        super.src = normalized as never;
-    }
-    public getContext(type: string): unknown {
-        if (type !== "2d") return null;
-        if (!this.pixelCanvas) {
-            this.pixelCanvas = new Canvas(Math.max(1, this.width), Math.max(1, this.height));
-            this.pixelCanvas.getContext("2d").drawImage(this, 0, 0);
-        }
-        return this.pixelCanvas.getContext("2d");
-    }
-}
 
 /** Minimal Pixi environment adapter for Node's native WGPU runtime. */
 export class NodeDOMAdapter {
@@ -54,7 +33,7 @@ export class NodeDOMAdapter {
         return { userAgent: "Node native WebGPU", gpu: this.gpu as unknown as GPU };
     }
 
-    public createImage(): HTMLImageElement { return new NodeImage() as unknown as HTMLImageElement; }
+    public createImage(): HTMLImageElement { return new Image() as unknown as HTMLImageElement; }
     public getWebGLRenderingContext(): never { throw new Error("WebGL is intentionally unsupported in this PoC"); }
     public getBaseUrl(): string { return "file:///"; }
     public getFontFaceSet(): null { return null; }
@@ -101,7 +80,7 @@ export class NodeDOMAdapter {
 
     public install(): void {
         const canvas2d = this.createCanvas().getContext("2d");
-        if (!canvas2d) throw new Error("Skia Canvas2D backend is unavailable");
+        if (!canvas2d) throw new Error("Native Canvas2D backend is unavailable");
         DOMAdapter.set(this as never);
         const globalObject = globalThis as any;
         if (!globalObject.HTMLCanvasElement) globalObject.HTMLCanvasElement = NodeTextCanvas;
