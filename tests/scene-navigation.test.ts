@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { getSceneIndexForKey, getVideoIndexForKey } from "../src/demo/sceneNavigation.ts";
 
 test("number keys select the matching scene", () => {
-    assert.equal(getSceneIndexForKey("1", 0, 4), 0);
-    assert.equal(getSceneIndexForKey("2", 0, 4), 1);
-    assert.equal(getSceneIndexForKey("3", 0, 4), 2);
-    assert.equal(getSceneIndexForKey("4", 0, 4), 3);
+    assert.equal(getSceneIndexForKey("1", 0, 5), 0);
+    assert.equal(getSceneIndexForKey("2", 0, 5), 1);
+    assert.equal(getSceneIndexForKey("3", 0, 5), 2);
+    assert.equal(getSceneIndexForKey("4", 0, 5), 3);
+    assert.equal(getSceneIndexForKey("5", 0, 5), 4);
 });
 
 test("arrow keys navigate with wraparound", () => {
@@ -23,6 +24,7 @@ test("unknown and repeated key presses do not change the scene", () => {
 
 test("number keys beyond the available scenes are ignored", () => {
     assert.equal(getSceneIndexForKey("4", 0, 3), null);
+    assert.equal(getSceneIndexForKey("5", 0, 4), null);
 });
 
 test("video navigation cycles with up and down", () => {

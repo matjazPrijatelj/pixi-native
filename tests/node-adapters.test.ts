@@ -72,6 +72,39 @@ test("NodeDOMAdapter loads a local image into a Canvas2D context", async () => {
     assert.equal(context.getImageData(0, 0, 1, 1).data.length, 4);
 });
 
+test("NodeDOMAdapter fetches absolute paths and file URLs without HTTP", async () => {
+    const adapter = new NodeDOMAdapter({} as never);
+    const fontUrl = new URL(
+        "../assets/bitmap-font/native-pixel.fnt",
+        import.meta.url,
+    );
+
+    const absoluteResponse = await adapter.fetch(fileURLToPath(fontUrl));
+    const fileUrlResponse = await adapter.fetch(fontUrl);
+
+    assert.equal(absoluteResponse.status, 200);
+    assert.match(await absoluteResponse.text(), /face="NativePixel"/);
+    assert.match(await fileUrlResponse.text(), /chars count=43/);
+});
+
+test("NodeDOMAdapter delegates non-file URLs to the global fetch", async () => {
+    const adapter = new NodeDOMAdapter({} as never);
+    const originalFetch = globalThis.fetch;
+    let requestedUrl: string | undefined;
+    globalThis.fetch = async (input): Promise<Response> => {
+        requestedUrl = input.toString();
+        return new Response("remote font");
+    };
+
+    try {
+        const response = await adapter.fetch("https://example.invalid/font.fnt");
+        assert.equal(requestedUrl, "https://example.invalid/font.fnt");
+        assert.equal(await response.text(), "remote font");
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test("display refresh rates are validated for frame scheduling", () => {
     assert.equal(normalizeRefreshRate(59.94), 59.94);
     assert.equal(normalizeRefreshRate(144), 144);

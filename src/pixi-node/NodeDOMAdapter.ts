@@ -1,5 +1,8 @@
 import { DOMAdapter } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
+import { readFile } from "node:fs/promises";
+import { isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NodeGPUInstance } from "./nativeTypes.ts";
 import { NodeCanvas } from "./NodeCanvas.ts";
 import { FrameScheduler } from "./FrameScheduler.ts";
@@ -40,7 +43,25 @@ export class NodeDOMAdapter {
     public getWebGLRenderingContext(): never { throw new Error("WebGL is intentionally unsupported in this PoC"); }
     public getBaseUrl(): string { return "file:///"; }
     public getFontFaceSet(): null { return null; }
-    public fetch(url: RequestInfo, options?: RequestInit): Promise<Response> { return globalThis.fetch(url, options); }
+    public async fetch(url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+        const source =
+            typeof url === "string"
+                ? url
+                : url instanceof URL
+                  ? url.href
+                  : url.url;
+        const localPath = source.startsWith("file:")
+            ? fileURLToPath(source)
+            : isAbsolute(source)
+              ? source
+              : null;
+
+        if (localPath) {
+            const data = await readFile(localPath);
+            return new Response(new Uint8Array(data), { status: 200 });
+        }
+        return globalThis.fetch(url, options);
+    }
     public parseXML(): never { throw new Error("XML parsing is not implemented in the native WGPU PoC"); }
 
     private installFrameScheduler(): void {

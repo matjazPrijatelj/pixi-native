@@ -3,6 +3,7 @@ const NUMBER_KEYS: Readonly<Record<string, number>> = {
   "2": 1,
   "3": 2,
   "4": 3,
+  "5": 4,
 };
 
 /** Returns the scene selected by a non-repeating SDL key press, or null for other keys. */

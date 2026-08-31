@@ -6,7 +6,7 @@ if (!(globalThis as any).navigator) {
     configurable: true,
   });
 }
-const { Assets, Texture } = await import("pixi.js");
+const { Assets, BitmapFont, Texture } = await import("pixi.js");
 const { createPixiRenderer } =
   await import("./pixi-node/createPixiRenderer.ts");
 const { NodeCanvas } = await import("./pixi-node/NodeCanvas.ts");
@@ -14,10 +14,13 @@ const { supportsNativeVideo } = await import("./pixi-node/platform.ts");
 const {
   animateDemoScene,
   createGraphicsTest,
+  createBitmapTextTest,
   createSpriteTest,
   createTextTest,
   createVideoTest,
   disposeDemoScene,
+  DYNAMIC_BITMAP_FONT_NAME,
+  installDynamicBitmapTextFont,
 } = await import("./demo/DemoScene.ts");
 
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
@@ -29,8 +32,16 @@ const { app, native } = await createPixiRenderer();
 const texturePath = fileURLToPath(
   new URL("../assets/test-texture.png", import.meta.url),
 );
+const bitmapFontPath = fileURLToPath(
+  new URL(
+    "../assets/bitmap-font/native-pixel.fnt",
+    import.meta.url,
+  ),
+);
 
 const loaded = await Assets.load(texturePath);
+installDynamicBitmapTextFont();
+await Assets.load(bitmapFontPath);
 const image = (loaded as any).source?.resource;
 const imageCanvas = new NodeCanvas(loaded.width, loaded.height);
 const context = imageCanvas.getContext("2d") as any;
@@ -69,6 +80,7 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createGraphicsTest(),
   () => createSpriteTest(texture),
   () => createTextTest(),
+  () => createBitmapTextTest(),
 ];
 
 const videoSceneIndex = supportsNativeVideo(process.platform)
@@ -169,6 +181,14 @@ app.ticker.add((ticker) => {
 app.ticker.start();
 
 let shuttingDown = false;
+let bitmapFontsDestroyed = false;
+const destroyBitmapFonts = async (): Promise<void> => {
+  if (bitmapFontsDestroyed) return;
+  bitmapFontsDestroyed = true;
+  BitmapFont.uninstall(DYNAMIC_BITMAP_FONT_NAME);
+  await Assets.unload(bitmapFontPath);
+};
+
 const shutdown = async (): Promise<void> => {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -183,6 +203,7 @@ const shutdown = async (): Promise<void> => {
     { removeView: true },
     { children: true, context: true, style: true },
   );
+  await destroyBitmapFonts();
   native.destroy();
   process.exit(0);
 };
@@ -217,6 +238,10 @@ const restartApp = async (): Promise<void> => {
       { removeView: true },
       { children: true, context: true, style: true },
     );
+  } catch {}
+
+  try {
+    await destroyBitmapFonts();
   } catch {}
 
   try {

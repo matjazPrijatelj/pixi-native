@@ -21,3 +21,17 @@ test("animateDemoScene still animates a sprite at the expected slot", () => {
     assert.equal(sprite.x, 640);
     assert.equal(sprite.y, 440);
 });
+
+test("animateDemoScene forwards timing to a scene update hook", () => {
+    const scene = new Container() as Container & {
+        update(deltaMS: number, now: number): void;
+    };
+    let timing: [number, number] | undefined;
+    scene.update = (deltaMS, now) => {
+        timing = [deltaMS, now];
+    };
+
+    animateDemoScene(scene, 16.5, 1234);
+
+    assert.deepEqual(timing, [16.5, 1234]);
+});

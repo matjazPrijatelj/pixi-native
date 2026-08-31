@@ -2,14 +2,17 @@ import { Container, Graphics, Sprite } from "pixi.js";
 import { createGraphicsTest } from "./test/GraphicsTest.ts";
 import { createSpriteTest } from "./test/SpriteTest.ts";
 import { createTextTest } from "./test/TextTest.ts";
+import { createBitmapTextTest } from "./test/BitmapTextTest.ts";
 import { createVideoTest } from "./test/VideoTest.ts";
 
 export {
   createGraphicsTest,
   createSpriteTest,
   createTextTest,
+  createBitmapTextTest,
   createVideoTest,
 };
+export * from "./bitmapFonts.ts";
 export * from "./sceneLifecycle.ts";
 
 export function animateDemoScene(
@@ -33,5 +36,9 @@ export function animateDemoScene(
     sprite.y = 390 + Math.cos(now / 700) * 50;
   }
 
-  (scene as Container & { update?: () => void }).update?.();
+  (
+    scene as Container & {
+      update?: (deltaMS: number, now: number) => void;
+    }
+  ).update?.(deltaMS, now);
 }

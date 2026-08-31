@@ -1,23 +1,20 @@
-import { Container, Graphics, Text } from "pixi.js";
+import { BitmapText, Container, Graphics } from "pixi.js";
+import { createMetricBitmapText } from "./bitmapFonts.ts";
 
 /** Always-visible FPS indicator rendered by Pixi on the native WebGPU surface. */
 export class FpsOverlay extends Container {
-  private readonly textLabel: Text;
+  private readonly textLabel: BitmapText;
   private elapsedMS = 0;
   private squaredElapsedMS = 0;
   private frameCount = 0;
-  private nextUpdateMS = 1000;
+  private nextUpdateMS = 100;
 
   public constructor() {
     super();
-    this.textLabel = new Text({
-      text: "FPS: --",
-      resolution: 2,
-      style: { fontFamily: "Arial", fontSize: 18, fill: 0xffffff },
-    });
+    this.textLabel = createMetricBitmapText("FPS: --", 18);
 
     const background = new Graphics()
-      .roundRect(0, 0, 250, 32, 6)
+      .roundRect(0, 0, 360, 32, 6)
       .fill({ color: 0x101522, alpha: 0.85 });
 
     this.textLabel.position.set(10, 6);
