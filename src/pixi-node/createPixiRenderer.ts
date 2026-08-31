@@ -168,7 +168,11 @@ export async function createPixiRenderer(): Promise<{
   );
 
   const refreshRateHz = normalizeRefreshRate(window.display.frequency);
-  new NodeDOMAdapter(instance, refreshRateHz).install();
+  const waitForPresent =
+    process.platform === "win32" && renderer.waitForPresent
+      ? renderer.waitForPresent.bind(renderer)
+      : undefined;
+  new NodeDOMAdapter(instance, refreshRateHz, waitForPresent).install();
 
   const app = new Application();
   await app.init({

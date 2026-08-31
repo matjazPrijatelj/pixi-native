@@ -2,6 +2,8 @@
 
 ## 2026-08-31
 
+- Replaced Windows timer-paced RAF with the D3D12/DXGI frame-latency waitable-object signal, configured the FIFO swapchain for a maximum frame latency of one, and retained refresh-rate timer fallback when the native signal is unavailable.
+- Verified TypeScript, all 43 Node tests, the complete native Dawn build, and a Windows D3D12 runtime launch reporting `DXGI frame-latency signal` at the detected 60 Hz refresh rate.
 - Replaced the frequently updated FPS/frame-time/jitter overlay and native-video status/statistics label with shared-atlas BitmapText, avoiding repeated Canvas text rasterization and texture uploads when metrics change.
 - Added a dedicated BitmapText demo scene on key `4`, moved native video to key `5`, and exercised runtime-generated and external BMFont atlases with animated, tinted, multiline, and Slovenian-character samples.
 - Added a deterministic procedural 5x7 BMFont generator and checked-in `.fnt`/PNG fixture, plus direct absolute-path and `file:` loading in the Node DOM adapter without an HTTP server.

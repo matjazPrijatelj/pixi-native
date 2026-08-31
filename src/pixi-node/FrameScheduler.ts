@@ -9,6 +9,95 @@ export interface FrameSchedulerOptions {
     readonly minimumFrameSpacingRatio?: number;
 }
 
+export interface VSyncFrameSchedulerOptions {
+    readonly waitForPresent: () => Promise<boolean>;
+    readonly now?: () => number;
+    readonly setTimer?: (callback: () => void, delayMS: number) => unknown;
+    readonly clearTimer?: (timer: unknown) => void;
+    readonly fallbackFrameIntervalMS?: number;
+}
+
+/** Present-signal-backed requestAnimationFrame scheduler for Windows DXGI. */
+export class VSyncFrameScheduler {
+    private readonly callbacks = new Map<number, FrameCallback>();
+    private readonly waitForPresent: () => Promise<boolean>;
+    private readonly now: () => number;
+    private readonly setTimer: (
+        callback: () => void,
+        delayMS: number,
+    ) => unknown;
+    private readonly clearTimer: (timer: unknown) => void;
+    private readonly fallbackFrameIntervalMS: number;
+    private nextId = 1;
+    private waiting = false;
+    private fallbackTimer: unknown | undefined;
+
+    public constructor(options: VSyncFrameSchedulerOptions) {
+        this.waitForPresent = options.waitForPresent;
+        this.now = options.now ?? (() => performance.now());
+        this.setTimer =
+            options.setTimer ??
+            ((callback, delayMS) => setTimeout(callback, delayMS));
+        this.clearTimer =
+            options.clearTimer ??
+            ((timer) => clearTimeout(timer as ReturnType<typeof setTimeout>));
+        this.fallbackFrameIntervalMS =
+            options.fallbackFrameIntervalMS ?? 1000 / 60;
+        if (
+            !Number.isFinite(this.fallbackFrameIntervalMS) ||
+            this.fallbackFrameIntervalMS <= 0
+        ) {
+            throw new Error("Fallback frame interval must be positive and finite");
+        }
+    }
+
+    public request(callback: FrameCallback): number {
+        const id = this.nextId++;
+        this.callbacks.set(id, callback);
+        this.schedule();
+        return id;
+    }
+
+    public cancel(id: number): void {
+        this.callbacks.delete(id);
+        if (this.callbacks.size === 0 && this.fallbackTimer !== undefined) {
+            this.clearTimer(this.fallbackTimer);
+            this.fallbackTimer = undefined;
+        }
+    }
+
+    private schedule(): void {
+        if (
+            this.waiting ||
+            this.fallbackTimer !== undefined ||
+            this.callbacks.size === 0
+        ) return;
+        this.waiting = true;
+        void this.waitForPresent().then(
+            (signaled) => this.dispatch(signaled),
+            () => this.dispatch(false),
+        );
+    }
+
+    private dispatch(signaled: boolean): void {
+        this.waiting = false;
+        if (!signaled) {
+            if (this.callbacks.size === 0) return;
+            this.fallbackTimer = this.setTimer(() => {
+                this.fallbackTimer = undefined;
+                this.dispatch(true);
+            }, this.fallbackFrameIntervalMS);
+            return;
+        }
+
+        const pending = [...this.callbacks.values()];
+        this.callbacks.clear();
+        const timestamp = this.now();
+        for (const callback of pending) callback(timestamp);
+        this.schedule();
+    }
+}
+
 /** Timer-backed requestAnimationFrame scheduler for the native Node runtime. */
 export class FrameScheduler {
     private readonly callbacks = new Map<number, FrameCallback>();

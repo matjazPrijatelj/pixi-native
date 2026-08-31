@@ -5,7 +5,7 @@ import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NodeGPUInstance } from "./nativeTypes.ts";
 import { NodeCanvas } from "./NodeCanvas.ts";
-import { FrameScheduler } from "./FrameScheduler.ts";
+import { FrameScheduler, VSyncFrameScheduler } from "./FrameScheduler.ts";
 
 /** Minimal Pixi environment adapter for Node's native WGPU runtime. */
 export class NodeDOMAdapter {
@@ -13,10 +13,16 @@ export class NodeDOMAdapter {
 
     private readonly gpu: NodeGPUInstance;
     private readonly refreshRateHz: number;
+    private readonly waitForPresent?: () => Promise<boolean>;
 
-    public constructor(gpu: NodeGPUInstance, refreshRateHz = 60) {
+    public constructor(
+        gpu: NodeGPUInstance,
+        refreshRateHz = 60,
+        waitForPresent?: () => Promise<boolean>,
+    ) {
         this.gpu = gpu;
         this.refreshRateHz = normalizeRefreshRate(refreshRateHz);
+        this.waitForPresent = waitForPresent;
     }
 
     public createCanvas(width = 1, height = 1): HTMLCanvasElement {
@@ -65,11 +71,16 @@ export class NodeDOMAdapter {
     public parseXML(): never { throw new Error("XML parsing is not implemented in the native WGPU PoC"); }
 
     private installFrameScheduler(): void {
-        const scheduler = new FrameScheduler({
-            frameIntervalMS: 1000 / this.refreshRateHz,
-        });
+        const scheduler = this.waitForPresent
+            ? new VSyncFrameScheduler({
+                  waitForPresent: this.waitForPresent,
+                  fallbackFrameIntervalMS: 1000 / this.refreshRateHz,
+              })
+            : new FrameScheduler({ frameIntervalMS: 1000 / this.refreshRateHz });
         console.log({
-            animationFrameSource: "deadline timer",
+            animationFrameSource: this.waitForPresent
+                ? "DXGI frame-latency signal"
+                : "deadline timer",
             refreshRateHz: this.refreshRateHz,
         });
         (globalThis as any).requestAnimationFrame = (callback: FrameRequestCallback): number =>

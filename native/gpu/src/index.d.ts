@@ -3035,6 +3035,7 @@ interface Renderer {
   getCurrentTexture(): GPUTexture
   getCurrentTextureView(): GPUTextureView
   swap()
+  waitForPresent(): Promise<boolean>
   resize()
 }
 

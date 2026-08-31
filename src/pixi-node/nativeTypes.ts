@@ -17,6 +17,7 @@ export interface NodeWindowRenderer {
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap(): void;
+  waitForPresent?(): Promise<boolean>;
   resize(): void;
   destroy(): void;
 }

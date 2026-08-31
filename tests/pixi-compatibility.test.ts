@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FrameScheduler } from "../src/pixi-node/FrameScheduler.ts";
+import {
+    FrameScheduler,
+    VSyncFrameScheduler,
+} from "../src/pixi-node/FrameScheduler.ts";
 import {
     getReusableUploadBuffer,
     prepareRgbaPixelsForUpload,
@@ -126,4 +129,49 @@ test("canceling the final frame request clears its timer", () => {
     scheduler.cancel(id);
 
     assert.deepEqual(clearedTimers, [42]);
+});
+
+test("VSync frame scheduler batches callbacks on the native present signal", async () => {
+    const waiters: Array<(signaled: boolean) => void> = [];
+    const scheduler = new VSyncFrameScheduler({
+        now: () => 123.5,
+        waitForPresent: () =>
+            new Promise<boolean>((resolve) => waiters.push(resolve)),
+    });
+    const timestamps: number[] = [];
+
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    assert.equal(waiters.length, 1);
+
+    waiters[0](true);
+    await Promise.resolve();
+    assert.deepEqual(timestamps, [123.5, 123.5]);
+});
+
+test("VSync frame scheduler falls back to a timer and honors cancellation", async () => {
+    const waiters: Array<(signaled: boolean) => void> = [];
+    const timers: Array<{ callback: () => void; delayMS: number }> = [];
+    const scheduler = new VSyncFrameScheduler({
+        now: () => 200,
+        waitForPresent: () =>
+            new Promise<boolean>((resolve) => waiters.push(resolve)),
+        fallbackFrameIntervalMS: 10,
+        setTimer: (callback, delayMS) => {
+            timers.push({ callback, delayMS });
+            return timers.length;
+        },
+    });
+    const timestamps: number[] = [];
+    const canceledId = scheduler.request(() => timestamps.push(-1));
+    scheduler.cancel(canceledId);
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+
+    waiters[0](false);
+    await Promise.resolve();
+    assert.equal(waiters.length, 1);
+    assert.equal(timers[0].delayMS, 10);
+
+    timers[0].callback();
+    assert.deepEqual(timestamps, [200]);
 });
