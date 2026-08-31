@@ -14,6 +14,9 @@ importers:
       '@napi-rs/canvas':
         specifier: 1.0.8
         version: 1.0.8
+      pixi-node-wgpu:
+        specifier: 'link:'
+        version: 'link:'
       pixi.js:
         specifier: 8.20.0
         version: 8.20.0

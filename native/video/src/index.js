@@ -1,7 +1,8 @@
 const { createRequire } = require("node:module");
+const { getBindingPath } = require("./binding-path.js");
 const requireNative = createRequire(__filename);
 
-const native = requireNative("../dist/native_video.node");
+const native = requireNative(getBindingPath());
 
 class NativeVideoDecoder {
     constructor(options) {
