@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import { createGraphicsTest } from "./test/GraphicsTest.ts";
 import { createSpriteTest } from "./test/SpriteTest.ts";
 import { createTextTest } from "./test/TextTest.ts";
@@ -12,6 +12,7 @@ export {
   createBitmapTextTest,
   createVideoTest,
 };
+export type { SpriteTestScene } from "./test/SpriteTest.ts";
 export * from "./bitmapFonts.ts";
 export * from "./sceneLifecycle.ts";
 
@@ -27,13 +28,6 @@ export function animateDemoScene(
     graphics.x = graphics.width;
     graphics.y = graphics.height;
     graphics.rotation += deltaMS * 0.001;
-  }
-
-  const sprite = scene.children[2];
-
-  if (sprite instanceof Sprite) {
-    sprite.x = 640 + Math.sin(now / 500) * 180;
-    sprite.y = 390 + Math.cos(now / 700) * 50;
   }
 
   (

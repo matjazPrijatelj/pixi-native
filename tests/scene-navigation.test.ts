@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getSceneIndexForKey, getVideoIndexForKey } from "../src/demo/sceneNavigation.ts";
+import {
+    getSceneIndexForKey,
+    getSpriteCountDeltaForKey,
+    getVideoIndexForKey,
+} from "../src/demo/sceneNavigation.ts";
 
 test("number keys select the matching scene", () => {
     assert.equal(getSceneIndexForKey("1", 0, 5), 0);
@@ -33,4 +37,11 @@ test("video navigation cycles with up and down", () => {
     assert.equal(getVideoIndexForKey("down", 1, 5), 2);
     assert.equal(getVideoIndexForKey("left", 1, 5), null);
     assert.equal(getVideoIndexForKey("up", 1, 5, true), null);
+});
+
+test("Sprite population controls add and remove batches of ten", () => {
+    assert.equal(getSpriteCountDeltaForKey("up"), 10);
+    assert.equal(getSpriteCountDeltaForKey("down"), -10);
+    assert.equal(getSpriteCountDeltaForKey("left"), null);
+    assert.equal(getSpriteCountDeltaForKey("up", true), null);
 });

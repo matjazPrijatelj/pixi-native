@@ -34,3 +34,14 @@ export function getVideoIndexForKey(
   if (key === "down") return (currentIndex + 1) % videoCount;
   return null;
 }
+
+/** Returns the Sprite-test population delta for a non-repeating up/down press. */
+export function getSpriteCountDeltaForKey(
+  key: string | null,
+  repeat = 0,
+): number | null {
+  if (repeat) return null;
+  if (key === "up") return 10;
+  if (key === "down") return -10;
+  return null;
+}

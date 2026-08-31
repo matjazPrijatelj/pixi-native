@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import type { SpriteTestScene } from "./demo/test/SpriteTest.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -24,13 +25,21 @@ const {
 } = await import("./demo/DemoScene.ts");
 
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
-const { getSceneIndexForKey, getVideoIndexForKey } =
+const {
+  getSceneIndexForKey,
+  getSpriteCountDeltaForKey,
+  getVideoIndexForKey,
+} =
   await import("./demo/sceneNavigation.ts");
 
 const { app, native } = await createPixiRenderer();
 
-const texturePath = fileURLToPath(
-  new URL("../assets/test-texture.png", import.meta.url),
+const texturePaths = [
+  "test-texture.png",
+  "batman.png",
+  "mario.png",
+].map((file) =>
+  fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
 );
 const bitmapFontPath = fileURLToPath(
   new URL(
@@ -39,22 +48,30 @@ const bitmapFontPath = fileURLToPath(
   ),
 );
 
-const loaded = await Assets.load(texturePath);
 installDynamicBitmapTextFont();
 await Assets.load(bitmapFontPath);
-const image = (loaded as any).source?.resource;
-const imageCanvas = new NodeCanvas(loaded.width, loaded.height);
-const context = imageCanvas.getContext("2d") as any;
+type PixiTexture = InstanceType<typeof Texture>;
 
-if (!image || !context?.drawImage) {
-  throw new Error("Native image cannot be rasterized");
-}
+const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
+  const loaded = await Assets.load(path);
+  const image = (loaded as any).source?.resource;
+  const imageCanvas = new NodeCanvas(loaded.width, loaded.height);
+  const context = imageCanvas.getContext("2d") as any;
 
-context.drawImage(image, 0, 0, loaded.width, loaded.height);
-const texture = Texture.from({
-  resource: imageCanvas as unknown as HTMLCanvasElement,
-  format: "rgba8unorm",
-});
+  if (!image || !context?.drawImage) {
+    throw new Error(`Native image cannot be rasterized: ${path}`);
+  }
+
+  context.drawImage(image, 0, 0, loaded.width, loaded.height);
+  return Texture.from({
+    resource: imageCanvas as unknown as HTMLCanvasElement,
+    format: "rgba8unorm",
+  });
+};
+
+const spriteTextures = (await Promise.all(
+  texturePaths.map(loadNativeTexture),
+)) as [PixiTexture, PixiTexture, PixiTexture];
 
 const videos = [
   { file: "Big_Buck_Bunny_1080_10s_5MB.mp4", fps: 60 },
@@ -78,7 +95,11 @@ let videoIndex = 1;
 
 const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createGraphicsTest(),
-  () => createSpriteTest(texture),
+  () =>
+    createSpriteTest(spriteTextures, {
+      width: native.canvas.width,
+      height: native.canvas.height,
+    }),
   () => createTextTest(),
   () => createBitmapTextTest(),
 ];
@@ -144,6 +165,25 @@ native.window.on("keyDown", (event) => {
     return;
   }
 
+  const spriteScene = scene as unknown as Partial<SpriteTestScene>;
+  const spriteCountDelta = getSpriteCountDeltaForKey(
+    event.key,
+    event.repeat,
+  );
+
+  if (
+    spriteCountDelta !== null &&
+    spriteScene.addRandomSprites &&
+    spriteScene.removeRandomSprites
+  ) {
+    if (spriteCountDelta > 0) {
+      spriteScene.addRandomSprites(spriteCountDelta);
+    } else {
+      spriteScene.removeRandomSprites(-spriteCountDelta);
+    }
+    return;
+  }
+
   const nextVideoIndex = getVideoIndexForKey(
     event.key,
     videoIndex,
@@ -189,6 +229,11 @@ const destroyBitmapFonts = async (): Promise<void> => {
   await Assets.unload(bitmapFontPath);
 };
 
+const destroySpriteTextures = async (): Promise<void> => {
+  for (const texture of spriteTextures) texture.destroy(true);
+  await Promise.all(texturePaths.map((path) => Assets.unload(path)));
+};
+
 const shutdown = async (): Promise<void> => {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -198,7 +243,7 @@ const shutdown = async (): Promise<void> => {
     onSubmittedWorkDone?: () => Promise<void>;
   };
   await queue.onSubmittedWorkDone?.();
-  texture.destroy(true);
+  await destroySpriteTextures();
   app.destroy(
     { removeView: true },
     { children: true, context: true, style: true },
@@ -233,7 +278,7 @@ const restartApp = async (): Promise<void> => {
   } catch {}
 
   try {
-    texture.destroy(true);
+    await destroySpriteTextures();
     app.destroy(
       { removeView: true },
       { children: true, context: true, style: true },

@@ -1,10 +1,7 @@
 import { Application, VERSION } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
-import {
-  NodeDOMAdapter,
-  normalizeRefreshRate,
-} from "./NodeDOMAdapter.ts";
+import { NodeDOMAdapter, normalizeRefreshRate } from "./NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
 import { NodeCanvas } from "./NodeCanvas.ts";
 import type {
@@ -122,8 +119,7 @@ export async function createPixiRenderer(): Promise<{
       ? resource?.getPremultipliedRgbaPixels?.()
       : undefined;
     const canvasPixels =
-      premultipliedPixels ??
-      context.getImageData(0, 0, width, height).data;
+      premultipliedPixels ?? context.getImageData(0, 0, width, height).data;
     const format = destination.texture.format;
     if (
       format !== "rgba8unorm" &&
