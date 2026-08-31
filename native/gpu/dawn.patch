@@ -280,7 +280,7 @@ index cb70833c..220e420e 100644
  
      std::tuple<std::vector<std::string>> args;
      if (auto res = wgpu::interop::FromJS(info, args); !res) {
-@@ -68,7 +86,174 @@ Napi::Value CreateGPU(const Napi::CallbackInfo& info) {
+@@ -68,7 +86,200 @@ Napi::Value CreateGPU(const Napi::CallbackInfo& info) {
      }
  
      // Construct a wgpu::interop::GPU interface, implemented by wgpu::bindings::GPU.
@@ -302,7 +302,7 @@ index cb70833c..220e420e 100644
 +            InstanceMethod("getCurrentTextureView", &Renderer::getCurrentTextureView),
 +            InstanceMethod("swap", &Renderer::swap),
 +            InstanceMethod("resize", &Renderer::resize),
-            InstanceMethod("destroy", &Renderer::destroy),
++            InstanceMethod("destroy", &Renderer::destroy),
 +        });
 +
 +        constructor = Napi::Persistent(func);
@@ -383,6 +383,14 @@ index cb70833c..220e420e 100644
 +        return env.Undefined();
 +    }
 +
++    Napi::Value destroy(const Napi::CallbackInfo& info) {
++        const Napi::Env& env = info.Env();
++        _destroySurface();
++        _device.Reset();
++        _window.Reset();
++        return env.Undefined();
++    }
++
 +private:
 +
 +    Napi::ObjectReference _device;
@@ -391,10 +399,18 @@ index cb70833c..220e420e 100644
 +    WGPUDevice _wgpuDevice;
 +    WGPUAdapter _wgpuAdapter;
 +    WGPUInstance _wgpuInstance;
-+    WGPUSurface _wgpuSurface;
++    WGPUSurface _wgpuSurface = nullptr;
 +    WGPUTextureFormat _wgpuPreferredFormat;
 +
++    void _destroySurface() {
++        if (_wgpuSurface == nullptr) return;
++        procs->surfaceUnconfigure(_wgpuSurface);
++        procs->surfaceRelease(_wgpuSurface);
++        _wgpuSurface = nullptr;
++    }
++
 +    void _createSurface(const Napi::Env &env) {
++        _destroySurface();
 +        Napi::Buffer<char> buffer = { env, _window.Get("_native").As<Napi::Object>().Get("gpu") };
 +        _wgpuSurface = wgpu::sdl::CreateSurfaceForWindow(procs, _wgpuInstance, buffer.Data());
 +
@@ -402,12 +418,12 @@ index cb70833c..220e420e 100644
 +        procs->surfaceGetCapabilities(_wgpuSurface, _wgpuAdapter, &wgpuCapabilities);
 +
 +        _wgpuPreferredFormat = wgpuCapabilities.formats[0];
-        for (size_t i = 0; i < wgpuCapabilities.formatCount; ++i) {
-            if (wgpuCapabilities.formats[i] == WGPUTextureFormat_BGRA8Unorm) {
-                _wgpuPreferredFormat = WGPUTextureFormat_BGRA8Unorm;
-                break;
-            }
-        }
++        for (size_t i = 0; i < wgpuCapabilities.formatCount; ++i) {
++            if (wgpuCapabilities.formats[i] == WGPUTextureFormat_BGRA8Unorm) {
++                _wgpuPreferredFormat = WGPUTextureFormat_BGRA8Unorm;
++                break;
++            }
++        }
 +
 +        WGPUSurfaceConfiguration wgpuConfig = {};
 +        wgpuConfig.device = _wgpuDevice;
@@ -609,7 +625,7 @@ new file mode 100644
 index 00000000..f8f8a79c
 --- /dev/null
 +++ b/src/dawn/sdl/CMakeLists.txt
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,50 @@
 +# Copyright 2022 The Dawn & Tint Authors
 +#
 +# Redistribution and use in source and binary forms, with or without
@@ -645,6 +661,7 @@ index 00000000..f8f8a79c
 +  PRIVATE
 +    "utils.cpp"
 +)
++target_include_directories(dawn_sdl PRIVATE "${DAWN_SRC_DIR}")
 +target_link_libraries(dawn_sdl
 +  PUBLIC
 +    dawncpp_headers

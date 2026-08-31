@@ -20,3 +20,7 @@ Use TypeScript, four-space indentation, semicolons, explicit types at native/GPU
 ## Testing
 
 Test compatibility adapters and native startup/resizing. A successful demo must show Sprite, Graphics, normal Text, ticker animation, stable presentation, and WebGPU-only renderer selection.
+
+## Progress
+
+Write all tasks progress to HISTORY.md

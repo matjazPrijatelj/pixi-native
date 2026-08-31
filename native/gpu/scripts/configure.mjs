@@ -1,18 +1,23 @@
 import Fs from 'fs'
 import Path from 'path'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import C from './util/common.js'
 
 process.chdir(C.dir.dawn)
 await Fs.promises.cp('scripts/standalone-with-node.gclient', '.gclient')
 
-if (!Fs.existsSync(Path.join(C.dir.dawn, '.gclient_previous_sync_commits'))) {
+const needsSync = !Fs.existsSync(Path.join(C.dir.dawn, '.gclient_previous_sync_commits'))
+if (needsSync) {
 	console.log("run gclient sync")
-	execSync('gclient sync --no-history -j8 -vvv', {
+	const gclientCommand = C.platform === 'win32'
+		? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'gclient.bat', 'sync', '--no-history', '-j8', '-vvv']]
+		: ['gclient', ['sync', '--no-history', '-j8', '-vvv']]
+	execFileSync(gclientCommand[0], gclientCommand[1], {
 		stdio: 'inherit',
 		env: {
 			...process.env,
 			...C.depotTools.env,
+			...C.gitConfigEnv,
 			DEPOT_TOOLS_UPDATE: '0',
 		},
 	})
@@ -20,9 +25,9 @@ if (!Fs.existsSync(Path.join(C.dir.dawn, '.gclient_previous_sync_commits'))) {
 
 process.chdir(C.dir.abseil)
 const abseilPatch = Path.join(C.dir.root, 'abseil-cpp.patch')
-if (!Fs.existsSync(Path.join(C.dir.dawn, '.gclient_previous_sync_commits'))) {
+if (needsSync) {
 	console.log("applying abseil-cpp.patch")
-	execSync(`git apply --ignore-space-change --ignore-whitespace ${abseilPatch}`, {
+	execFileSync('git', [...C.gitConfigArgs, 'apply', '--ignore-space-change', '--ignore-whitespace', abseilPatch], {
 		stdio: 'inherit',
 	})
 }
@@ -42,7 +47,7 @@ if (C.platform === 'darwin') {
 	let arch = process.env.CROSS_COMPILE_ARCH ?? C.arch
 	if (arch === 'x64') { arch = 'x86_64' }
 
-	crossCompileFlag = `-DCMAKE_OSX_ARCHITECTURES="${arch}"`
+	crossCompileFlag = `-DCMAKE_OSX_ARCHITECTURES=${arch}`
 
 	if (C.targetArch === 'arm64') {
 		CFLAGS = '-mmacosx-version-min=11.0'
@@ -62,12 +67,18 @@ else if (C.platform === 'linux') {
 		'-DDAWN_USE_WAYLAND=OFF',
 	]
 }
+else if (C.platform === 'win32') {
+	backendFlags = [
+		'-DDAWN_USE_WINDOWS_UI=ON',
+		'-DDAWN_ENABLE_D3D12=ON',
+	]
+}
 
-execSync(`cmake ${[
+const cmakeArgs = [
 	'-S',
-	`"${C.dir.dawn}"`,
+	C.dir.dawn,
 	'-B',
-	`"${C.dir.build}"`,
+	C.dir.build,
 	'-GNinja',
 	'-DCMAKE_BUILD_TYPE=Release',
 	'-DCMAKE_CXX_SCAN_FOR_MODULES=OFF',
@@ -90,12 +101,14 @@ execSync(`cmake ${[
 	'-DDAWN_ALWAYS_ASSERT=ON',
 	crossCompileFlag,
 	...backendFlags,
-].filter(Boolean).join(' ')}`, {
+].filter(Boolean)
+const childEnv = {
+	...process.env,
+	...C.depotTools.env,
+}
+if (CFLAGS) childEnv.CFLAGS = CFLAGS
+if (LDFLAGS) childEnv.LDFLAGS = LDFLAGS
+execFileSync('cmake', cmakeArgs, {
 	stdio: 'inherit',
-	env: {
-		...process.env,
-		...C.depotTools.env,
-		CFLAGS,
-		LDFLAGS,
-	},
+	env: childEnv,
 })

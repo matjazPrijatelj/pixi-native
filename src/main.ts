@@ -9,6 +9,7 @@ const { NodeTextCanvas } = await import("./pixi-node/NodeTextCanvas.ts");
 const { animateDemoScene, createGraphicsTest, createSpriteTest, createTextTest, createVideoTest } = await import("./demo/DemoScene.ts");
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
 const { getSceneIndexForKey, getVideoIndexForKey } = await import("./demo/sceneNavigation.ts");
+const { supportsNativeVideo } = await import("./pixi-node/platform.ts");
 const { app, native } = await createPixiRenderer();
 const texturePath = fileURLToPath(new URL("../assets/test-texture.png", import.meta.url));
 const loaded = await Assets.load(texturePath);
@@ -27,12 +28,14 @@ const videoFiles = [
 ];
 const videoPaths = videoFiles.map((file) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)));
 let videoIndex = 1;
-const scenes = [
+const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
     () => createGraphicsTest(),
     () => createSpriteTest(texture),
-    () => createTextTest(),
-    () => createVideoTest(videoPaths[videoIndex], { width: native.canvas.width, height: native.canvas.height }, native.uploadRgbaTexture, videoFiles[videoIndex])
+    () => createTextTest()
 ];
+if (supportsNativeVideo()) {
+    scenes.push(() => createVideoTest(videoPaths[videoIndex], { width: native.canvas.width, height: native.canvas.height }, native.uploadRgbaTexture, videoFiles[videoIndex]));
+}
 let index = 0;
 let scene = scenes[index]();
 app.stage.addChild(scene);
@@ -86,5 +89,6 @@ const shutdown = async (): Promise<void> => {
     native.destroy();
     process.exit(0);
 };
+native.window.on("close", () => { void shutdown(); });
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

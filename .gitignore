@@ -38,10 +38,13 @@ native/**/build/
 native/**/dawn/
 native/**/depot_tools/
 
-# Keep the Linux x64 prebuilt addon; ignore any other generated dist files
+# Keep the Linux x64 prebuilt addon; ignore generated binaries for other platforms
 native/**/dist/
 !native/gpu/dist/
-!native/gpu/dist/dawn.node
+native/gpu/dist/*
+!native/gpu/dist/linux-x64/
+native/gpu/dist/linux-x64/*
+!native/gpu/dist/linux-x64/dawn.node
 
 # Crash dumps
 core

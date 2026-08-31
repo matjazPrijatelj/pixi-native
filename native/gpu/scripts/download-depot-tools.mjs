@@ -1,29 +1,25 @@
 import Fs from 'fs'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import C from './util/common.js'
 
 console.log("clone", C.depotTools.url)
 await Fs.promises.rm(C.dir.depotTools, { recursive: true }).catch(() => {})
-execSync([
-	`mkdir ${C.dir.depotTools}`,
-	`cd ${C.dir.depotTools}`,
-	'git init',
-	`git remote add origin ${C.depotTools.url}`,
-	`git fetch --depth 1 origin ${C.depotTools.commit}`,
-	'git checkout FETCH_HEAD',
-].join(' && '), {
-	stdio: 'inherit',
-	cwd: C.dir.root,
-})
+await Fs.promises.mkdir(C.dir.depotTools, { recursive: true })
+execFileSync('git', [...C.gitConfigArgs, 'init'], { stdio: 'inherit', cwd: C.dir.depotTools })
+execFileSync('git', [...C.gitConfigArgs, 'remote', 'add', 'origin', C.depotTools.url], { stdio: 'inherit', cwd: C.dir.depotTools })
+execFileSync('git', [...C.gitConfigArgs, 'fetch', '--depth', '1', 'origin', C.depotTools.commit], { stdio: 'inherit', cwd: C.dir.depotTools })
+execFileSync('git', [...C.gitConfigArgs, 'checkout', 'FETCH_HEAD'], { stdio: 'inherit', cwd: C.dir.depotTools })
 
 if (C.platform === 'win32') {
-	execSync('gclient', {
+	await import('./bootstrap-cipd.mjs')
+	execFileSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'gclient.bat'], {
 		stdio: 'inherit',
 		env: {
 			...process.env,
 			...C.depotTools.env,
+			...C.gitConfigEnv,
 		},
 	})
 
-	await Fs.promises.rm(`${C.dir.depotTools}/ninja`)
+	await Fs.promises.rm(`${C.dir.depotTools}/ninja`, { force: true })
 }

@@ -1,6 +1,8 @@
 import Fs from 'fs'
 import C from './util/common.js'
 
+await import('./preflight.mjs')
+
 await Promise.all([
 	C.dir.depotTools,
 	C.dir.dawn,

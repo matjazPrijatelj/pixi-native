@@ -1,10 +1,13 @@
 import Fs from 'fs'
 import Path from 'path'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import C from './util/common.js'
 
 console.log("build in", C.dir.build)
-execSync(`ninja -v -C ${C.dir.build} dawn.node`, {
+const ninjaCommand = C.platform === 'win32'
+	? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'ninja.bat', '-v', '-C', C.dir.build, 'dawn.node']]
+	: ['ninja', ['-v', '-C', C.dir.build, 'dawn.node']]
+execFileSync(ninjaCommand[0], ninjaCommand[1], {
 	stdio: 'inherit',
 	env: {
 		...process.env,
@@ -20,7 +23,14 @@ await Fs.promises.cp(
 	Path.join(C.dir.dist, 'dawn.node'),
 )
 
+if (C.platform === 'win32') {
+	await Fs.promises.cp(
+		Path.join(C.dir.build, 'd3dcompiler_47.dll'),
+		Path.join(C.dir.dist, 'd3dcompiler_47.dll'),
+	)
+}
+
 // Strip binaries on linux
 if (C.platform === 'linux') {
-	execSync(`strip -s ${Path.join(C.dir.dist, 'dawn.node')}`)
+	execFileSync('strip', ['-s', Path.join(C.dir.dist, 'dawn.node')])
 }
