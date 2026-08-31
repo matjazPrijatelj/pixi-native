@@ -1,7 +1,8 @@
 #![deny(clippy::all)]
 
 use std::io::{self, Read};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -13,6 +14,7 @@ pub struct DecoderOptions {
     pub width: i64,
     pub height: i64,
     pub fps: Option<f64>,
+    pub start_time: Option<f64>,
     pub ffmpeg_path: Option<String>,
     pub vaapi_device: Option<String>,
 }
@@ -25,26 +27,18 @@ pub struct VideoFrame {
     pub data: Buffer,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DecoderBackend {
-    #[cfg(target_os = "windows")]
     D3d11va,
-
-    #[cfg(target_os = "linux")]
     Vaapi,
-
     Cpu,
 }
 
 impl DecoderBackend {
     fn name(self) -> &'static str {
         match self {
-            #[cfg(target_os = "windows")]
             Self::D3d11va => "D3D11VA",
-
-            #[cfg(target_os = "linux")]
             Self::Vaapi => "VA-API",
-
             Self::Cpu => "CPU",
         }
     }
@@ -69,17 +63,35 @@ impl DecoderBackend {
 
 #[derive(Clone)]
 struct DecoderState {
-    closed: Arc<std::sync::atomic::AtomicBool>,
+    closed: Arc<AtomicBool>,
+    finished: Arc<AtomicBool>,
     child: Arc<Mutex<Option<Child>>>,
     latest: Arc<Mutex<Option<PendingFrame>>>,
     error: Arc<Mutex<Option<String>>>,
-    frame_count: Arc<std::sync::atomic::AtomicU64>,
+    decoded_frames: Arc<AtomicU64>,
+    dropped_frames: Arc<AtomicU64>,
     backend: Arc<Mutex<String>>,
 }
 
 struct PendingFrame {
     timestamp_us: i64,
     data: Vec<u8>,
+}
+
+struct SpawnedFfmpeg {
+    child: Child,
+    stdout: ChildStdout,
+}
+
+#[derive(Clone)]
+struct FfmpegRequest {
+    ffmpeg_path: String,
+    source: String,
+    vaapi_device: String,
+    width: usize,
+    height: usize,
+    fps: f64,
+    start_time: f64,
 }
 
 #[napi]
@@ -92,13 +104,7 @@ pub struct NativeVideoDecoder {
 impl NativeVideoDecoder {
     #[napi(constructor)]
     pub fn new(options: DecoderOptions) -> Result<Self> {
-        if options.width <= 0 || options.height <= 0 {
-            return Err(Error::from_reason("Video dimensions must be positive"));
-        }
-
-        if options.fps.unwrap_or(30.0) <= 0.0 {
-            return Err(Error::from_reason("Video FPS must be positive"));
-        }
+        validate_options(&options)?;
 
         let backend = DecoderBackend::hardware()
             .map(DecoderBackend::name)
@@ -108,11 +114,13 @@ impl NativeVideoDecoder {
         Ok(Self {
             options,
             state: DecoderState {
-                closed: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                closed: Arc::new(AtomicBool::new(true)),
+                finished: Arc::new(AtomicBool::new(false)),
                 child: Arc::new(Mutex::new(None)),
                 latest: Arc::new(Mutex::new(None)),
                 error: Arc::new(Mutex::new(None)),
-                frame_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+                decoded_frames: Arc::new(AtomicU64::new(0)),
+                dropped_frames: Arc::new(AtomicU64::new(0)),
                 backend: Arc::new(Mutex::new(backend)),
             },
         })
@@ -120,29 +128,32 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn open(&mut self, source: String) -> Result<()> {
-        if !self
-            .state
-            .closed
-            .swap(false, std::sync::atomic::Ordering::SeqCst)
-        {
+        if !self.state.closed.swap(false, Ordering::SeqCst) {
             return Err(Error::from_reason("Video decoder is already open"));
+        }
+
+        self.state.finished.store(false, Ordering::SeqCst);
+        self.state.decoded_frames.store(0, Ordering::SeqCst);
+        self.state.dropped_frames.store(0, Ordering::SeqCst);
+
+        if let Ok(mut error) = self.state.error.lock() {
+            *error = None;
+        }
+        if let Ok(mut latest) = self.state.latest.lock() {
+            *latest = None;
         }
 
         let width = usize::try_from(self.options.width)
             .map_err(|_| Error::from_reason("Invalid video width"))?;
-
         let height = usize::try_from(self.options.height)
             .map_err(|_| Error::from_reason("Invalid video height"))?;
-
         let fps = self.options.fps.unwrap_or(30.0);
-
+        let start_time = self.options.start_time.unwrap_or(0.0);
         let ffmpeg_path = self
             .options
             .ffmpeg_path
             .clone()
             .unwrap_or_else(|| "ffmpeg".to_string());
-
-        #[cfg(target_os = "linux")]
         let vaapi_device = self
             .options
             .vaapi_device
@@ -150,100 +161,80 @@ impl NativeVideoDecoder {
             .or_else(|| std::env::var("FFMPEG_VAAPI_DEVICE").ok())
             .unwrap_or_else(|| "/dev/dri/renderD128".to_string());
 
-        #[cfg(not(target_os = "linux"))]
-        let vaapi_device = String::new();
+        let requested_backend = DecoderBackend::hardware().unwrap_or(DecoderBackend::Cpu);
+        let request = FfmpegRequest {
+            ffmpeg_path,
+            source,
+            vaapi_device,
+            width,
+            height,
+            fps,
+            start_time,
+        };
+        let (spawned, active_backend) = match spawn_ffmpeg(&request, requested_backend) {
+            Ok(spawned) => (spawned, requested_backend),
+            Err(hardware_error) if requested_backend != DecoderBackend::Cpu => {
+                eprintln!(
+                    "FFmpeg {} process failed to start; retrying with CPU decoder: {hardware_error}",
+                    requested_backend.name()
+                );
+                let spawned = spawn_ffmpeg(&request, DecoderBackend::Cpu)
+                    .map_err(|error| Error::from_reason(error.to_string()))?;
+                (spawned, DecoderBackend::Cpu)
+            }
+            Err(error) => {
+                self.state.closed.store(true, Ordering::SeqCst);
+                return Err(Error::from_reason(error.to_string()));
+            }
+        };
+
+        set_backend_name(
+            &self.state,
+            if active_backend == DecoderBackend::Cpu && requested_backend != DecoderBackend::Cpu {
+                "CPU fallback"
+            } else {
+                active_backend.name()
+            },
+        );
 
         let state = self.state.clone();
-
-        state
-            .frame_count
-            .store(0, std::sync::atomic::Ordering::SeqCst);
-
-        if let Ok(mut error) = state.error.lock() {
-            *error = None;
-        }
+        let initial_stdout = install_child(&state, spawned)
+            .map_err(|error| Error::from_reason(error.to_string()))?;
 
         thread::spawn(move || {
-            if let Some(hardware_backend) = DecoderBackend::hardware() {
-                if let Ok(mut backend) = state.backend.lock() {
-                    *backend = hardware_backend.name().to_string();
-                }
+            let result =
+                consume_ffmpeg_output(initial_stdout, width, height, fps, start_time, &state);
 
-                let result = run_ffmpeg(
-                    &ffmpeg_path,
-                    &source,
-                    &vaapi_device,
-                    width,
-                    height,
-                    fps,
-                    &state,
-                    hardware_backend,
-                );
+            if let Err(error) = result {
+                let has_frames = state.decoded_frames.load(Ordering::SeqCst) > 0;
+                if active_backend != DecoderBackend::Cpu
+                    && !has_frames
+                    && !state.closed.load(Ordering::SeqCst)
+                {
+                    eprintln!(
+                        "FFmpeg {} decoder failed; retrying with CPU decoder: {error}",
+                        active_backend.name()
+                    );
+                    set_backend_name(&state, "CPU fallback");
 
-                if let Err(error) = result {
-                    let has_frames =
-                        state.frame_count.load(std::sync::atomic::Ordering::SeqCst) > 0;
+                    let fallback_result = spawn_ffmpeg(&request, DecoderBackend::Cpu)
+                        .and_then(|spawned| install_child(&state, spawned))
+                        .and_then(|stdout| {
+                            consume_ffmpeg_output(stdout, width, height, fps, start_time, &state)
+                        });
 
-                    if !has_frames && !state.closed.load(std::sync::atomic::Ordering::SeqCst) {
-                        eprintln!(
-                            "FFmpeg {} decoder failed; retrying with CPU decoder: {error}",
-                            hardware_backend.name()
-                        );
-
-                        if let Ok(mut backend) = state.backend.lock() {
-                            *backend = "CPU fallback".to_string();
-                        }
-
-                        if let Err(fallback_error) = run_ffmpeg(
-                            &ffmpeg_path,
-                            &source,
-                            &vaapi_device,
-                            width,
-                            height,
-                            fps,
-                            &state,
-                            DecoderBackend::Cpu,
-                        ) {
-                            eprintln!("FFmpeg CPU decoder failed: {fallback_error}");
-
-                            if let Ok(mut slot) = state.error.lock() {
-                                *slot = Some(fallback_error.to_string());
-                            }
-                        }
-                    } else if !state.closed.load(std::sync::atomic::Ordering::SeqCst) {
-                        eprintln!("FFmpeg {} decoder failed: {error}", hardware_backend.name());
-
-                        if let Ok(mut slot) = state.error.lock() {
-                            *slot = Some(error.to_string());
-                        }
+                    if let Err(fallback_error) = fallback_result {
+                        store_error(&state, fallback_error.to_string());
                     }
-                }
-            } else {
-                if let Ok(mut backend) = state.backend.lock() {
-                    *backend = "CPU".to_string();
-                }
-
-                if let Err(error) = run_ffmpeg(
-                    &ffmpeg_path,
-                    &source,
-                    &vaapi_device,
-                    width,
-                    height,
-                    fps,
-                    &state,
-                    DecoderBackend::Cpu,
-                ) {
-                    eprintln!("FFmpeg CPU decoder failed: {error}");
-
-                    if let Ok(mut slot) = state.error.lock() {
-                        *slot = Some(error.to_string());
-                    }
+                } else if !state.closed.load(Ordering::SeqCst) {
+                    store_error(&state, error.to_string());
                 }
             }
 
-            state
-                .closed
-                .store(true, std::sync::atomic::Ordering::SeqCst);
+            if !state.closed.load(Ordering::SeqCst) {
+                state.finished.store(true, Ordering::SeqCst);
+            }
+            state.closed.store(true, Ordering::SeqCst);
         });
 
         Ok(())
@@ -276,130 +267,275 @@ impl NativeVideoDecoder {
     }
 
     #[napi]
-    pub fn close(&mut self) {
-        self.state
-            .closed
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+    pub fn decoded_frames(&self) -> i64 {
+        i64::try_from(self.state.decoded_frames.load(Ordering::SeqCst)).unwrap_or(i64::MAX)
+    }
 
-        if let Ok(mut child) = self.state.child.lock() {
-            if let Some(mut process) = child.take() {
-                let _ = process.kill();
-            }
-        }
+    #[napi]
+    pub fn dropped_frames(&self) -> i64 {
+        i64::try_from(self.state.dropped_frames.load(Ordering::SeqCst)).unwrap_or(i64::MAX)
+    }
+
+    #[napi]
+    pub fn is_finished(&self) -> bool {
+        self.state.finished.load(Ordering::SeqCst)
+    }
+
+    #[napi]
+    pub fn close(&mut self) {
+        close_state(&self.state);
     }
 }
 
-fn run_ffmpeg(
-    ffmpeg_path: &str,
-    source: &str,
-    vaapi_device: &str,
-    width: usize,
-    height: usize,
-    fps: f64,
-    state: &DecoderState,
-    backend: DecoderBackend,
-) -> io::Result<()> {
-    let mut command = Command::new(ffmpeg_path);
+impl Drop for NativeVideoDecoder {
+    fn drop(&mut self) {
+        close_state(&self.state);
+    }
+}
 
-    command.args(["-hide_banner", "-loglevel", "error", "-nostdin"]);
+fn validate_options(options: &DecoderOptions) -> Result<()> {
+    if options.width <= 0 || options.height <= 0 {
+        return Err(Error::from_reason("Video dimensions must be positive"));
+    }
+    if options.width % 2 != 0 || options.height % 2 != 0 {
+        return Err(Error::from_reason("NV12 video dimensions must be even"));
+    }
 
-    let filter = match backend {
-        #[cfg(target_os = "windows")]
+    let fps = options.fps.unwrap_or(30.0);
+    if !fps.is_finite() || fps <= 0.0 {
+        return Err(Error::from_reason("Video FPS must be positive and finite"));
+    }
+
+    let start_time = options.start_time.unwrap_or(0.0);
+    if !start_time.is_finite() || start_time < 0.0 {
+        return Err(Error::from_reason(
+            "Video start time must be non-negative and finite",
+        ));
+    }
+    Ok(())
+}
+
+fn nv12_frame_bytes(width: usize, height: usize) -> io::Result<usize> {
+    let y_bytes = width
+        .checked_mul(height)
+        .ok_or_else(|| io::Error::other("Video frame size overflow"))?;
+    y_bytes
+        .checked_add(y_bytes / 2)
+        .ok_or_else(|| io::Error::other("Video frame size overflow"))
+}
+
+fn ffmpeg_args(request: &FfmpegRequest, backend: DecoderBackend) -> Vec<String> {
+    let mut args = vec![
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+        "-nostdin".to_string(),
+    ];
+
+    match backend {
         DecoderBackend::D3d11va => {
-            command.args(["-hwaccel", "d3d11va"]);
-
-            format!("scale={width}:{height}:flags=fast_bilinear,format=rgba")
+            args.extend(["-hwaccel".to_string(), "d3d11va".to_string()]);
         }
-
-        #[cfg(target_os = "linux")]
         DecoderBackend::Vaapi => {
-            command.args([
-                "-hwaccel",
-                "vaapi",
-                "-hwaccel_device",
-                vaapi_device,
-                "-hwaccel_output_format",
-                "vaapi",
+            args.extend([
+                "-hwaccel".to_string(),
+                "vaapi".to_string(),
+                "-hwaccel_device".to_string(),
+                request.vaapi_device.clone(),
+                "-hwaccel_output_format".to_string(),
+                "vaapi".to_string(),
             ]);
-
-            format!("hwdownload,format=nv12,scale={width}:{height}:flags=fast_bilinear,format=rgba")
         }
+        DecoderBackend::Cpu => {}
+    }
 
-        DecoderBackend::Cpu => {
-            format!("scale={width}:{height}:flags=fast_bilinear,format=rgba")
-        }
+    args.push("-re".to_string());
+    if request.start_time > 0.0 {
+        args.extend(["-ss".to_string(), request.start_time.to_string()]);
+    }
+    args.extend(["-i".to_string(), request.source.clone(), "-an".to_string()]);
+
+    let scale = format!(
+        "scale={}:{}:flags=fast_bilinear:in_range=auto:out_range=tv:in_color_matrix=auto:out_color_matrix=bt709,format=nv12",
+        request.width, request.height
+    );
+    let filter = if backend == DecoderBackend::Vaapi {
+        format!("hwdownload,format=nv12,{scale}")
+    } else {
+        scale
     };
 
-    let fps_arg = fps.to_string();
+    args.extend([
+        "-vf".to_string(),
+        filter,
+        "-r".to_string(),
+        request.fps.to_string(),
+        "-f".to_string(),
+        "rawvideo".to_string(),
+        "-pix_fmt".to_string(),
+        "nv12".to_string(),
+        "pipe:1".to_string(),
+    ]);
+    args
+}
 
-    let mut child = command
-        .args([
-            "-re", "-i", source, "-an", "-vf", &filter, "-r", &fps_arg, "-f", "rawvideo",
-            "-pix_fmt", "rgba", "pipe:1",
-        ])
+fn spawn_ffmpeg(request: &FfmpegRequest, backend: DecoderBackend) -> io::Result<SpawnedFfmpeg> {
+    let mut child = Command::new(&request.ffmpeg_path)
+        .args(ffmpeg_args(request, backend))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        // Keep FFmpeg diagnostics visible. A piped stderr that is never drained
-        // can stop the child once its pipe fills.
         .stderr(Stdio::inherit())
         .spawn()?;
 
-    let mut stdout = child
+    let stdout = child
         .stdout
         .take()
         .ok_or_else(|| io::Error::other("FFmpeg stdout unavailable"))?;
+    Ok(SpawnedFfmpeg { child, stdout })
+}
 
+fn install_child(state: &DecoderState, spawned: SpawnedFfmpeg) -> io::Result<ChildStdout> {
     *state
         .child
         .lock()
-        .map_err(|_| io::Error::other("FFmpeg process lock poisoned"))? = Some(child);
+        .map_err(|_| io::Error::other("FFmpeg process lock poisoned"))? = Some(spawned.child);
+    Ok(spawned.stdout)
+}
 
-    let frame_bytes = width
-        .checked_mul(height)
-        .and_then(|size| size.checked_mul(4))
-        .ok_or_else(|| io::Error::other("Video frame size overflow"))?;
-
+fn consume_ffmpeg_output(
+    mut stdout: ChildStdout,
+    width: usize,
+    height: usize,
+    fps: f64,
+    start_time: f64,
+    state: &DecoderState,
+) -> io::Result<()> {
+    let frame_bytes = nv12_frame_bytes(width, height)?;
+    let start_timestamp_us = (start_time * 1_000_000.0).round() as i64;
     let mut frame_index = 0_i64;
-
-    loop {
-        if state.closed.load(std::sync::atomic::Ordering::SeqCst) {
-            break;
+    let read_result = loop {
+        if state.closed.load(Ordering::SeqCst) {
+            break Ok(());
         }
 
         let mut data = vec![0_u8; frame_bytes];
-
         match stdout.read_exact(&mut data) {
             Ok(()) => {
-                let timestamp_us = (frame_index as f64 * 1_000_000.0 / fps).round() as i64;
-
+                let timestamp_us =
+                    start_timestamp_us + (frame_index as f64 * 1_000_000.0 / fps).round() as i64;
                 frame_index += 1;
-
-                state
-                    .frame_count
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                state.decoded_frames.fetch_add(1, Ordering::SeqCst);
 
                 if let Ok(mut latest) = state.latest.lock() {
-                    *latest = Some(PendingFrame { timestamp_us, data });
+                    if latest
+                        .replace(PendingFrame { timestamp_us, data })
+                        .is_some()
+                    {
+                        state.dropped_frames.fetch_add(1, Ordering::SeqCst);
+                    }
                 }
             }
-
-            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
-
-            Err(error) => return Err(error),
+            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break Ok(()),
+            Err(error) => break Err(error),
         }
+    };
+
+    let status = state
+        .child
+        .lock()
+        .map_err(|_| io::Error::other("FFmpeg process lock poisoned"))?
+        .take()
+        .map(|mut process| process.wait())
+        .transpose()?;
+
+    read_result?;
+    if !state.closed.load(Ordering::SeqCst) && status.is_some_and(|status| !status.success()) {
+        return Err(io::Error::other(format!(
+            "FFmpeg exited with status {}",
+            status.expect("status checked above")
+        )));
     }
-
-    if let Ok(mut child_slot) = state.child.lock() {
-        if let Some(mut process) = child_slot.take() {
-            let status = process.wait()?;
-
-            if !state.closed.load(std::sync::atomic::Ordering::SeqCst) && !status.success() {
-                return Err(io::Error::other(format!(
-                    "FFmpeg exited with status {status}"
-                )));
-            }
-        }
-    }
-
     Ok(())
+}
+
+fn set_backend_name(state: &DecoderState, name: &str) {
+    if let Ok(mut backend) = state.backend.lock() {
+        *backend = name.to_string();
+    }
+}
+
+fn store_error(state: &DecoderState, message: String) {
+    eprintln!("FFmpeg decoder failed: {message}");
+    if let Ok(mut error) = state.error.lock() {
+        *error = Some(message);
+    }
+}
+
+fn close_state(state: &DecoderState) {
+    state.closed.store(true, Ordering::SeqCst);
+    if let Ok(mut child) = state.child.lock() {
+        if let Some(mut process) = child.take() {
+            let _ = process.kill();
+        }
+    }
+    if let Ok(mut latest) = state.latest.lock() {
+        *latest = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn calculates_nv12_frame_size() {
+        assert_eq!(nv12_frame_bytes(1280, 720).unwrap(), 1_382_400);
+        assert_eq!(nv12_frame_bytes(1920, 1080).unwrap(), 3_110_400);
+    }
+
+    #[test]
+    fn builds_windows_nv12_seek_args() {
+        let args = ffmpeg_args(&request(24.0, 12.5), DecoderBackend::D3d11va);
+        assert!(args.windows(2).any(|pair| pair == ["-hwaccel", "d3d11va"]));
+        assert!(args.windows(2).any(|pair| pair == ["-ss", "12.5"]));
+        assert!(args
+            .iter()
+            .any(|arg| arg.contains("out_color_matrix=bt709")));
+        assert_eq!(args[args.len() - 3..], ["-pix_fmt", "nv12", "pipe:1"]);
+    }
+
+    #[test]
+    fn builds_linux_vaapi_download_filter() {
+        let args = ffmpeg_args(&request(30.0, 0.0), DecoderBackend::Vaapi);
+        assert!(args.iter().any(|arg| arg == "/dev/dri/test"));
+        assert!(args
+            .iter()
+            .any(|arg| arg.starts_with("hwdownload,format=nv12,scale=")));
+        assert!(!args.iter().any(|arg| arg == "-ss"));
+    }
+
+    #[test]
+    fn rejects_odd_nv12_dimensions() {
+        let result = validate_options(&DecoderOptions {
+            width: 1279,
+            height: 720,
+            fps: Some(24.0),
+            start_time: None,
+            ffmpeg_path: None,
+            vaapi_device: None,
+        });
+        assert!(result.is_err());
+    }
+
+    fn request(fps: f64, start_time: f64) -> FfmpegRequest {
+        FfmpegRequest {
+            ffmpeg_path: "ffmpeg".to_string(),
+            source: "video.mp4".to_string(),
+            vaapi_device: "/dev/dri/test".to_string(),
+            width: 1280,
+            height: 720,
+            fps,
+            start_time,
+        }
+    }
 }

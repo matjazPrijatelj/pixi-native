@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { FrameScheduler } from "../src/pixi-node/FrameScheduler.ts";
 import { prepareRgbaPixelsForUpload } from "../src/pixi-node/rgbaUpload.ts";
+import { normalizeGpuBindGroupIndex } from "../src/pixi-node/gpuCompatibility.ts";
 
 test("Canvas RGBA pixels are reordered for BGRA textures", () => {
     const source = new Uint8ClampedArray([255, 32, 64, 255]);
@@ -31,6 +32,12 @@ test("Canvas pixels retain RGBA order and support premultiplied alpha", () => {
         ),
         [100, 50, 25, 128],
     );
+});
+
+test("native Dawn bind-group indices are normalized to numbers", () => {
+    assert.equal(normalizeGpuBindGroupIndex("2"), 2);
+    assert.equal(normalizeGpuBindGroupIndex(1), 1);
+    assert.throws(() => normalizeGpuBindGroupIndex("invalid"), /Invalid/);
 });
 
 test("frame scheduler skips missed slots without an immediate catch-up frame", () => {

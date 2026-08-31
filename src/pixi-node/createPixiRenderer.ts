@@ -1,4 +1,4 @@
-import { Application, VERSION, type TextureSource } from "pixi.js";
+import { Application, VERSION } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
 import { NodeDOMAdapter } from "./NodeDOMAdapter.ts";
@@ -16,6 +16,7 @@ import {
 } from "./rgbaUpload.ts";
 import * as sdl from "@kmamal/sdl";
 import type { Sdl } from "@kmamal/sdl";
+import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
 
 const require = createRequire(import.meta.url);
 const gpu = require("../../native/gpu") as NodeGPUApi;
@@ -27,12 +28,6 @@ export interface NodeRendererContext {
   readonly window: Sdl.Video.Window;
   readonly renderer: NodeWindowRenderer;
   readonly canvas: NodeGPUCanvas;
-  readonly uploadRgbaTexture: (
-    source: TextureSource,
-    data: Uint8Array,
-    width: number,
-    height: number,
-  ) => void;
   readonly destroy: () => void;
 }
 
@@ -183,30 +178,23 @@ export async function createPixiRenderer(): Promise<{
     throw new Error(`WebGPU is required; Pixi selected ${app.renderer.name}`);
   }
 
-  const textureSystem = app.renderer.texture as unknown as {
-    getGpuSource(source: TextureSource): GPUTexture;
-  };
-
-  const uploadRgbaTexture = (
-    source: TextureSource,
-    data: Uint8Array,
-    width: number,
-    height: number,
-  ): void => {
-    const expectedBytes = width * height * 4;
-    if (data.byteLength !== expectedBytes)
-      throw new Error(
-        `RGBA video frame has ${data.byteLength} bytes; expected ${expectedBytes}`,
-      );
-    // Copy the external napi-rs memory once into a V8-owned typed-array view.
-    const pixels = new Uint8Array(data);
-    const texture = textureSystem.getGpuSource(source);
-    device.queue.writeTexture(
-      { texture },
-      pixels as unknown as GPUAllowSharedBufferSource,
-      { bytesPerRow: width * 4, rowsPerImage: height },
-      { width, height, depthOrArrayLayers: 1 },
-    );
+  // Pixi 8.20 enumerates custom shader groups with `for...in`, so the group
+  // index reaches the strict native Dawn binding as a string. Browser WebGPU
+  // coerces it, while the Node binding correctly requires a number.
+  const encoder = (
+    app.renderer as unknown as {
+      encoder: {
+        setBindGroup(
+          index: number | string,
+          bindGroup: unknown,
+          program: unknown,
+        ): void;
+      };
+    }
+  ).encoder;
+  const setBindGroup = encoder.setBindGroup.bind(encoder);
+  encoder.setBindGroup = (index, bindGroup, program): void => {
+    setBindGroup(normalizeGpuBindGroupIndex(index), bindGroup, program);
   };
 
   window.on("resize", () => {
@@ -247,7 +235,6 @@ export async function createPixiRenderer(): Promise<{
       window,
       renderer,
       canvas,
-      uploadRgbaTexture,
       destroy,
     },
   };

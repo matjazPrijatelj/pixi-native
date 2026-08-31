@@ -10,6 +10,7 @@ const { Assets, Texture } = await import("pixi.js");
 const { createPixiRenderer } =
   await import("./pixi-node/createPixiRenderer.ts");
 const { NodeCanvas } = await import("./pixi-node/NodeCanvas.ts");
+const { supportsNativeVideo } = await import("./pixi-node/platform.ts");
 const {
   animateDemoScene,
   createGraphicsTest,
@@ -63,14 +64,19 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createTextTest(),
 ];
 
-scenes.push(() =>
-  createVideoTest(
-    videoPaths[videoIndex],
-    { width: native.canvas.width, height: native.canvas.height },
-    native.uploadRgbaTexture,
-    videoFiles[videoIndex],
-  ),
-);
+const videoSceneIndex = supportsNativeVideo(process.platform)
+  ? scenes.length
+  : null;
+
+if (videoSceneIndex !== null) {
+  scenes.push(() =>
+    createVideoTest(
+      videoPaths[videoIndex],
+      { width: native.canvas.width, height: native.canvas.height },
+      videoFiles[videoIndex],
+    ),
+  );
+}
 
 let index = 0;
 let scene = scenes[index]();
@@ -88,7 +94,7 @@ const selectScene = (nextIndex: number): void => {
 };
 
 const selectVideo = (nextVideoIndex: number): void => {
-  if (index !== 3 || nextVideoIndex === videoIndex) return;
+  if (index !== videoSceneIndex || nextVideoIndex === videoIndex) return;
   app.stage.removeChild(scene);
   videoIndex = nextVideoIndex;
   scene = scenes[index]();

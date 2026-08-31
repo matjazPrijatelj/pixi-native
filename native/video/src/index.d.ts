@@ -2,6 +2,7 @@ export interface DecoderOptions {
     width: number;
     height: number;
     fps?: number;
+    startTime?: number;
     ffmpegPath?: string;
     vaapiDevice?: string;
 }
@@ -19,5 +20,8 @@ export class NativeVideoDecoder {
     public pollLatest(): VideoFrame | null;
     public pollError(): string | null;
     public backend(): string;
+    public decodedFrames(): number;
+    public droppedFrames(): number;
+    public isFinished(): boolean;
     public close(): void;
 }

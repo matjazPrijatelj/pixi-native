@@ -25,6 +25,18 @@ class NativeVideoDecoder {
         return this.decoder.backend();
     }
 
+    decodedFrames() {
+        return this.decoder.decodedFrames();
+    }
+
+    droppedFrames() {
+        return this.decoder.droppedFrames();
+    }
+
+    isFinished() {
+        return this.decoder.isFinished();
+    }
+
     close() {
         this.decoder.close();
     }

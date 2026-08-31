@@ -19,3 +19,8 @@ export function resolveGpuBackend(
   const requestedBackend = override?.trim();
   return requestedBackend || getDefaultGpuBackend(platform);
 }
+
+/** Native FFmpeg video builds are currently packaged for Windows and Linux x64. */
+export function supportsNativeVideo(platform: NodeJS.Platform): boolean {
+  return platform === "win32" || platform === "linux";
+}

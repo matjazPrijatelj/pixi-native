@@ -28,8 +28,8 @@ test("native GPU binding paths are isolated by platform and architecture", () =>
     assert.equal(getBindingPath("win32", "x64").endsWith(path.join("dist", "win32-x64", "dawn.node")), true);
 });
 
-test("the VA-API video scene is exposed only on Linux", () => {
+test("the native video scene is exposed on Windows and Linux", () => {
     assert.equal(supportsNativeVideo("linux"), true);
-    assert.equal(supportsNativeVideo("win32"), false);
+    assert.equal(supportsNativeVideo("win32"), true);
     assert.equal(supportsNativeVideo("darwin"), false);
 });

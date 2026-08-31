@@ -1,9 +1,9 @@
-import { Container, Sprite, Text, Texture, type TextureSource } from "pixi.js";
+import { Container, Text } from "pixi.js";
 import {
-  NativeVideoDecoder,
-  VideoFpsMeter,
-  type VideoFrameData,
-} from "../../video/NativeVideoDecoder.ts";
+    NativeVideo,
+    NativeVideoSprite,
+    VideoFpsMeter,
+} from "../../pixi-node/video/index.ts";
 import { fitVideoRect } from "../videoLayout.ts";
 
 const WIDTH = 1280;
@@ -12,139 +12,100 @@ const FPS = 24;
 const VIDEO_TOP_INSET = 92;
 
 export function createVideoTest(
-  source: string,
-  viewport: { width: number; height: number },
-  uploadRgbaTexture: (
-    texture: TextureSource,
-    data: Uint8Array,
-    width: number,
-    height: number,
-  ) => void,
-  label = source,
+    source: string,
+    viewport: { width: number; height: number },
+    label = source,
 ): Container {
-  const scene = new Container();
-  const fileName = label.split(/[\\/]/).pop() ?? label;
-  scene.addChild(
-    new Text({
-      text: `VIDEO TEST  [4]  ${fileName}  [UP/DOWN: change video]`,
-      style: {
-        fontFamily: "Arial",
-        fontSize: 26,
-        fill: 0xffffff,
-        stroke: { color: 0x000000, width: 3 },
-      },
-    }),
-  );
-  const initialFrame = new Uint8Array(WIDTH * HEIGHT * 4);
-  const texture = Texture.from({
-    resource: initialFrame,
-    width: WIDTH,
-    height: HEIGHT,
-    format: "rgba8unorm",
-  } as never);
-  const sprite = new Sprite(texture);
-  let pendingFrame: VideoFrameData | undefined;
-  const videoScene = scene as Container & {
-    resize(width: number, height: number): void;
-    update(): void;
-  };
-  videoScene.resize = (width, height) => {
-    const rect = fitVideoRect(WIDTH, HEIGHT, width, height, VIDEO_TOP_INSET);
-    sprite.position.set(rect.x, rect.y);
-    sprite.width = rect.width;
-    sprite.height = rect.height;
-  };
-  scene.addChild(sprite);
-  videoScene.resize(viewport.width, viewport.height);
-  const decoder = new NativeVideoDecoder({
-    width: WIDTH,
-    height: HEIGHT,
-    fps: FPS,
-  });
-  const fpsMeter = new VideoFpsMeter();
-  const uploadFpsMeter = new VideoFpsMeter();
-  let measuredFps: number | null = null;
-  let uploadFps: number | null = null;
-  let receivedFrames = 0;
-  let uploadedFrames = 0;
-  let pendingTimestampUs = 0;
-
-  const formatStatus = (timestampUs: number, loading = false): string => {
-    const decodedFps = measuredFps === null ? "--" : measuredFps.toFixed(1);
-    const upload = uploadFps === null ? "--" : uploadFps.toFixed(1);
-    const state = loading
-      ? "loading…"
-      : String(Math.round(timestampUs / 1000)) + " ms";
-    return (
-      "Decoder: " +
-      decoder.info.decoderType +
-      " / " +
-      decoder.getBackend() +
-      " | Decoded FPS: " +
-      decodedFps +
-      " | UP: " +
-      upload +
-      " | frames: " +
-      receivedFrames +
-      "/" +
-      uploadedFrames +
-      " | " +
-      state
+    const scene = new Container();
+    const fileName = label.split(/[\\/]/).pop() ?? label;
+    scene.addChild(
+        new Text({
+            text: `VIDEO TEST  [4]  ${fileName}  [UP/DOWN: change video]`,
+            style: {
+                fontFamily: "Arial",
+                fontSize: 26,
+                fill: 0xffffff,
+                stroke: { color: 0x000000, width: 3 },
+            },
+        }),
     );
-  };
 
-  const status = new Text({
-    text: formatStatus(0, true),
-    resolution: 2,
-    style: {
-      fontFamily: "Arial",
-      fontSize: 22,
-      fill: 0xffffff,
-      stroke: { color: 0x000000, width: 3 },
-    },
-  });
-
-  status.position.set(24, 60);
-  scene.addChild(status);
-
-  const nextUpdateMS = 1000;
-  let nextUpdateTime = 0;
-
-  videoScene.update = () => {
-    decoder.pollLatest();
-    if (!pendingFrame) return;
-    uploadRgbaTexture(
-      texture.source,
-      pendingFrame.data,
-      pendingFrame.width,
-      pendingFrame.height,
-    );
-    uploadedFrames++;
-    uploadFps = uploadFpsMeter.observe(performance.now()) ?? uploadFps;
-    pendingFrame = undefined;
-
-    const now = performance.now();
-    if (now - nextUpdateTime < nextUpdateMS) return;
-    status.text = formatStatus(pendingTimestampUs);
-    nextUpdateTime = now;
-  };
-  void decoder
-    .open(
-      source,
-      (frame) => {
-        receivedFrames++;
-        measuredFps = fpsMeter.observe(performance.now()) ?? measuredFps;
-        pendingFrame = frame;
-        pendingTimestampUs = frame.timestampUs;
-      },
-      (error) => {
-        status.text = `Video error: ${error.message}`;
-        console.error("[VideoTest] FFmpeg VA-API decoder failed", error);
-      },
-    )
-    .catch((error: unknown) => {
-      status.text = `Video error: ${error instanceof Error ? error.message : String(error)}`;
+    const video = new NativeVideo(source, {
+        width: WIDTH,
+        height: HEIGHT,
+        fps: FPS,
     });
-  scene.on("removed", () => decoder.close());
-  return videoScene;
+    const sprite = new NativeVideoSprite(video);
+    const uploadFpsMeter = new VideoFpsMeter();
+    let measuredUploadFps: number | null = null;
+    let previousPresentedFrames = 0;
+
+    const status = new Text({
+        text: "NV12 video loading…",
+        resolution: 2,
+        style: {
+            fontFamily: "Arial",
+            fontSize: 22,
+            fill: 0xffffff,
+            stroke: { color: 0x000000, width: 3 },
+        },
+    });
+    status.position.set(24, 60);
+
+    const videoScene = scene as Container & {
+        resize(width: number, height: number): void;
+        update(): void;
+    };
+    videoScene.resize = (width, height) => {
+        const rect = fitVideoRect(WIDTH, HEIGHT, width, height, VIDEO_TOP_INSET);
+        sprite.position.set(rect.x, rect.y);
+        sprite.width = rect.width;
+        sprite.height = rect.height;
+    };
+
+    scene.addChild(sprite, status);
+    videoScene.resize(viewport.width, viewport.height);
+
+    let nextStatusUpdateTime = 0;
+    videoScene.update = () => {
+        const stats = video.stats;
+        if (stats.presentedFrames !== previousPresentedFrames) {
+            previousPresentedFrames = stats.presentedFrames;
+            measuredUploadFps =
+                uploadFpsMeter.observe(performance.now()) ?? measuredUploadFps;
+        }
+
+        const now = performance.now();
+        if (now < nextStatusUpdateTime) return;
+        nextStatusUpdateTime = now + 1000;
+
+        const uploadFps =
+            measuredUploadFps === null ? "--" : measuredUploadFps.toFixed(1);
+        const state = video.error
+            ? `error: ${video.error.message}`
+            : video.ended
+              ? "ended"
+              : video.paused
+                ? "paused"
+                : `${video.currentTime.toFixed(2)} s`;
+        status.text =
+            `NV12 BT.709 limited / ${video.backend}` +
+            ` | UP: ${uploadFps}` +
+            ` | decoded/presented/dropped: ${stats.decodedFrames}/` +
+            `${stats.presentedFrames}/${stats.droppedFrames}` +
+            ` | ${(stats.bytesPerFrame / 1_000_000).toFixed(3)} MB/frame` +
+            ` | ${state}`;
+    };
+
+    void video.play().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        status.text = `Video error: ${message}`;
+        console.error("[VideoTest] FFmpeg NV12 decoder failed", error);
+    });
+
+    scene.on("removed", () => {
+        video.destroy();
+        sprite.destroy();
+    });
+    return videoScene;
 }

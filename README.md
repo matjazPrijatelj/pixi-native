@@ -4,7 +4,7 @@ Minimal proof of concept for rendering PixiJS 8 directly into a native SDL windo
 
 ## Stack
 
-- Node.js 22+
+- Node.js 24 LTS
 - pnpm 9.15.9
 - PixiJS 8.20.0
 - Dawn WebGPU through the project-owned native Node addon
@@ -20,6 +20,7 @@ The project-owned native addon creates the Dawn adapter/device and connects it t
 ```sh
 pnpm install
 pnpm native:build
+pnpm native:video:build
 pnpm dev
 ```
 
@@ -42,6 +43,7 @@ pnpm install
 pnpm typecheck
 pnpm test
 pnpm native:build
+pnpm native:video:build
 pnpm dev
 ```
 
@@ -49,9 +51,9 @@ The preflight runs before any generated native directories are removed and repor
 
 ## Demo
 
-The demo cycles through Graphics, Sprite, and normal Pixi Text on every supported platform. It shows a continuously updated FPS overlay in the upper-right corner and logs renderer, backend, adapter, and presentation format. The Sprite uses `assets/test-texture.png`; image and normal Text rasterization use the native Skia-backed `NodeCanvas` adapter.
+The demo cycles through Graphics, Sprite, normal Pixi Text, and native video on Windows x64 and Linux x64. It shows a continuously updated FPS overlay in the upper-right corner and logs renderer, backend, adapter, and presentation format. The Sprite uses `assets/test-texture.png`; image and normal Text rasterization use the native Skia-backed `NodeCanvas` adapter.
 
-On Linux, the demo also includes an FFmpeg VA-API video scene. It requires a system FFmpeg with VA-API support and an H.264 VA-API decode device. Set `FFMPEG_PATH` to override the executable and `FFMPEG_VAAPI_DEVICE` to override the default `/dev/dri/renderD128` device. The 4K High 4:2:2 samples in `assets` are not supported by the UHD 620 VA-API decoder; the bridge automatically falls back to the CPU decoder for those files and shows the active backend in the video status.
+The video scene uses FFmpeg D3D11VA on Windows and VA-API on Linux, with an automatic CPU fallback when the hardware decoder cannot handle a source. Set `FFMPEG_VAAPI_DEVICE` to override the default Linux device `/dev/dri/renderD128`. The 4K High 4:2:2 samples in `assets` may use the fallback on hardware that supports only 4:2:0 decode.
 
 Build the video bridge once before running the demo:
 
@@ -59,10 +61,21 @@ Build the video bridge once before running the demo:
 pnpm native:video:build
 ```
 
-The bridge starts FFmpeg from Rust, reads complete RGBA frames into native-owned buffers, and exposes each buffer to Node without an additional JS copy. The FFmpeg process pipe and WebGPU staging upload remain, so this is not end-to-end zero-copy. On the video scene, use Up/Down to cycle through all MP4 files in `assets`.
+The bridge starts FFmpeg from Rust and requests packed 8-bit NV12 normalized to BT.709 limited range. Each native-owned frame becomes one external N-API buffer; Y and interleaved UV are zero-copy views uploaded to `r8unorm` and `rg8unorm` textures. A WebGPU-only Pixi `Mesh` shader converts NV12 to RGB. At 1280×720 this transfers 1,382,400 bytes per frame instead of 3,686,400 RGBA bytes. The process pipe and WebGPU staging upload remain, so this is not decoder-to-GPU zero-copy.
 
-On Linux, scenes are selected with `1`–`4`. On Windows, scenes `1`–`3` are available and `4` is ignored. Use the left and right arrow keys to move between available scenes. Key-repeat events are ignored.
+FFmpeg executable lookup uses this order:
+
+1. `NativeVideoOptions.ffmpegPath`;
+2. `FFMPEG_PATH`;
+3. `native/video/dist/<platform>-<arch>/ffmpeg[.exe]` next to the packaged addon;
+4. `ffmpeg` from `PATH` for development.
+
+Production packaging may place a verified FFmpeg executable in the app-relative location above. The binary is intentionally not downloaded or committed by this repository; the distributor must include the license and comply with the selected FFmpeg build's LGPL/GPL configuration.
+
+`NativeVideo` provides `play()`, `pause()`, writable `currentTime`, `paused`, `ended`, backend/error state, and decode/presentation/drop statistics. Pause and seek restart the subprocess at the selected position. Audio, duration metadata, looping, and a shared audio/video clock are planned separately. On the video scene, use Up/Down to cycle through all MP4 files in `assets`.
+
+Scenes are selected with `1`–`4`. Use the left and right arrow keys to move between scenes. Key-repeat events are ignored.
 
 ## Current limitations
 
-The checked-in prebuilt addon targets Linux x64 and Vulkan. Windows x64 builds its own ignored D3D12 addon from the pinned source. The native video bridge remains Linux-only. The native window, renderer, ticker, Sprite, Graphics, and Text paths are isolated from the desktop host runtime; there is no WebView or WebGL fallback.
+The checked-in GPU addon targets Linux x64 and Vulkan. Windows x64 builds its own ignored D3D12 addon from the pinned source. Native video currently supports Windows x64 and Linux x64. Video output is normalized SDR BT.709 limited NV12; source color metadata, HDR, audio, and direct D3D11/VA-API surface import are not implemented. The native window, renderer, ticker, Sprite, Graphics, Text, and video paths are isolated from the desktop host runtime; there is no WebView or WebGL fallback.
