@@ -9,8 +9,7 @@ if (!(globalThis as any).navigator) {
   });
 }
 const { Assets, BitmapFont, Texture } = await import("pixi.js");
-const { createPixiRenderer } =
-  await import("./pixi-node/createPixiRenderer.ts");
+const { createPixiRenderer } = await import("./pixi-node/createPixiRenderer.ts");
 const { NodeCanvas } = await import("./pixi-node/NodeCanvas.ts");
 const { supportsNativeVideo } = await import("./pixi-node/platform.ts");
 const {
@@ -28,31 +27,16 @@ const {
 
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
 const { Howler } = await import("./pixi-node/audio/index.ts");
-const {
-  getSceneIndexForKey,
-  getSpriteCountDeltaForKey,
-  getVideoIndexForKey,
-} =
+const { getSceneIndexForKey, getSpriteCountDeltaForKey, getVideoIndexForKey } =
   await import("./demo/sceneNavigation.ts");
 
 const { app, native } = await createPixiRenderer();
 
-const texturePaths = [
-  "test-texture.png",
-  "batman.png",
-  "mario.png",
-].map((file) =>
+const texturePaths = ["test-texture.png", "batman.png", "mario.png"].map((file) =>
   fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
 );
-const bitmapFontPath = fileURLToPath(
-  new URL(
-    "../assets/bitmap-font/native-pixel.fnt",
-    import.meta.url,
-  ),
-);
-const drumTexturePath = fileURLToPath(
-  new URL("../assets/drum-kit.png", import.meta.url),
-);
+const bitmapFontPath = fileURLToPath(new URL("../assets/bitmap-font/native-pixel.fnt", import.meta.url));
+const drumTexturePath = fileURLToPath(new URL("../assets/drum-kit.png", import.meta.url));
 
 installDynamicBitmapTextFont();
 await Assets.load(bitmapFontPath);
@@ -75,9 +59,11 @@ const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
   });
 };
 
-const spriteTextures = (await Promise.all(
-  texturePaths.map(loadNativeTexture),
-)) as [PixiTexture, PixiTexture, PixiTexture];
+const spriteTextures = (await Promise.all(texturePaths.map(loadNativeTexture))) as [
+  PixiTexture,
+  PixiTexture,
+  PixiTexture,
+];
 const drumTexture = await loadNativeTexture(drumTexturePath);
 
 const videos = [
@@ -94,9 +80,7 @@ const videos = [
   },
 ];
 
-const videoPaths = videos.map(({ file }) =>
-  fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
-);
+const videoPaths = videos.map(({ file }) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)));
 
 let videoIndex = 1;
 
@@ -111,9 +95,7 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createBitmapTextTest(),
 ];
 
-const videoSceneIndex = supportsNativeVideo(process.platform)
-  ? scenes.length
-  : null;
+const videoSceneIndex = supportsNativeVideo(process.platform) ? scenes.length : null;
 
 if (videoSceneIndex !== null) {
   scenes.push(() =>
@@ -183,16 +165,9 @@ native.window.on("keyDown", (event) => {
   if (audioScene.handleKey?.(event.key, event.repeat)) return;
 
   const spriteScene = scene as unknown as Partial<SpriteTestScene>;
-  const spriteCountDelta = getSpriteCountDeltaForKey(
-    event.key,
-    event.repeat,
-  );
+  const spriteCountDelta = getSpriteCountDeltaForKey(event.key, event.repeat);
 
-  if (
-    spriteCountDelta !== null &&
-    spriteScene.addRandomSprites &&
-    spriteScene.removeRandomSprites
-  ) {
+  if (spriteCountDelta !== null && spriteScene.addRandomSprites && spriteScene.removeRandomSprites) {
     if (spriteCountDelta > 0) {
       spriteScene.addRandomSprites(spriteCountDelta);
     } else {
@@ -201,24 +176,14 @@ native.window.on("keyDown", (event) => {
     return;
   }
 
-  const nextVideoIndex = getVideoIndexForKey(
-    event.key,
-    videoIndex,
-    videoPaths.length,
-    event.repeat,
-  );
+  const nextVideoIndex = getVideoIndexForKey(event.key, videoIndex, videoPaths.length, event.repeat);
 
   if (nextVideoIndex !== null) {
     selectVideo(nextVideoIndex);
     return;
   }
 
-  const nextIndex = getSceneIndexForKey(
-    event.key,
-    index,
-    scenes.length,
-    event.repeat,
-  );
+  const nextIndex = getSceneIndexForKey(event.key, index, scenes.length, event.repeat);
 
   if (nextIndex !== null) selectScene(nextIndex);
 });
@@ -263,10 +228,7 @@ const shutdown = async (): Promise<void> => {
   };
   await queue.onSubmittedWorkDone?.();
   await destroySpriteTextures();
-  app.destroy(
-    { removeView: true },
-    { children: true, context: true, style: true },
-  );
+  app.destroy({ removeView: true }, { children: true, context: true, style: true });
   await destroyBitmapFonts();
   Howler.unload();
   native.destroy();
@@ -299,10 +261,7 @@ const restartApp = async (): Promise<void> => {
 
   try {
     await destroySpriteTextures();
-    app.destroy(
-      { removeView: true },
-      { children: true, context: true, style: true },
-    );
+    app.destroy({ removeView: true }, { children: true, context: true, style: true });
   } catch {}
 
   try {

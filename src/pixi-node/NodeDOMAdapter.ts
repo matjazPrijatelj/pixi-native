@@ -45,7 +45,28 @@ export class NodeDOMAdapter {
         return { userAgent: "Node native WebGPU", gpu: this.gpu as unknown as GPU };
     }
 
-    public createImage(): HTMLImageElement { return new Image() as unknown as HTMLImageElement; }
+    public createImage(): HTMLImageElement {
+        const image = new Image();
+        const imagePrototype = Object.getPrototypeOf(image) as object;
+        const sourceDescriptor = Object.getOwnPropertyDescriptor(imagePrototype, "src");
+
+        if (!sourceDescriptor?.get || !sourceDescriptor.set) {
+            throw new Error("Native image source property is unavailable");
+        }
+
+        Object.defineProperty(image, "src", {
+            configurable: true,
+            enumerable: sourceDescriptor.enumerable,
+            get: () => sourceDescriptor.get?.call(image),
+            set: (value: string) => {
+                sourceDescriptor.set?.call(
+                    image,
+                    value.startsWith("file:") ? fileURLToPath(value) : value,
+                );
+            },
+        });
+        return image as unknown as HTMLImageElement;
+    }
     public getWebGLRenderingContext(): never { throw new Error("WebGL is intentionally unsupported in this PoC"); }
     public getBaseUrl(): string { return "file:///"; }
     public getFontFaceSet(): null { return null; }

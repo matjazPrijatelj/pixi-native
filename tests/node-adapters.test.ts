@@ -72,6 +72,19 @@ test("NodeDOMAdapter loads a local image into a Canvas2D context", async () => {
     assert.equal(context.getImageData(0, 0, 1, 1).data.length, 4);
 });
 
+test("NodeDOMAdapter loads file URLs into a native image", async () => {
+    const adapter = new NodeDOMAdapter({} as never);
+    const image = adapter.createImage();
+    await new Promise<void>((resolve, reject) => {
+        image.onload = (): void => resolve();
+        image.onerror = reject;
+        image.src = new URL("../assets/bitmap-font/native-pixel.png", import.meta.url).href;
+    });
+
+    assert.equal(image.width, 192);
+    assert.equal(image.height, 192);
+});
+
 test("NodeDOMAdapter fetches absolute paths and file URLs without HTTP", async () => {
     const adapter = new NodeDOMAdapter({} as never);
     const fontUrl = new URL(
