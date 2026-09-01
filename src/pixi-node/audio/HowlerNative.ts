@@ -17,6 +17,11 @@ export interface HowlOptions {
     readonly preload?: boolean | "metadata";
     readonly preloadSprites?: boolean;
     readonly html5?: boolean;
+    /** Internal/native FFmpeg input options used by media streams. */
+    readonly ffmpegInputArgs?: readonly string[];
+    readonly ffmpegOutputArgs?: readonly string[];
+    /** Initial media playback rate. */
+    readonly rate?: number;
     readonly onload?: HowlEventCallback;
     readonly onloaderror?: HowlEventCallback;
     readonly onplayerror?: HowlEventCallback;
@@ -157,6 +162,9 @@ export class Howl implements NativeAudioEventTarget {
                 muted: this.groupMuted,
                 loop,
                 streaming: this.options.html5 ?? false,
+                playbackRate: this.options.rate ?? 1,
+                inputArgs: this.options.ffmpegInputArgs,
+                outputArgs: this.options.ffmpegOutputArgs,
             });
             this.sounds.set(id, {
                 sprite: spriteName,

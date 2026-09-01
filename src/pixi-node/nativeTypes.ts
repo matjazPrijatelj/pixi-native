@@ -19,6 +19,7 @@ export interface NodeWindowRenderer {
   swap(): void;
   waitForPresent?(): Promise<boolean>;
   setModalFrameCallback?(callback?: () => void): void;
+  setModalStateCallback?(callback?: (active: boolean) => void): void;
   resize(): void;
   destroy(): void;
 }

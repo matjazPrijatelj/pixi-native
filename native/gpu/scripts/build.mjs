@@ -1,6 +1,8 @@
-import Fs from 'fs'
 import C from './util/common.js'
+import { removeDirectory } from './util/remove-directory.mjs'
+import { initializeWindowsDevEnvironment } from './windows-dev-environment.mjs'
 
+initializeWindowsDevEnvironment()
 await import('./preflight.mjs')
 
 await Promise.all([
@@ -10,7 +12,7 @@ await Promise.all([
 	C.dir.dist,
 	C.dir.publish,
 ].map(async (dir) => {
-	await Fs.promises.rm(dir, { recursive: true }).catch(() => {})
+	await removeDirectory(dir)
 }))
 
 await import('./download-depot-tools.mjs')

@@ -1,5 +1,6 @@
 export interface ModalFrameRenderer {
     setModalFrameCallback?(callback?: () => void): void;
+    setModalStateCallback?(callback?: (active: boolean) => void): void;
 }
 
 export function requireWindowsModalFrameSupport(
@@ -8,7 +9,10 @@ export function requireWindowsModalFrameSupport(
 ): void {
     if (
         platform === "win32" &&
-        typeof renderer.setModalFrameCallback !== "function"
+        (
+            typeof renderer.setModalFrameCallback !== "function" ||
+            typeof renderer.setModalStateCallback !== "function"
+        )
     ) {
         throw new Error(
             "The Windows Dawn addon is outdated and cannot animate during window move/resize. " +

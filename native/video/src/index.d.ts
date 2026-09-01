@@ -5,6 +5,11 @@ export interface DecoderOptions {
     startTime?: number;
     ffmpegPath?: string;
     vaapiDevice?: string;
+    playbackRate?: number;
+    endTime?: number;
+    sourcePaced?: boolean;
+    inputArgs?: string[];
+    outputArgs?: string[];
 }
 
 export interface VideoFrame {

@@ -1,7 +1,7 @@
 #![deny(clippy::all)]
 
 use std::collections::VecDeque;
-use std::io::{self, Read};
+use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -20,6 +20,11 @@ pub struct DecoderOptions {
     pub start_time: Option<f64>,
     pub ffmpeg_path: Option<String>,
     pub vaapi_device: Option<String>,
+    pub playback_rate: Option<f64>,
+    pub end_time: Option<f64>,
+    pub source_paced: Option<bool>,
+    pub input_args: Option<Vec<String>>,
+    pub output_args: Option<Vec<String>>,
 }
 
 #[napi(object)]
@@ -132,6 +137,11 @@ struct FfmpegRequest {
     height: usize,
     fps: f64,
     start_time: f64,
+    playback_rate: f64,
+    end_time: Option<f64>,
+    source_paced: bool,
+    input_args: Vec<String>,
+    output_args: Vec<String>,
 }
 
 #[napi]
@@ -191,6 +201,7 @@ impl NativeVideoDecoder {
             .map_err(|_| Error::from_reason("Invalid video height"))?;
         let fps = self.options.fps.unwrap_or(30.0);
         let start_time = self.options.start_time.unwrap_or(0.0);
+        let playback_rate = self.options.playback_rate.unwrap_or(1.0);
         let ffmpeg_path = self
             .options
             .ffmpeg_path
@@ -212,6 +223,11 @@ impl NativeVideoDecoder {
             height,
             fps,
             start_time,
+            playback_rate,
+            end_time: self.options.end_time,
+            source_paced: self.options.source_paced.unwrap_or(false),
+            input_args: self.options.input_args.clone().unwrap_or_default(),
+            output_args: self.options.output_args.clone().unwrap_or_default(),
         };
         let (spawned, active_backend) = match spawn_ffmpeg(&request, requested_backend) {
             Ok(spawned) => (spawned, requested_backend),
@@ -382,6 +398,21 @@ fn validate_options(options: &DecoderOptions) -> Result<()> {
             "Video start time must be non-negative and finite",
         ));
     }
+
+    let playback_rate = options.playback_rate.unwrap_or(1.0);
+    if !playback_rate.is_finite() || playback_rate <= 0.0 {
+        return Err(Error::from_reason(
+            "Video playback rate must be positive and finite",
+        ));
+    }
+
+    if let Some(end_time) = options.end_time {
+        if !end_time.is_finite() || end_time <= start_time {
+            return Err(Error::from_reason(
+                "Video end time must be finite and greater than start time",
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -419,11 +450,21 @@ fn ffmpeg_args(request: &FfmpegRequest, backend: DecoderBackend) -> Vec<String> 
         DecoderBackend::Cpu => {}
     }
 
-    args.push("-re".to_string());
+    if !request.source_paced {
+        args.extend(["-readrate".to_string(), request.playback_rate.to_string()]);
+    }
     if request.start_time > 0.0 {
         args.extend(["-ss".to_string(), request.start_time.to_string()]);
     }
+    args.extend(request.input_args.iter().cloned());
     args.extend(["-i".to_string(), request.source.clone(), "-an".to_string()]);
+    if let Some(end_time) = request.end_time {
+        args.extend([
+            "-t".to_string(),
+            (end_time - request.start_time).to_string(),
+        ]);
+    }
+    args.extend(request.output_args.iter().cloned());
 
     let scale = format!(
         "scale={}:{}:flags=fast_bilinear:in_range=auto:out_range=tv:in_color_matrix=auto:out_color_matrix=bt709,format=nv12",
@@ -454,14 +495,41 @@ fn spawn_ffmpeg(request: &FfmpegRequest, backend: DecoderBackend) -> io::Result<
         .args(ffmpeg_args(request, backend))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .spawn()?;
 
     let stdout = child
         .stdout
         .take()
         .ok_or_else(|| io::Error::other("FFmpeg stdout unavailable"))?;
+    if let Some(stderr) = child.stderr.take() {
+        thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(|line| line.ok()) {
+                eprintln!("{}", redact_url_credentials(&line));
+            }
+        });
+    }
     Ok(SpawnedFfmpeg { child, stdout })
+}
+
+fn redact_url_credentials(value: &str) -> String {
+    let mut result = value.to_string();
+    let mut search_from = 0;
+    while let Some(relative_scheme) = result[search_from..].find("://") {
+        let authority_start = search_from + relative_scheme + 3;
+        let authority_end = result[authority_start..]
+            .find(|character: char| character == '/' || character.is_whitespace())
+            .map(|offset| authority_start + offset)
+            .unwrap_or(result.len());
+        let Some(relative_at) = result[authority_start..authority_end].find('@') else {
+            search_from = authority_end.min(result.len());
+            continue;
+        };
+        let at = authority_start + relative_at;
+        result.replace_range(authority_start..at, "***:***");
+        search_from = authority_start + "***:***@".len();
+    }
+    result
 }
 
 fn install_child(state: &DecoderState, spawned: SpawnedFfmpeg) -> io::Result<ChildStdout> {
@@ -585,6 +653,30 @@ mod tests {
     }
 
     #[test]
+    fn builds_source_paced_custom_arguments_without_readrate() {
+        let mut request = request(25.0, 0.0);
+        request.source_paced = true;
+        request.input_args = vec!["-fflags".to_string(), "nobuffer".to_string()];
+        request.output_args = vec!["-threads".to_string(), "1".to_string()];
+        let args = ffmpeg_args(&request, DecoderBackend::Cpu);
+        assert!(!args.iter().any(|arg| arg == "-readrate" || arg == "-re"));
+        let input_index = args.iter().position(|arg| arg == "-i").unwrap();
+        let fflags_index = args.iter().position(|arg| arg == "-fflags").unwrap();
+        let threads_index = args.iter().position(|arg| arg == "-threads").unwrap();
+        let pipe_index = args.iter().position(|arg| arg == "pipe:1").unwrap();
+        assert!(fflags_index < input_index);
+        assert!(threads_index > input_index && threads_index < pipe_index);
+    }
+
+    #[test]
+    fn redacts_url_credentials_from_ffmpeg_errors() {
+        assert_eq!(
+            redact_url_credentials("failed http://root:secret@10.1.2.3/live.sdp"),
+            "failed http://***:***@10.1.2.3/live.sdp"
+        );
+    }
+
+    #[test]
     fn rejects_odd_nv12_dimensions() {
         let result = validate_options(&DecoderOptions {
             width: 1279,
@@ -593,6 +685,11 @@ mod tests {
             start_time: None,
             ffmpeg_path: None,
             vaapi_device: None,
+            playback_rate: None,
+            end_time: None,
+            source_paced: None,
+            input_args: None,
+            output_args: None,
         });
         assert!(result.is_err());
     }
@@ -642,6 +739,11 @@ mod tests {
             height: 720,
             fps,
             start_time,
+            playback_rate: 1.0,
+            end_time: None,
+            source_paced: false,
+            input_args: Vec::new(),
+            output_args: Vec::new(),
         }
     }
 }

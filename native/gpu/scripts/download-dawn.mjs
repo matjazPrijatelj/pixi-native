@@ -2,9 +2,10 @@ import Fs from 'fs'
 import Path from 'path'
 import { execFileSync } from 'child_process'
 import C from './util/common.js'
+import { removeDirectory } from './util/remove-directory.mjs'
 
 console.log("clone", C.dawn.url)
-await Fs.promises.rm(C.dir.dawn, { recursive: true }).catch(() => {})
+await removeDirectory(C.dir.dawn)
 await Fs.promises.mkdir(C.dir.dawn, { recursive: true })
 execFileSync('git', [...C.gitConfigArgs, 'init'], { stdio: 'inherit', cwd: C.dir.dawn })
 execFileSync('git', [...C.gitConfigArgs, 'remote', 'add', 'origin', C.dawn.url], { stdio: 'inherit', cwd: C.dir.dawn })

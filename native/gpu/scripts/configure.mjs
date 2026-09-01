@@ -36,6 +36,10 @@ if (needsSync) {
 process.chdir(C.dir.dawn)
 console.log("configure build in", C.dir.build)
 
+if (!Fs.existsSync(C.dir.ninja)) {
+	throw new Error(`Pinned Dawn Ninja executable was not found: ${C.dir.ninja}`)
+}
+
 await Fs.promises.rm(C.dir.build, { recursive: true }).catch(() => {})
 await Fs.promises.mkdir(C.dir.build, { recursive: true })
 
@@ -80,6 +84,7 @@ const cmakeArgs = [
 	'-B',
 	C.dir.build,
 	'-GNinja',
+	`-DCMAKE_MAKE_PROGRAM=${C.dir.ninja}`,
 	'-DCMAKE_BUILD_TYPE=Release',
 	'-DCMAKE_CXX_SCAN_FOR_MODULES=OFF',
 	'-DDAWN_SUPPORTS_CXX_MODULES=OFF',

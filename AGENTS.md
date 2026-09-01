@@ -24,3 +24,8 @@ Test compatibility adapters and native startup/resizing. A successful demo must 
 ## Progress
 
 Write all tasks progress to HISTORY.md
+
+## Extra
+
+Name long regexes and place comments on functions that are harder to read, understand, or maintain.
+Code should be readable prefer for/for-of in (tight loops) over forEach when possible.

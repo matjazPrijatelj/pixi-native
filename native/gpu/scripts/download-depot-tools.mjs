@@ -2,9 +2,10 @@ import Fs from 'fs'
 import Path from 'path'
 import { execFileSync } from 'child_process'
 import C from './util/common.js'
+import { removeDirectory } from './util/remove-directory.mjs'
 
 console.log("clone", C.depotTools.url)
-await Fs.promises.rm(C.dir.depotTools, { recursive: true }).catch(() => {})
+await removeDirectory(C.dir.depotTools)
 await Fs.promises.mkdir(C.dir.depotTools, { recursive: true })
 execFileSync('git', [...C.gitConfigArgs, 'init'], { stdio: 'inherit', cwd: C.dir.depotTools })
 execFileSync('git', [...C.gitConfigArgs, 'remote', 'add', 'origin', C.depotTools.url], { stdio: 'inherit', cwd: C.dir.depotTools })

@@ -20,6 +20,7 @@ const {
   createTextTest,
   createVideoTest,
   createAudioTest,
+  createRtpVideoTest,
   disposeDemoScene,
   DYNAMIC_BITMAP_FONT_NAME,
   installDynamicBitmapTextFont,
@@ -114,6 +115,13 @@ scenes.push(() =>
     height: native.canvas.height,
   }),
 );
+
+if (supportsNativeVideo(process.platform)) {
+  scenes.push(() => createRtpVideoTest({
+    width: native.canvas.width,
+    height: native.canvas.height,
+  }));
+}
 
 let index = 0;
 let scene = scenes[index]();

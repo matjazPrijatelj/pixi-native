@@ -229,6 +229,110 @@ test("NativeVideo without audio keeps latest-frame-wins behavior", async () => {
     assert.equal(video.stats.queuedFrames, 0);
 });
 
+test("NativeVideo dispatches Electron-compatible events and loops without ended", async () => {
+    const factory = new FakeDecoderFactory();
+    const video = new NativeVideo(
+        "video.mp4#t=0,2",
+        { width: 2, height: 2, audio: false, loop: true },
+        factory,
+    );
+    const events: string[] = [];
+    for (const type of ["loadedmetadata", "loadeddata", "canplay", "canplaythrough", "play", "playing", "ended"]) {
+        video.addEventListener(type, () => events.push(type));
+    }
+    let propertyEnded = 0;
+    video.onended = () => { propertyEnded++; };
+
+    await video.play();
+    factory.decoders[0].frame = createFrame(500_000);
+    assert.ok(video.takeLatestFrame());
+    factory.decoders[0].finished = true;
+    assert.equal(video.takeLatestFrame(), null);
+
+    assert.equal(video.ended, false);
+    assert.equal(propertyEnded, 0);
+    assert.equal(factory.options[1].startTime, 0);
+    assert.ok(events.includes("loadedmetadata"));
+    assert.deepEqual(events.slice(events.indexOf("loadeddata"), events.indexOf("playing") + 1), [
+        "loadeddata", "canplay", "canplaythrough", "playing",
+    ]);
+    video.destroy();
+});
+
+test("NativeVideo emits pause then ended at a natural file end", async () => {
+    const factory = new FakeDecoderFactory();
+    const video = new NativeVideo("video.mp4", { width: 2, height: 2, audio: false }, factory);
+    const events: string[] = [];
+    for (const type of ["timeupdate", "pause", "ended"]) {
+        video.addEventListener(type, () => events.push(type));
+    }
+    await video.play();
+    factory.decoders[0].finished = true;
+    video.takeLatestFrame();
+    assert.deepEqual(events.slice(-3), ["timeupdate", "pause", "ended"]);
+    video.destroy();
+});
+
+test("modal playback discards audio and resumes at the latest silent video frame", async () => {
+    const factory = new FakeAudioVideoFactory();
+    const video = new NativeVideo("video.mp4", { width: 2, height: 2 }, factory);
+    await video.play();
+    factory.audios[0].currentTime = 0.5;
+    factory.decoders[0].frame = createFrame(500_000);
+    video.takeLatestFrame();
+
+    video.setModalState(true);
+    assert.equal(factory.audios[0].destroyed, true);
+    factory.decoders[0].frame = createFrame(2_000_000);
+    assert.equal(video.takeLatestFrame()?.timestampUs, 2_000_000);
+    video.setModalState(false);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(factory.audios[1].currentTime, 2);
+    assert.equal(factory.options.at(-1)?.startTime, 2);
+    video.destroy();
+});
+
+test("live video forwards FFmpeg arguments and reconnects without read pacing", async () => {
+    const factory = new FakeDecoderFactory();
+    const video = new NativeVideo("http://camera/live.sdp", {
+        width: 2,
+        height: 2,
+        audio: false,
+        mediaType: "live",
+        reconnect: { initialDelayMs: 0, maxDelayMs: 0 },
+        ffmpeg: {
+            inputPacing: "source",
+            inputArgs: ["-fflags", "nobuffer"],
+            videoOutputArgs: ["-threads", "1"],
+        },
+    }, factory);
+    await video.play();
+    assert.equal(factory.options[0].sourcePaced, true);
+    assert.deepEqual(factory.options[0].inputArgs, ["-fflags", "nobuffer"]);
+    assert.deepEqual(factory.options[0].outputArgs, ["-threads", "1"]);
+
+    factory.decoders[0].error = "connection lost";
+    video.takeLatestFrame();
+    video.takeLatestFrame();
+    assert.equal(factory.decoders.length, 2);
+    assert.equal(video.ended, false);
+    video.destroy();
+});
+
+test("playbackRate restarts file audio and video at the same media time", async () => {
+    const factory = new FakeAudioVideoFactory();
+    const video = new NativeVideo("video.mp4", { width: 2, height: 2 }, factory);
+    await video.play();
+    factory.audios[0].currentTime = 1.25;
+    video.playbackRate = 0.94;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(factory.options.at(-1)?.startTime, 1.25);
+    assert.equal(factory.options.at(-1)?.playbackRate, 0.94);
+    assert.equal(factory.audioPlaybackRates.at(-1), 0.94);
+    video.destroy();
+});
+
 test("VideoFpsMeter reports measured FPS after its sample window", () => {
     const meter = new VideoFpsMeter(500);
     assert.equal(meter.observe(1000), null);
@@ -250,15 +354,18 @@ class FakeDecoderFactory implements NativeVideoDependencies {
 
 class FakeAudioVideoFactory extends FakeDecoderFactory {
     public readonly audios: FakeAudio[] = [];
+    public readonly audioPlaybackRates: number[] = [];
 
     public createAudio(
         _source: string,
         startTime: number,
         volume: number,
         muted: boolean,
+        playbackRate = 1,
     ): FakeAudio {
         const audio = new FakeAudio(startTime, volume, muted);
         this.audios.push(audio);
+        this.audioPlaybackRates.push(playbackRate);
         return audio;
     }
 }

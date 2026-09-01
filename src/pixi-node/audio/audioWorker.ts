@@ -18,6 +18,7 @@ interface Voice {
     muted: boolean;
     loop: boolean;
     playing: boolean;
+    readonly playbackRate: number;
     fade?: { from: number; to: number; startFrame: number; durationFrames: number; version: number };
 }
 
@@ -31,9 +32,9 @@ interface StreamState {
 }
 
 type WorkerCommand =
-    | { type: "createVoice"; ownerId: number; id: number; source: string; ffmpegPath: string; offsetSeconds: number; durationSeconds?: number; volume: number; muted: boolean; loop: boolean; streaming: boolean }
+    | { type: "createVoice"; ownerId: number; id: number; source: string; ffmpegPath: string; offsetSeconds: number; durationSeconds?: number; volume: number; muted: boolean; loop: boolean; streaming: boolean; playbackRate: number; inputArgs: string[]; outputArgs: string[] }
     | { type: "preload"; ownerId: number; requestId: number; source: string; ffmpegPath: string; offsetSeconds: number; durationSeconds?: number }
-    | { type: "render"; frames: number; globalVolume: number; globalMuted: boolean }
+    | { type: "render"; frames: number; globalVolume: number; globalMuted: boolean; generation: number }
     | { type: "command"; ownerId: number; id?: number; command: "play" | "pause" | "stop" | "volume" | "mute" | "loop" | "seek" | "fade"; value?: number | boolean; from?: number; to?: number; durationMs?: number; fadeVersion?: number }
     | { type: "unloadOwner"; ownerId: number }
     | { type: "clear" }
@@ -50,6 +51,30 @@ const pendingVoiceCommands = new Map<
     number,
     Array<Extract<WorkerCommand, { type: "command" }>>
 >();
+const AUTHENTICATED_URL_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+(?::[^\s/@]*)?@/giu;
+
+// FFmpeg atempo accepts bounded factors, so extreme rates are decomposed.
+function buildAtempoFilter(playbackRate: number): string {
+    if (!Number.isFinite(playbackRate) || playbackRate <= 0) {
+        throw new RangeError("Audio playback rate must be positive and finite");
+    }
+    const factors: number[] = [];
+    let remaining = playbackRate;
+    while (remaining < 0.5) {
+        factors.push(0.5);
+        remaining /= 0.5;
+    }
+    while (remaining > 2) {
+        factors.push(2);
+        remaining /= 2;
+    }
+    factors.push(remaining);
+    return factors.map((factor) => `atempo=${factor}`).join(",");
+}
+
+function redactUrlCredentials(value: string): string {
+    return value.replace(AUTHENTICATED_URL_PATTERN, "$1***:***@");
+}
 
 function cacheKey(source: string, offsetSeconds: number, durationSeconds?: number): string {
     return `${source}\u0000${offsetSeconds}\u0000${durationSeconds ?? "end"}`;
@@ -79,7 +104,8 @@ async function decodePcm(
         child.once("error", reject);
         child.once("close", (code) => {
             if (code !== 0) {
-                reject(new Error(Buffer.concat(errors).toString("utf8").trim() || `FFmpeg exited with code ${code}`));
+                const message = Buffer.concat(errors).toString("utf8").trim();
+                reject(new Error(redactUrlCredentials(message) || `FFmpeg exited with code ${code}`));
                 return;
             }
             const pcm = Buffer.concat(chunks);
@@ -168,6 +194,7 @@ async function createVoice(command: Extract<WorkerCommand, { type: "createVoice"
             muted: command.muted,
             loop: command.loop,
             playing: true,
+            playbackRate: command.playbackRate,
         });
         postEvent(command.ownerId, "play", command.id);
         const pending = pendingVoiceCommands.get(command.id) ?? [];
@@ -186,8 +213,13 @@ async function createVoice(command: Extract<WorkerCommand, { type: "createVoice"
 function createStreamingVoice(command: Extract<WorkerCommand, { type: "createVoice" }>): void {
     const args = ["-hide_banner", "-loglevel", "error", "-nostdin"];
     if (command.offsetSeconds > 0) args.push("-ss", String(command.offsetSeconds));
+    args.push(...command.inputArgs);
     args.push("-i", command.source, "-vn");
     if (command.durationSeconds !== undefined) args.push("-t", String(command.durationSeconds));
+    if (command.playbackRate !== 1) {
+        args.push("-af", buildAtempoFilter(command.playbackRate));
+    }
+    args.push(...command.outputArgs);
     args.push("-ac", "2", "-ar", String(SAMPLE_RATE), "-f", "f32le", "pipe:1");
 
     const child = spawn(command.ffmpegPath, args, {
@@ -213,6 +245,7 @@ function createStreamingVoice(command: Extract<WorkerCommand, { type: "createVoi
         muted: command.muted,
         loop: false,
         playing: true,
+        playbackRate: command.playbackRate,
     };
     voices.set(command.id, voice);
 
@@ -241,7 +274,7 @@ function createStreamingVoice(command: Extract<WorkerCommand, { type: "createVoi
         if (code !== 0) {
             failStreamingVoice(
                 voice,
-                Buffer.concat(errors).toString("utf8").trim() || `FFmpeg exited with code ${code}`,
+                redactUrlCredentials(Buffer.concat(errors).toString("utf8").trim()) || `FFmpeg exited with code ${code}`,
             );
             return;
         }
@@ -339,7 +372,7 @@ function applyCommand(command: Extract<WorkerCommand, { type: "command" }>): voi
     }
 }
 
-function render(frames: number, globalVolume: number, globalMuted: boolean): void {
+function render(frames: number, globalVolume: number, globalMuted: boolean, generation: number): void {
     const output = new Float32Array(frames * CHANNELS);
     const events: Array<{
         ownerId: number;
@@ -401,12 +434,13 @@ function render(frames: number, globalVolume: number, globalMuted: boolean): voi
     const positions = [...voices.values()].map((voice) => ({
         id: voice.id,
         ownerId: voice.ownerId,
-        seconds: voice.spriteOffsetSeconds + voice.positionFrames / SAMPLE_RATE,
+        seconds: voice.spriteOffsetSeconds + voice.positionFrames * voice.playbackRate / SAMPLE_RATE,
         playing: voice.playing,
         volume: voice.volume,
+        playbackRate: voice.playbackRate,
     }));
     port!.postMessage(
-        { type: "chunk", buffer: output.buffer, frames, positions, events },
+        { type: "chunk", buffer: output.buffer, frames, positions, events, generation },
         [output.buffer],
     );
 }
@@ -422,7 +456,7 @@ port.on("message", (command: WorkerCommand) => {
                 .catch((error) => postEvent(command.ownerId, "loaderror", undefined, error instanceof Error ? error.message : String(error)));
             break;
         case "render":
-            render(command.frames, command.globalVolume, command.globalMuted);
+            render(command.frames, command.globalVolume, command.globalMuted, command.generation);
             break;
         case "command":
             applyCommand(command);

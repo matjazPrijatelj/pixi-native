@@ -31,7 +31,7 @@ if (process.platform === 'win32') {
 	if (process.arch !== 'x64') errors.push(`Windows x64 is required; found ${process.arch}.`)
 
 	if (!process.env.VSCMD_VER) {
-		errors.push('Run this command from Developer PowerShell for Visual Studio 2022.')
+		errors.push('Visual Studio 2022 developer environment could not be initialized automatically.')
 	}
 	if (!commandOutput('where.exe', ['cl.exe'])) {
 		errors.push('MSVC cl.exe is not available in PATH.')

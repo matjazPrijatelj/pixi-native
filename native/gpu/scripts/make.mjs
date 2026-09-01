@@ -4,7 +4,7 @@ import { execFileSync } from 'child_process'
 import C from './util/common.js'
 
 console.log("build in", C.dir.build)
-execFileSync('cmake', ['--build', C.dir.build, '--target', 'dawn.node', '--verbose'], {
+execFileSync(C.dir.ninja, ['-C', C.dir.build, 'dawn.node', '-v'], {
 	stdio: 'inherit',
 	env: {
 		...process.env,

@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 
 const RESTART_EXIT_CODE = 75;
+
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 const startApp = (): void => {
   const child = spawn(

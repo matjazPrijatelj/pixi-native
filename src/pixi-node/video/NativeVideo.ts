@@ -1,7 +1,11 @@
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { Howl } from "../audio/index.ts";
+import { nativeAudioEngine } from "../audio/NativeAudioEngine.ts";
+import { parseMediaSource, redactMediaSource } from "./mediaSource.ts";
 
 const require = createRequire(import.meta.url);
 const AUDIO_FRAME_LEAD_SECONDS = 0.02;
@@ -48,7 +52,19 @@ interface NativeDecoderBinding {
 
 interface NativeVideoModule {
     NativeVideoDecoder: new (
-        options: NativeVideoDecoderOptions,
+        options: {
+            width: number;
+            height: number;
+            fps: number;
+            startTime: number;
+            ffmpegPath: string;
+            vaapiDevice?: string;
+            playbackRate: number;
+            endTime?: number;
+            sourcePaced?: boolean;
+            inputArgs?: string[];
+            outputArgs?: string[];
+        },
     ) => NativeDecoderBinding;
 }
 
@@ -61,10 +77,31 @@ export interface NativeVideoOptions {
     readonly audio?: boolean;
     readonly volume?: number;
     readonly muted?: boolean;
+    readonly loop?: boolean;
+    readonly playbackRate?: number;
+    readonly mediaType?: "file" | "live";
+    readonly ffmpeg?: NativeVideoFfmpegOptions;
+    readonly reconnect?: false | NativeVideoReconnectOptions;
+}
+
+export interface NativeVideoFfmpegOptions {
+    readonly inputArgs?: readonly string[];
+    readonly videoOutputArgs?: readonly string[];
+    readonly audioOutputArgs?: readonly string[];
+    readonly inputPacing?: "media" | "source";
+}
+
+export interface NativeVideoReconnectOptions {
+    readonly initialDelayMs?: number;
+    readonly maxDelayMs?: number;
 }
 
 export interface NativeVideoDecoderOptions extends NativeVideoOptions {
     readonly startTime?: number;
+    readonly endTime?: number;
+    readonly sourcePaced?: boolean;
+    readonly inputArgs?: readonly string[];
+    readonly outputArgs?: readonly string[];
 }
 
 export interface NativeVideoStats {
@@ -93,7 +130,16 @@ export interface NativeVideoDecoderLike {
 
 export interface NativeVideoDependencies {
     createDecoder(options: NativeVideoDecoderOptions): NativeVideoDecoderLike;
-    createAudio?(source: string, startTime: number, volume: number, muted: boolean): NativeVideoAudioLike;
+    createAudio?(
+        source: string,
+        startTime: number,
+        volume: number,
+        muted: boolean,
+        playbackRate: number,
+        inputArgs: readonly string[],
+        outputArgs: readonly string[],
+        endTime?: number,
+    ): NativeVideoAudioLike;
 }
 
 export interface NativeVideoAudioLike {
@@ -206,6 +252,60 @@ export function resolveFfmpegPath(
     return pathExists(bundledPath) ? bundledPath : "ffmpeg";
 }
 
+function resolveFfprobePath(ffmpegPath: string): string {
+    if (ffmpegPath === "ffmpeg") return "ffprobe";
+    const executable = process.platform === "win32" ? "ffprobe.exe" : "ffprobe";
+    return join(dirname(ffmpegPath), executable);
+}
+
+interface ProbedMetadata {
+    readonly duration?: number;
+    readonly width?: number;
+    readonly height?: number;
+}
+
+function probeMedia(
+    source: string,
+    ffmpegPath: string,
+    inputArgs: readonly string[],
+): Promise<ProbedMetadata | null> {
+    return new Promise((resolve) => {
+        execFile(
+            resolveFfprobePath(ffmpegPath),
+            [
+                "-v", "error",
+                ...inputArgs,
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height:format=duration",
+                "-of", "json",
+                "-i", source,
+            ],
+            { windowsHide: true, timeout: 5_000 },
+            (error, stdout) => {
+                if (error) {
+                    void redactMediaSource(error.message);
+                    resolve(null);
+                    return;
+                }
+                try {
+                    const data = JSON.parse(stdout) as {
+                        format?: { duration?: string };
+                        streams?: Array<{ width?: number; height?: number }>;
+                    };
+                    const duration = Number(data.format?.duration);
+                    resolve({
+                        duration: Number.isFinite(duration) ? duration : undefined,
+                        width: data.streams?.[0]?.width,
+                        height: data.streams?.[0]?.height,
+                    });
+                } catch {
+                    resolve(null);
+                }
+            },
+        );
+    });
+}
+
 export class NativeVideoDecoder implements NativeVideoDecoderLike {
     private readonly decoder: NativeDecoderBinding;
 
@@ -219,14 +319,25 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
         if (!Number.isFinite(startTime) || startTime < 0) {
             throw new Error("Video start time must be non-negative and finite");
         }
+        const playbackRate = options.playbackRate ?? 1;
+        if (!Number.isFinite(playbackRate) || playbackRate <= 0) {
+            throw new Error("Video playback rate must be positive and finite");
+        }
 
         const nativeVideo = require(
             "../../../native/video/src/index.js"
         ) as NativeVideoModule;
         this.decoder = new nativeVideo.NativeVideoDecoder({
-            ...options,
+            width: options.width,
+            height: options.height,
             fps,
             startTime,
+            playbackRate,
+            endTime: options.endTime,
+            sourcePaced: options.sourcePaced,
+            inputArgs: options.inputArgs ? [...options.inputArgs] : undefined,
+            outputArgs: options.outputArgs ? [...options.outputArgs] : undefined,
+            vaapiDevice: options.vaapiDevice,
             ffmpegPath: resolveFfmpegPath({
                 explicitPath: options.ffmpegPath,
             }),
@@ -282,8 +393,8 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
 
 const DEFAULT_DEPENDENCIES: NativeVideoDependencies = {
     createDecoder: (options) => new NativeVideoDecoder(options),
-    createAudio: (source, startTime, volume, muted) =>
-        new HowlVideoAudio(source, startTime, volume, muted),
+    createAudio: (source, startTime, volume, muted, playbackRate, inputArgs, outputArgs, endTime) =>
+        new HowlVideoAudio(source, startTime, volume, muted, playbackRate, inputArgs, outputArgs, endTime),
 };
 
 class HowlVideoAudio implements NativeVideoAudioLike {
@@ -299,17 +410,29 @@ class HowlVideoAudio implements NativeVideoAudioLike {
         startTime: number,
         volume: number,
         muted: boolean,
+        playbackRate: number,
+        inputArgs: readonly string[],
+        outputArgs: readonly string[],
+        endTime?: number,
     ) {
         this.startTime = startTime;
         this.currentVolume = volume;
         this.currentMuted = muted;
         this.howl = new Howl({
             src: [source],
-            sprite: { __video: [startTime * 1000, 86_400_000] },
+            sprite: {
+                __video: [
+                    startTime * 1000,
+                    endTime === undefined ? 86_400_000 : (endTime - startTime) * 1000,
+                ],
+            },
             volume,
             mute: muted,
             preload: false,
             html5: true,
+            rate: playbackRate,
+            ffmpegInputArgs: inputArgs,
+            ffmpegOutputArgs: outputArgs,
         });
     }
 
@@ -359,11 +482,50 @@ class HowlVideoAudio implements NativeVideoAudioLike {
     }
 }
 
-export class NativeVideo {
-    public readonly src: string;
+export type NativeVideoEventType =
+    | "loadedmetadata"
+    | "loadeddata"
+    | "canplay"
+    | "canplaythrough"
+    | "play"
+    | "playing"
+    | "pause"
+    | "timeupdate"
+    | "seeked"
+    | "ended"
+    | "error";
+
+type NativeVideoEventHandler = ((this: NativeVideo, event: Event) => void) | null;
+
+const activeVideos = new Set<WeakRef<NativeVideo>>();
+
+export function setNativeVideoModalState(active: boolean): void {
+    if (active) nativeAudioEngine.clearQueuedOutput();
+    for (const reference of activeVideos) {
+        const video = reference.deref();
+        if (video) video.setModalState(active);
+        else activeVideos.delete(reference);
+    }
+}
+
+export class NativeVideo extends EventTarget {
     public readonly width: number;
     public readonly height: number;
     public readonly fps: number;
+    public videoWidth: number;
+    public videoHeight: number;
+
+    public onloadedmetadata: NativeVideoEventHandler = null;
+    public onloadeddata: NativeVideoEventHandler = null;
+    public oncanplay: NativeVideoEventHandler = null;
+    public oncanplaythrough: NativeVideoEventHandler = null;
+    public onplay: NativeVideoEventHandler = null;
+    public onplaying: NativeVideoEventHandler = null;
+    public onpause: NativeVideoEventHandler = null;
+    public ontimeupdate: NativeVideoEventHandler = null;
+    public onseeked: NativeVideoEventHandler = null;
+    public onended: NativeVideoEventHandler = null;
+    public onerror: NativeVideoEventHandler = null;
 
     private readonly options: NativeVideoOptions;
     private readonly dependencies: NativeVideoDependencies;
@@ -386,12 +548,31 @@ export class NativeVideo {
     private audioVolume: number;
     private audioMuted: boolean;
     private playbackGeneration = 0;
+    private sourceValue: string;
+    private decodedSource: string;
+    private segmentStart = 0;
+    private segmentEnd?: number;
+    private playbackRateValue: number;
+    private loopValue: boolean;
+    private readyStateValue = 0;
+    private durationValue: number;
+    private metadataDispatched = false;
+    private dataDispatched = false;
+    private playingDispatched = false;
+    private lastTimeUpdateMs = Number.NEGATIVE_INFINITY;
+    private modalActive = false;
+    private wasPlayingBeforeModal = false;
+    private reconnectAttempt = 0;
+    private reconnectAtMs = 0;
+    private readonly registryReference: WeakRef<NativeVideo>;
+    private metadataPromise?: Promise<void>;
 
     public constructor(
         src: string,
         options: NativeVideoOptions,
         dependencies: NativeVideoDependencies = DEFAULT_DEPENDENCIES,
     ) {
+        super();
         if (!src) throw new Error("Video source must not be empty");
         getNv12FrameLayout(options.width, options.height);
         const fps = options.fps ?? 30;
@@ -399,14 +580,92 @@ export class NativeVideo {
             throw new Error("Video FPS must be positive and finite");
         }
 
-        this.src = src;
+        const parsedSource = parseMediaSource(src);
+        this.sourceValue = src;
+        this.decodedSource = parsedSource.source;
+        this.segmentStart = parsedSource.startTime;
+        this.segmentEnd = parsedSource.endTime;
         this.width = options.width;
         this.height = options.height;
+        this.videoWidth = options.width;
+        this.videoHeight = options.height;
         this.fps = fps;
         this.options = options;
         this.dependencies = dependencies;
         this.audioVolume = options.volume ?? 1;
         this.audioMuted = options.muted ?? false;
+        this.playbackRateValue = options.playbackRate ?? 1;
+        this.loopValue = options.loop ?? false;
+        if (!Number.isFinite(this.playbackRateValue) || this.playbackRateValue <= 0) {
+            throw new RangeError("Video playbackRate must be positive and finite");
+        }
+        if (options.mediaType === "live" && this.playbackRateValue !== 1) {
+            throw new Error("Live video only supports playbackRate 1");
+        }
+        this.positionSeconds = this.segmentStart;
+        this.durationValue = options.mediaType === "live"
+            ? Number.POSITIVE_INFINITY
+            : (this.segmentEnd ?? Number.NaN);
+        this.registryReference = new WeakRef(this);
+        activeVideos.add(this.registryReference);
+    }
+
+    public get src(): string {
+        return this.sourceValue;
+    }
+
+    public set src(value: string) {
+        this.assertUsable();
+        if (!value) throw new Error("Video source must not be empty");
+        const parsed = parseMediaSource(value);
+        this.pauseInternal(false);
+        this.sourceValue = value;
+        this.decodedSource = parsed.source;
+        this.segmentStart = parsed.startTime;
+        this.segmentEnd = parsed.endTime;
+        this.positionSeconds = parsed.startTime;
+        this.durationValue = this.options.mediaType === "live"
+            ? Number.POSITIVE_INFINITY
+            : (parsed.endTime ?? Number.NaN);
+        this.resetReadiness();
+    }
+
+    public get currentSrc(): string {
+        return this.decodedSource;
+    }
+
+    public get duration(): number {
+        return this.durationValue;
+    }
+
+    public get readyState(): number {
+        return this.readyStateValue;
+    }
+
+    public get loop(): boolean {
+        return this.loopValue;
+    }
+
+    public set loop(value: boolean) {
+        this.loopValue = Boolean(value);
+    }
+
+    public get playbackRate(): number {
+        return this.playbackRateValue;
+    }
+
+    public set playbackRate(value: number) {
+        this.assertUsable();
+        if (!Number.isFinite(value) || value <= 0) {
+            throw new RangeError("Video playbackRate must be positive and finite");
+        }
+        if (this.options.mediaType === "live" && value !== 1) {
+            throw new Error("Live video only supports playbackRate 1");
+        }
+        if (value === this.playbackRateValue) return;
+        const position = this.currentTime;
+        this.playbackRateValue = value;
+        if (!this.isPaused) void this.restartPlayback(position);
     }
 
     public get paused(): boolean {
@@ -427,6 +686,14 @@ export class NativeVideo {
 
     public get audioError(): Error | null {
         return this.lastAudioError;
+    }
+
+    public get reconnecting(): boolean {
+        return this.reconnectAtMs > 0;
+    }
+
+    public get reconnectAttempts(): number {
+        return this.reconnectAttempt;
     }
 
     public get volume(): number {
@@ -458,11 +725,14 @@ export class NativeVideo {
 
     public set currentTime(value: number) {
         this.assertUsable();
+        if (this.options.mediaType === "live") {
+            throw new Error("Live video cannot be seeked");
+        }
         if (!Number.isFinite(value) || value < 0) {
             throw new RangeError("currentTime must be non-negative and finite");
         }
 
-        this.positionSeconds = value;
+        this.positionSeconds = this.clampFileTime(value);
         this.pendingFrame = null;
         this.syncOffsetMilliseconds = 0;
         this.hasEnded = false;
@@ -480,6 +750,10 @@ export class NativeVideo {
                 throw this.lastError;
             }
         }
+        this.emit("timeupdate");
+        queueMicrotask(() => {
+            if (!this.destroyed) this.emit("seeked");
+        });
     }
 
     public get stats(): NativeVideoStats {
@@ -504,43 +778,65 @@ export class NativeVideo {
     public async play(): Promise<void> {
         this.assertUsable();
         if (!this.isPaused) return;
-        if (this.hasEnded) this.positionSeconds = 0;
+        void this.ensureMetadata();
+        if (this.hasEnded) this.positionSeconds = this.segmentStart;
 
         this.hasEnded = false;
         this.lastError = null;
         this.isPaused = false;
+        this.emit("play");
         const generation = ++this.playbackGeneration;
         try {
-            if (this.shouldUseAudio()) {
+            await this.ensureMetadata();
+            if (generation !== this.playbackGeneration || this.isPaused) return;
+            if (this.shouldUseAudio() && !this.modalActive) {
                 await this.startAudio(this.positionSeconds, generation);
             }
             if (generation !== this.playbackGeneration || this.isPaused) return;
             this.startDecoder(this.positionSeconds);
         } catch (error) {
-            this.isPaused = true;
             this.lastError = asError(error);
+            this.emit("error");
+            if (this.options.mediaType === "live" && this.options.reconnect !== false) {
+                this.scheduleReconnect();
+                return;
+            }
+            this.isPaused = true;
             throw this.lastError;
         }
     }
 
     public pause(): void {
         this.assertUsable();
-        if (this.isPaused) return;
-        this.positionSeconds = this.currentTime;
-        this.playbackGeneration++;
-        this.stopDecoder();
-        this.stopAudio();
-        this.isPaused = true;
+        this.pauseInternal(true);
+    }
+
+    public load(): void {
+        this.assertUsable();
+        this.pauseInternal(false);
+        this.positionSeconds = this.segmentStart;
+        this.hasEnded = false;
+        this.resetReadiness();
+        void this.ensureMetadata();
     }
 
     public takeLatestFrame(): NativeVideoFrame | null {
-        if (this.destroyed || !this.decoder) return null;
+        if (this.destroyed) return null;
+        if (!this.decoder) {
+            this.tryReconnect();
+            return null;
+        }
 
         const message = this.decoder.pollError();
         if (message) {
             this.lastError = new Error(message);
             this.stopDecoder();
-            this.isPaused = true;
+            this.emit("error");
+            if (this.options.mediaType === "live" && this.options.reconnect !== false) {
+                this.scheduleReconnect();
+            } else {
+                this.isPaused = true;
+            }
             return null;
         }
 
@@ -550,16 +846,37 @@ export class NativeVideo {
         const frame = audioTime === undefined
             ? this.takeNewestDecodedFrame()
             : this.takeAudioSynchronizedFrame(audioTime);
-        if (frame) return frame;
+        if (frame) {
+            this.handlePresentedFrameState();
+            return frame;
+        }
 
         if (this.decoder.isFinished()) {
+            if (this.options.mediaType === "live") {
+                this.stopDecoder();
+                this.lastError = new Error("Live video stream ended");
+                this.emit("error");
+                if (this.options.reconnect !== false) this.scheduleReconnect();
+                else this.isPaused = true;
+                return null;
+            }
             if (!this.audio || this.audio.ended) {
                 this.stopDecoder();
                 this.stopAudio();
-                this.isPaused = true;
-                this.hasEnded = true;
+                if (this.loopValue) {
+                    this.positionSeconds = this.segmentStart;
+                    void this.restartPlayback(this.segmentStart);
+                } else {
+                    this.positionSeconds = this.segmentEnd ?? this.positionSeconds;
+                    this.emit("timeupdate");
+                    this.isPaused = true;
+                    this.hasEnded = true;
+                    this.emit("pause");
+                    this.emit("ended");
+                }
             }
         }
+        this.tryReconnect();
         return null;
     }
 
@@ -574,6 +891,7 @@ export class NativeVideo {
         this.stopAudio();
         this.isPaused = true;
         this.destroyed = true;
+        activeVideos.delete(this.registryReference);
     }
 
     private startDecoder(startTime: number): void {
@@ -582,10 +900,17 @@ export class NativeVideo {
             ...this.options,
             fps: this.fps,
             startTime,
+            endTime: this.segmentEnd,
+            playbackRate: this.playbackRateValue,
+            sourcePaced:
+                this.options.ffmpeg?.inputPacing === "source" ||
+                this.options.mediaType === "live",
+            inputArgs: this.options.ffmpeg?.inputArgs,
+            outputArgs: this.options.ffmpeg?.videoOutputArgs,
         });
 
         try {
-            decoder.open(this.src);
+            decoder.open(this.decodedSource);
             this.decoder = decoder;
             this.lastBackend = decoder.backend();
         } catch (error) {
@@ -602,10 +927,14 @@ export class NativeVideo {
         this.stopAudio();
         this.lastAudioError = null;
         const audio = this.dependencies.createAudio!(
-            this.src,
+            this.decodedSource,
             startTime,
             this.audioVolume,
             this.audioMuted,
+            this.playbackRateValue,
+            this.options.ffmpeg?.inputArgs ?? [],
+            this.options.ffmpeg?.audioOutputArgs ?? [],
+            this.segmentEnd,
         );
         this.audio = audio;
         try {
@@ -696,6 +1025,162 @@ export class NativeVideo {
         this.lastBackend = this.decoder.backend();
         this.decoder.close();
         this.decoder = undefined;
+    }
+
+    public setModalState(active: boolean): void {
+        if (this.destroyed || active === this.modalActive) return;
+        this.modalActive = active;
+        if (active) {
+            this.wasPlayingBeforeModal = !this.isPaused;
+            if (!this.wasPlayingBeforeModal) return;
+            this.positionSeconds = this.currentTime;
+            this.playbackGeneration++;
+            this.stopAudio();
+            return;
+        }
+
+        const shouldResume = this.wasPlayingBeforeModal && !this.hasEnded;
+        this.wasPlayingBeforeModal = false;
+        if (shouldResume && this.options.mediaType !== "live") {
+            void this.restartPlayback(this.positionSeconds);
+        }
+    }
+
+    private pauseInternal(dispatch: boolean): void {
+        if (this.isPaused) return;
+        this.positionSeconds = this.currentTime;
+        this.playbackGeneration++;
+        this.stopDecoder();
+        this.stopAudio();
+        this.isPaused = true;
+        if (dispatch) this.emit("pause");
+    }
+
+    private async restartPlayback(startTime: number): Promise<void> {
+        const generation = ++this.playbackGeneration;
+        this.stopDecoder();
+        this.stopAudio();
+        this.positionSeconds = startTime;
+        this.hasEnded = false;
+        try {
+            if (this.shouldUseAudio() && !this.modalActive) {
+                await this.startAudio(startTime, generation);
+            }
+            if (
+                generation !== this.playbackGeneration ||
+                this.destroyed ||
+                this.isPaused
+            ) return;
+            this.startDecoder(startTime);
+        } catch (error) {
+            if (generation !== this.playbackGeneration || this.destroyed) return;
+            this.lastError = asError(error);
+            this.isPaused = true;
+            this.emit("error");
+        }
+    }
+
+    private clampFileTime(value: number): number {
+        return Math.min(this.segmentEnd ?? Number.POSITIVE_INFINITY, Math.max(this.segmentStart, value));
+    }
+
+    private resetReadiness(): void {
+        this.readyStateValue = 0;
+        this.metadataDispatched = false;
+        this.dataDispatched = false;
+        this.playingDispatched = false;
+        this.metadataPromise = undefined;
+    }
+
+    private ensureMetadata(): Promise<void> {
+        if (this.metadataPromise) return this.metadataPromise;
+        this.metadataPromise = (async () => {
+            if (
+                this.options.mediaType !== "live" &&
+                this.dependencies === DEFAULT_DEPENDENCIES
+            ) {
+                const ffmpegPath = resolveFfmpegPath({ explicitPath: this.options.ffmpegPath });
+                const metadata = await probeMedia(
+                    this.decodedSource,
+                    ffmpegPath,
+                    this.options.ffmpeg?.inputArgs ?? [],
+                );
+                if (this.destroyed) return;
+                if (metadata?.width) this.videoWidth = metadata.width;
+                if (metadata?.height) this.videoHeight = metadata.height;
+                if (this.segmentEnd !== undefined) {
+                    this.durationValue = this.segmentEnd;
+                } else if (metadata?.duration !== undefined) {
+                    this.durationValue = metadata.duration;
+                }
+            }
+            if (!this.metadataDispatched && !this.destroyed) {
+                this.readyStateValue = 1;
+                this.metadataDispatched = true;
+                this.emit("loadedmetadata");
+            }
+        })();
+        return this.metadataPromise;
+    }
+
+    private handlePresentedFrameState(): void {
+        this.lastError = null;
+        if (!this.dataDispatched) {
+            this.dataDispatched = true;
+            this.readyStateValue = 4;
+            this.emit("loadeddata");
+            this.emit("canplay");
+            this.emit("canplaythrough");
+        }
+        if (!this.playingDispatched && !this.isPaused) {
+            this.playingDispatched = true;
+            this.emit("playing");
+        }
+        this.reconnectAttempt = 0;
+        this.reconnectAtMs = 0;
+        const now = performance.now();
+        if (now - this.lastTimeUpdateMs >= 250) {
+            this.lastTimeUpdateMs = now;
+            this.emit("timeupdate");
+        }
+    }
+
+    private scheduleReconnect(): void {
+        this.playingDispatched = false;
+        const reconnect = this.options.reconnect || {};
+        const initialDelay = reconnect.initialDelayMs ?? 500;
+        const maxDelay = reconnect.maxDelayMs ?? 5_000;
+        const delay = Math.min(maxDelay, initialDelay * 2 ** this.reconnectAttempt);
+        this.reconnectAttempt++;
+        this.reconnectAtMs = performance.now() + delay;
+    }
+
+    private tryReconnect(): void {
+        if (
+            this.destroyed ||
+            this.isPaused ||
+            this.options.mediaType !== "live" ||
+            this.options.reconnect === false ||
+            this.reconnectAtMs === 0 ||
+            performance.now() < this.reconnectAtMs
+        ) return;
+        this.reconnectAtMs = 0;
+        try {
+            this.startDecoder(0);
+        } catch (error) {
+            this.lastError = asError(error);
+            this.emit("error");
+            this.scheduleReconnect();
+        }
+    }
+
+    private emit(type: NativeVideoEventType): void {
+        const event = new Event(type);
+        this.dispatchEvent(event);
+        const handler = this[`on${type}` as keyof NativeVideo];
+        if (typeof handler === "function") {
+            (handler as NativeVideoEventHandler)?.call(this, event);
+        }
     }
 
     private assertUsable(): void {

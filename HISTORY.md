@@ -2,6 +2,13 @@
 
 ## 2026-09-01
 
+- Fixed Windows native configure/build to use Dawn's pinned `ninja.exe` directly, avoiding `CMAKE_MAKE_PROGRAM is not set` after a successful `gclient sync`.
+- Made `pnpm native:build` discover Visual Studio 2022 through `vswhere.exe` and import the x64 MSVC/Windows SDK environment automatically when launched from a normal PowerShell or terminal.
+- Made native checkout cleanup retry transient Windows locks and fail explicitly instead of reusing a partially removed Dawn repository with an existing `origin` remote.
+- Added structured FFmpeg input/video-output/audio-output arguments, source-paced live decoding, authenticated-URL redaction, media fragments, ffprobe metadata, file playback rates with pitch-preserving audio, and live reconnect backoff.
+- Added EventTarget-compatible native-video readiness/playback/seek/end/error events, standard loop behavior, and Windows modal-state handling that runs video silently during drag-resize before restarting A/V at the latest presented timestamp.
+- Added scene 7 with two simultaneous configurable low-latency HTTP/SDP/RTP streams loaded from an ignored local `.env`, plus missing-config diagnostics and per-camera decode/reconnect status.
+- Added RTP configuration, media-source, event ordering, loop, playback-rate, modal resync, reconnect, FFmpeg argument-order, credential-redaction, and seventh-scene navigation regressions.
 - Replaced the native video's single latest-frame slot with a bounded four-frame chronological NV12 queue, preserving latest-frame delivery for silent playback while allowing audio-clock playback to consume ordered frames.
 - Fixed low video upload FPS and continuously rising decoder drops by draining all audio-due frames per render, retaining only the first future frame, and exposing queue depth, scheduler skips, and A/V offset diagnostics.
 - Added native queue overflow/order tests and TypeScript regressions for multi-frame audio scheduling and no-audio latest-frame behavior without changing the Windows Dawn/vsync path.

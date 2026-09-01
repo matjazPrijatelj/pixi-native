@@ -35,6 +35,9 @@ export interface CreateVoiceOptions {
     readonly muted: boolean;
     readonly loop: boolean;
     readonly streaming?: boolean;
+    readonly playbackRate?: number;
+    readonly inputArgs?: readonly string[];
+    readonly outputArgs?: readonly string[];
 }
 
 interface VoicePosition {
@@ -43,6 +46,7 @@ interface VoicePosition {
     readonly outputFrame: number;
     readonly playing: boolean;
     readonly volume: number;
+    readonly playbackRate: number;
 }
 
 function resolveFfmpegPath(): string {
@@ -74,6 +78,7 @@ export class NativeAudioEngine {
     private submittedFrames = 0;
     private globalVolume = 1;
     private globalMuted = false;
+    private queueGeneration = 0;
 
     public registerOwner(owner: NativeAudioEventTarget): number {
         const id = this.nextOwnerId++;
@@ -110,6 +115,9 @@ export class NativeAudioEngine {
             muted: options.muted,
             loop: options.loop,
             streaming: options.streaming ?? false,
+            playbackRate: options.playbackRate ?? 1,
+            inputArgs: [...(options.inputArgs ?? [])],
+            outputArgs: [...(options.outputArgs ?? [])],
         });
         return id;
     }
@@ -168,7 +176,11 @@ export class NativeAudioEngine {
         if (!position.playing || !this.device) return position.seconds;
         const queuedFrames = this.device.queued / (CHANNELS * BYTES_PER_SAMPLE);
         const audibleFrame = this.submittedFrames - queuedFrames;
-        return Math.max(0, position.seconds - (position.outputFrame - audibleFrame) / SAMPLE_RATE);
+        return Math.max(
+            0,
+            position.seconds -
+                (position.outputFrame - audibleFrame) * position.playbackRate / SAMPLE_RATE,
+        );
     }
 
     public currentVolume(id: number): number | undefined {
@@ -206,6 +218,11 @@ export class NativeAudioEngine {
         this.positions.clear();
         this.voiceOwners.clear();
         this.fadeVersions.clear();
+        this.clearQueuedOutput();
+    }
+
+    public clearQueuedOutput(): void {
+        this.queueGeneration++;
         this.device?.clearQueue();
         this.submittedFrames = 0;
     }
@@ -255,6 +272,7 @@ export class NativeAudioEngine {
             frames: CHUNK_FRAMES,
             globalVolume: this.globalVolume,
             globalMuted: this.globalMuted,
+            generation: this.queueGeneration,
         });
     }
 
@@ -269,6 +287,10 @@ export class NativeAudioEngine {
         }
         if (message.type !== "chunk" || !this.device) return;
         this.renderPending = false;
+        if (message.generation !== this.queueGeneration) {
+            this.pump();
+            return;
+        }
         const buffer = Buffer.from(message.buffer);
         this.device.enqueue(buffer);
         this.submittedFrames += message.frames;
@@ -279,6 +301,7 @@ export class NativeAudioEngine {
                 outputFrame: this.submittedFrames,
                 playing: position.playing,
                 volume: position.volume,
+                playbackRate: position.playbackRate,
             });
         }
         const audibleDelayMs =

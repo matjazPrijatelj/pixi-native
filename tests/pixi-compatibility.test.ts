@@ -226,7 +226,10 @@ test("Windows startup rejects a Dawn addon without modal frame support", () => {
     );
     assert.doesNotThrow(() =>
         requireWindowsModalFrameSupport(
-            { setModalFrameCallback: () => undefined },
+            {
+                setModalFrameCallback: () => undefined,
+                setModalStateCallback: () => undefined,
+            },
             "win32",
         ),
     );

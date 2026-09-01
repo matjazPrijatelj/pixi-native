@@ -3037,6 +3037,7 @@ interface Renderer {
   swap()
   waitForPresent(): Promise<boolean>
   setModalFrameCallback(callback?: () => void): void
+  setModalStateCallback(callback?: (active: boolean) => void): void
   resize()
 }
 

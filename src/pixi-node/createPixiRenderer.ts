@@ -19,6 +19,7 @@ import * as sdl from "@kmamal/sdl";
 import type { Sdl } from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
 import { requireWindowsModalFrameSupport } from "./modalFrame.ts";
+import { setNativeVideoModalState } from "./video/NativeVideo.ts";
 
 const require = createRequire(import.meta.url);
 const gpu = require("../../native/gpu") as NodeGPUApi;
@@ -188,6 +189,9 @@ export async function createPixiRenderer(): Promise<{
   renderer.setModalFrameCallback?.(() => {
     domAdapter.dispatchModalFrame(performance.now());
   });
+  renderer.setModalStateCallback?.((active) => {
+    setNativeVideoModalState(active);
+  });
 
   const app = new Application();
   await app.init({
@@ -251,6 +255,7 @@ export async function createPixiRenderer(): Promise<{
     destroyed = true;
     rgbaUploadBuffers.clear();
     renderer.setModalFrameCallback?.();
+    renderer.setModalStateCallback?.();
     renderer.destroy();
     device.destroy();
 
