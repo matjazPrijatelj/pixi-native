@@ -2,6 +2,10 @@
 
 ## 2026-09-01
 
+- Replaced the native video's single latest-frame slot with a bounded four-frame chronological NV12 queue, preserving latest-frame delivery for silent playback while allowing audio-clock playback to consume ordered frames.
+- Fixed low video upload FPS and continuously rising decoder drops by draining all audio-due frames per render, retaining only the first future frame, and exposing queue depth, scheduler skips, and A/V offset diagnostics.
+- Added native queue overflow/order tests and TypeScript regressions for multi-frame audio scheduling and no-audio latest-frame behavior without changing the Windows Dawn/vsync path.
+- Verified TypeScript, all 56 Node tests, six Rust tests, Clippy with warnings denied, the Windows release addon API, and a five-second 1080p D3D11VA smoke test with 91 decoded/presented and zero dropped or skipped frames.
 - Routed the Windows modal move/resize timer through the shared RAF scheduler so every pending consumer, including GSAP, video clocks, Pixi ticker work, and rendering, continues while the title bar owns the event loop.
 - Reconfigured the existing Dawn surface from the live Win32 client area during drag-resize, with configured-state and re-entry guards that avoid repeated surface destruction, double unconfigure, and `Surface is not configured` crashes.
 - Added fail-fast detection for stale Windows Dawn addons, safe N-API callback scopes and teardown, and regression tests for timer/DXGI modal dispatch without duplicate RAF callbacks.

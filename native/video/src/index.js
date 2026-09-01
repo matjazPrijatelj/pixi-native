@@ -17,6 +17,14 @@ class NativeVideoDecoder {
         return this.decoder.pollLatest();
     }
 
+    pollNext() {
+        return this.decoder.pollNext();
+    }
+
+    queuedFrames() {
+        return this.decoder.queuedFrames();
+    }
+
     pollError() {
         return this.decoder.pollError();
     }
@@ -31,6 +39,10 @@ class NativeVideoDecoder {
 
     droppedFrames() {
         return this.decoder.droppedFrames();
+    }
+
+    skippedFrames() {
+        return this.decoder.skippedFrames();
     }
 
     isFinished() {

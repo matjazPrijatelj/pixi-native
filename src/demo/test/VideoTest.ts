@@ -91,6 +91,8 @@ export function createVideoTest(
       ` | UP: ${uploadFps}` +
       ` | decoded/presented/dropped: ${stats.decodedFrames}/` +
       `${stats.presentedFrames}/${stats.droppedFrames}` +
+      ` | queue/skipped: ${stats.queuedFrames}/${stats.skippedFrames}` +
+      ` | A/V: ${stats.syncOffsetMs.toFixed(1)} ms` +
       ` | ${(stats.bytesPerFrame / 1_000_000).toFixed(3)} MB/frame` +
       ` | ${audioState} | ${state}`;
   };

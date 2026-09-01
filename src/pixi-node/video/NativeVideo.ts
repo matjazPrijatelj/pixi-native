@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Howl } from "../audio/index.ts";
 
 const require = createRequire(import.meta.url);
+const AUDIO_FRAME_LEAD_SECONDS = 0.02;
 
 export interface Nv12FrameLayout {
     readonly yBytes: number;
@@ -34,10 +35,13 @@ interface NativePackedVideoFrame {
 interface NativeDecoderBinding {
     open(source: string): void;
     pollLatest(): NativePackedVideoFrame | null;
+    pollNext(): NativePackedVideoFrame | null;
+    queuedFrames(): number;
     pollError(): string | null;
     backend(): string;
     decodedFrames(): number;
     droppedFrames(): number;
+    skippedFrames(): number;
     isFinished(): boolean;
     close(): void;
 }
@@ -67,16 +71,22 @@ export interface NativeVideoStats {
     readonly decodedFrames: number;
     readonly presentedFrames: number;
     readonly droppedFrames: number;
+    readonly skippedFrames: number;
+    readonly queuedFrames: number;
+    readonly syncOffsetMs: number;
     readonly bytesPerFrame: number;
 }
 
 export interface NativeVideoDecoderLike {
     open(source: string): void;
     pollLatest(): NativeVideoFrame | null;
+    pollNext(): NativeVideoFrame | null;
+    queuedFrames(): number;
     pollError(): string | null;
     backend(): string;
     decodedFrames(): number;
     droppedFrames(): number;
+    skippedFrames(): number;
     isFinished(): boolean;
     close(): void;
 }
@@ -232,6 +242,15 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
         return frame ? splitNv12Frame(frame) : null;
     }
 
+    public pollNext(): NativeVideoFrame | null {
+        const frame = this.decoder.pollNext();
+        return frame ? splitNv12Frame(frame) : null;
+    }
+
+    public queuedFrames(): number {
+        return this.decoder.queuedFrames();
+    }
+
     public pollError(): string | null {
         return this.decoder.pollError();
     }
@@ -246,6 +265,10 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
 
     public droppedFrames(): number {
         return this.decoder.droppedFrames();
+    }
+
+    public skippedFrames(): number {
+        return this.decoder.skippedFrames();
     }
 
     public isFinished(): boolean {
@@ -353,7 +376,10 @@ export class NativeVideo {
     private lastError: Error | null = null;
     private decodedFrameBase = 0;
     private droppedFrameBase = 0;
+    private skippedFrameBase = 0;
     private presentedFrameCount = 0;
+    private skippedFrameCount = 0;
+    private syncOffsetMilliseconds = 0;
     private audio?: NativeVideoAudioLike;
     private lastAudioError: Error | null = null;
     private pendingFrame: NativeVideoFrame | null = null;
@@ -438,6 +464,7 @@ export class NativeVideo {
 
         this.positionSeconds = value;
         this.pendingFrame = null;
+        this.syncOffsetMilliseconds = 0;
         this.hasEnded = false;
         this.lastError = null;
         if (!this.isPaused) {
@@ -463,6 +490,13 @@ export class NativeVideo {
             presentedFrames: this.presentedFrameCount,
             droppedFrames:
                 this.droppedFrameBase + (this.decoder?.droppedFrames() ?? 0),
+            skippedFrames:
+                this.skippedFrameBase +
+                this.skippedFrameCount +
+                (this.decoder?.skippedFrames() ?? 0),
+            queuedFrames:
+                (this.decoder?.queuedFrames() ?? 0) + (this.pendingFrame ? 1 : 0),
+            syncOffsetMs: this.syncOffsetMilliseconds,
             bytesPerFrame: layout.frameBytes,
         };
     }
@@ -510,20 +544,13 @@ export class NativeVideo {
             return null;
         }
 
-        const frame = this.pendingFrame ?? this.decoder.pollLatest();
-        if (frame) {
-            const audioTime = this.audio && !this.audio.ended
-                ? this.audio.currentTime
-                : undefined;
-            if (audioTime !== undefined && frame.timestampUs / 1_000_000 > audioTime + 0.02) {
-                this.pendingFrame = frame;
-                this.positionSeconds = audioTime;
-                return null;
-            }
-            this.pendingFrame = null;
-            this.positionSeconds = frame.timestampUs / 1_000_000;
-            return frame;
-        }
+        const audioTime = this.audio && !this.audio.ended
+            ? this.audio.currentTime
+            : undefined;
+        const frame = audioTime === undefined
+            ? this.takeNewestDecodedFrame()
+            : this.takeAudioSynchronizedFrame(audioTime);
+        if (frame) return frame;
 
         if (this.decoder.isFinished()) {
             if (!this.audio || this.audio.ended) {
@@ -618,10 +645,54 @@ export class NativeVideo {
         this.audio = undefined;
     }
 
+    private takeAudioSynchronizedFrame(audioTime: number): NativeVideoFrame | null {
+        let frame = this.pendingFrame ?? this.decoder?.pollNext() ?? null;
+        let selected: NativeVideoFrame | null = null;
+        this.pendingFrame = null;
+        this.positionSeconds = audioTime;
+
+        while (frame) {
+            const frameTime = frame.timestampUs / 1_000_000;
+            const offsetSeconds = frameTime - audioTime;
+            if (offsetSeconds > AUDIO_FRAME_LEAD_SECONDS) {
+                this.pendingFrame = frame;
+                if (!selected) this.syncOffsetMilliseconds = offsetSeconds * 1000;
+                break;
+            }
+
+            if (selected) this.skippedFrameCount++;
+            selected = frame;
+            frame = this.decoder?.pollNext() ?? null;
+        }
+
+        if (selected) {
+            this.syncOffsetMilliseconds =
+                (selected.timestampUs / 1_000_000 - audioTime) * 1000;
+        }
+        return selected;
+    }
+
+    private takeNewestDecodedFrame(): NativeVideoFrame | null {
+        const pending = this.pendingFrame;
+        const latest = this.decoder?.pollLatest() ?? null;
+        this.pendingFrame = null;
+
+        let selected = latest ?? pending;
+        if (pending && latest) {
+            this.skippedFrameCount++;
+            selected = latest.timestampUs >= pending.timestampUs ? latest : pending;
+        }
+        if (selected) this.positionSeconds = selected.timestampUs / 1_000_000;
+        this.syncOffsetMilliseconds = 0;
+        return selected;
+    }
+
     private stopDecoder(): void {
+        this.pendingFrame = null;
         if (!this.decoder) return;
         this.decodedFrameBase += this.decoder.decodedFrames();
         this.droppedFrameBase += this.decoder.droppedFrames();
+        this.skippedFrameBase += this.decoder.skippedFrames();
         this.lastBackend = this.decoder.backend();
         this.decoder.close();
         this.decoder = undefined;

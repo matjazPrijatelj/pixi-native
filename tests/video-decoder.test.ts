@@ -139,6 +139,9 @@ test("NativeVideo records end and latest-frame decoder statistics", async () => 
         decodedFrames: 5,
         presentedFrames: 0,
         droppedFrames: 3,
+        skippedFrames: 0,
+        queuedFrames: 0,
+        syncOffsetMs: 0,
         bytesPerFrame: 6,
     });
 });
@@ -174,6 +177,56 @@ test("NativeVideo uses audio as its playback clock and holds early frames", asyn
     assert.equal(video.takeLatestFrame(), null);
     assert.equal(video.ended, true);
     assert.equal(audio.destroyed, true);
+});
+
+test("NativeVideo drains due frames in order without blocking the decoder queue", async () => {
+    const factory = new FakeAudioVideoFactory();
+    const video = new NativeVideo(
+        "video-with-audio.mp4",
+        { width: 2, height: 2, fps: 30 },
+        factory,
+    );
+
+    await video.play();
+    const audio = factory.audios[0];
+    const decoder = factory.decoders[0];
+    decoder.enqueue(
+        createFrame(0),
+        createFrame(33_333),
+        createFrame(66_667),
+        createFrame(100_000),
+    );
+
+    audio.currentTime = 0.05;
+    assert.equal(video.takeLatestFrame()?.timestampUs, 66_667);
+    assert.equal(video.stats.skippedFrames, 2);
+    assert.equal(video.stats.queuedFrames, 1);
+    assert.ok(Math.abs(video.stats.syncOffsetMs - 16.667) < 0.01);
+
+    decoder.enqueue(createFrame(133_333));
+    audio.currentTime = 0.09;
+    assert.equal(video.takeLatestFrame()?.timestampUs, 100_000);
+    assert.equal(video.stats.queuedFrames, 1);
+    assert.ok(Math.abs(video.stats.syncOffsetMs - 10) < 0.01);
+});
+
+test("NativeVideo without audio keeps latest-frame-wins behavior", async () => {
+    const factory = new FakeDecoderFactory();
+    const video = new NativeVideo(
+        "video.mp4",
+        { width: 2, height: 2, audio: false },
+        factory,
+    );
+
+    await video.play();
+    factory.decoders[0].enqueue(
+        createFrame(0),
+        createFrame(33_333),
+        createFrame(66_667),
+    );
+
+    assert.equal(video.takeLatestFrame()?.timestampUs, 66_667);
+    assert.equal(video.stats.queuedFrames, 0);
 });
 
 test("VideoFpsMeter reports measured FPS after its sample window", () => {
@@ -238,19 +291,40 @@ class FakeAudio implements NativeVideoAudioLike {
 }
 
 class FakeDecoder implements NativeVideoDecoderLike {
-    public frame: NativeVideoFrame | null = null;
+    private frames: NativeVideoFrame[] = [];
     public error: string | null = null;
     public decoded = 0;
     public dropped = 0;
+    public skipped = 0;
     public finished = false;
     public closed = false;
 
     public open(_source: string): void {}
 
+    public get frame(): NativeVideoFrame | null {
+        return this.frames[0] ?? null;
+    }
+
+    public set frame(frame: NativeVideoFrame | null) {
+        this.frames = frame ? [frame] : [];
+    }
+
+    public enqueue(...frames: NativeVideoFrame[]): void {
+        this.frames.push(...frames);
+    }
+
     public pollLatest(): NativeVideoFrame | null {
-        const frame = this.frame;
-        this.frame = null;
+        const frame = this.frames.at(-1) ?? null;
+        this.frames = [];
         return frame;
+    }
+
+    public pollNext(): NativeVideoFrame | null {
+        return this.frames.shift() ?? null;
+    }
+
+    public queuedFrames(): number {
+        return this.frames.length;
     }
 
     public pollError(): string | null {
@@ -269,6 +343,10 @@ class FakeDecoder implements NativeVideoDecoderLike {
 
     public droppedFrames(): number {
         return this.dropped;
+    }
+
+    public skippedFrames(): number {
+        return this.skipped;
     }
 
     public isFinished(): boolean {

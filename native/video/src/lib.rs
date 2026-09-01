@@ -1,5 +1,6 @@
 #![deny(clippy::all)]
 
+use std::collections::VecDeque;
 use std::io::{self, Read};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -8,6 +9,8 @@ use std::thread;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+
+const FRAME_QUEUE_CAPACITY: usize = 4;
 
 #[napi(object)]
 pub struct DecoderOptions {
@@ -66,16 +69,53 @@ struct DecoderState {
     closed: Arc<AtomicBool>,
     finished: Arc<AtomicBool>,
     child: Arc<Mutex<Option<Child>>>,
-    latest: Arc<Mutex<Option<PendingFrame>>>,
+    frames: Arc<Mutex<FrameQueue>>,
     error: Arc<Mutex<Option<String>>>,
     decoded_frames: Arc<AtomicU64>,
     dropped_frames: Arc<AtomicU64>,
+    skipped_frames: Arc<AtomicU64>,
     backend: Arc<Mutex<String>>,
 }
 
 struct PendingFrame {
     timestamp_us: i64,
     data: Vec<u8>,
+}
+
+#[derive(Default)]
+struct FrameQueue {
+    frames: VecDeque<PendingFrame>,
+}
+
+impl FrameQueue {
+    fn push(&mut self, frame: PendingFrame) -> Option<Vec<u8>> {
+        let recycled = if self.frames.len() >= FRAME_QUEUE_CAPACITY {
+            self.frames.pop_front().map(|dropped| dropped.data)
+        } else {
+            None
+        };
+        self.frames.push_back(frame);
+        recycled
+    }
+
+    fn pop_next(&mut self) -> Option<PendingFrame> {
+        self.frames.pop_front()
+    }
+
+    fn pop_latest(&mut self) -> (Option<PendingFrame>, usize) {
+        let latest = self.frames.pop_back();
+        let skipped = self.frames.len();
+        self.frames.clear();
+        (latest, skipped)
+    }
+
+    fn len(&self) -> usize {
+        self.frames.len()
+    }
+
+    fn clear(&mut self) {
+        self.frames.clear();
+    }
 }
 
 struct SpawnedFfmpeg {
@@ -117,10 +157,11 @@ impl NativeVideoDecoder {
                 closed: Arc::new(AtomicBool::new(true)),
                 finished: Arc::new(AtomicBool::new(false)),
                 child: Arc::new(Mutex::new(None)),
-                latest: Arc::new(Mutex::new(None)),
+                frames: Arc::new(Mutex::new(FrameQueue::default())),
                 error: Arc::new(Mutex::new(None)),
                 decoded_frames: Arc::new(AtomicU64::new(0)),
                 dropped_frames: Arc::new(AtomicU64::new(0)),
+                skipped_frames: Arc::new(AtomicU64::new(0)),
                 backend: Arc::new(Mutex::new(backend)),
             },
         })
@@ -135,12 +176,13 @@ impl NativeVideoDecoder {
         self.state.finished.store(false, Ordering::SeqCst);
         self.state.decoded_frames.store(0, Ordering::SeqCst);
         self.state.dropped_frames.store(0, Ordering::SeqCst);
+        self.state.skipped_frames.store(0, Ordering::SeqCst);
 
         if let Ok(mut error) = self.state.error.lock() {
             *error = None;
         }
-        if let Ok(mut latest) = self.state.latest.lock() {
-            *latest = None;
+        if let Ok(mut frames) = self.state.frames.lock() {
+            frames.clear();
         }
 
         let width = usize::try_from(self.options.width)
@@ -242,8 +284,31 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn poll_latest(&self) -> Option<VideoFrame> {
-        let pending = self.state.latest.lock().ok()?.take()?;
+        let (pending, skipped) = self.state.frames.lock().ok()?.pop_latest();
+        if skipped > 0 {
+            self.state
+                .skipped_frames
+                .fetch_add(skipped as u64, Ordering::SeqCst);
+        }
+        self.to_video_frame(pending?)
+    }
 
+    #[napi]
+    pub fn poll_next(&self) -> Option<VideoFrame> {
+        let pending = self.state.frames.lock().ok()?.pop_next()?;
+        self.to_video_frame(pending)
+    }
+
+    #[napi]
+    pub fn queued_frames(&self) -> i64 {
+        self.state
+            .frames
+            .lock()
+            .map(|frames| i64::try_from(frames.len()).unwrap_or(i64::MAX))
+            .unwrap_or(0)
+    }
+
+    fn to_video_frame(&self, pending: PendingFrame) -> Option<VideoFrame> {
         Some(VideoFrame {
             width: self.options.width,
             height: self.options.height,
@@ -274,6 +339,11 @@ impl NativeVideoDecoder {
     #[napi]
     pub fn dropped_frames(&self) -> i64 {
         i64::try_from(self.state.dropped_frames.load(Ordering::SeqCst)).unwrap_or(i64::MAX)
+    }
+
+    #[napi]
+    pub fn skipped_frames(&self) -> i64 {
+        i64::try_from(self.state.skipped_frames.load(Ordering::SeqCst)).unwrap_or(i64::MAX)
     }
 
     #[napi]
@@ -426,9 +496,9 @@ fn consume_ffmpeg_output(
                 frame_index += 1;
                 state.decoded_frames.fetch_add(1, Ordering::SeqCst);
 
-                if let Ok(mut latest) = state.latest.lock() {
-                    if let Some(previous) = latest.replace(PendingFrame { timestamp_us, data }) {
-                        data = previous.data;
+                if let Ok(mut frames) = state.frames.lock() {
+                    if let Some(recycled) = frames.push(PendingFrame { timestamp_us, data }) {
+                        data = recycled;
                         state.dropped_frames.fetch_add(1, Ordering::SeqCst);
                     } else {
                         data = vec![0_u8; frame_bytes];
@@ -478,8 +548,8 @@ fn close_state(state: &DecoderState) {
             let _ = process.kill();
         }
     }
-    if let Ok(mut latest) = state.latest.lock() {
-        *latest = None;
+    if let Ok(mut frames) = state.frames.lock() {
+        frames.clear();
     }
 }
 
@@ -525,6 +595,42 @@ mod tests {
             vaapi_device: None,
         });
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn frame_queue_preserves_order_and_drops_oldest_on_overflow() {
+        let mut queue = FrameQueue::default();
+        for timestamp_us in 0..FRAME_QUEUE_CAPACITY as i64 {
+            assert!(queue.push(pending(timestamp_us)).is_none());
+        }
+
+        let recycled = queue
+            .push(pending(FRAME_QUEUE_CAPACITY as i64))
+            .expect("oldest frame should be recycled");
+        assert_eq!(recycled, vec![0]);
+        assert_eq!(queue.len(), FRAME_QUEUE_CAPACITY);
+        assert_eq!(queue.pop_next().unwrap().timestamp_us, 1);
+        assert_eq!(queue.pop_next().unwrap().timestamp_us, 2);
+    }
+
+    #[test]
+    fn frame_queue_can_take_latest_and_reports_skipped_frames() {
+        let mut queue = FrameQueue::default();
+        queue.push(pending(10));
+        queue.push(pending(20));
+        queue.push(pending(30));
+
+        let (latest, skipped) = queue.pop_latest();
+        assert_eq!(latest.unwrap().timestamp_us, 30);
+        assert_eq!(skipped, 2);
+        assert_eq!(queue.len(), 0);
+    }
+
+    fn pending(timestamp_us: i64) -> PendingFrame {
+        PendingFrame {
+            timestamp_us,
+            data: vec![timestamp_us as u8],
+        }
     }
 
     fn request(fps: f64, start_time: f64) -> FfmpegRequest {
