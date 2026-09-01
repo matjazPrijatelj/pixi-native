@@ -1,4 +1,5 @@
 import Fs from 'fs'
+import Path from 'path'
 import { execFileSync } from 'child_process'
 import C from './util/common.js'
 
@@ -18,8 +19,17 @@ if (C.platform === 'win32') {
 			...process.env,
 			...C.depotTools.env,
 			...C.gitConfigEnv,
+			DEPOT_TOOLS_UPDATE: '0',
 		},
 	})
+
+	// Pinned depot_tools does not include the git.bat shim expected by its
+	// Windows git_cache.py. Keep the checkout pinned and delegate to Git for
+	// Windows explicitly instead of enabling depot_tools self-update.
+	await Fs.promises.writeFile(
+		Path.join(C.dir.depotTools, 'git.bat'),
+		'@echo off\r\ngit.exe %*\r\n',
+	)
 
 	await Fs.promises.rm(`${C.dir.depotTools}/ninja`, { force: true })
 }

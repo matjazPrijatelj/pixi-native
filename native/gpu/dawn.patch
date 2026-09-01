@@ -406,10 +406,8 @@ index cb70833c..220e420e 100644
  #include <tuple>
  #include <utility>
  #include <vector>
++#include <algorithm>
 +#include <map>
-+#if defined(_WIN32)
-+#include <windows.h>
-+#endif
  
  #include "dawn/dawn_proc.h"
  #include "src/dawn/node/binding/Flags.h"
@@ -421,6 +419,8 @@ index cb70833c..220e420e 100644
 +
 +#include "webgpu/webgpu_sdl.h"
 +#if defined(_WIN32)
++#include <windows.h>
++
 +namespace dawn::native::d3d {
 +bool WaitForWindowFrame(void* window, uint32_t timeoutMilliseconds);
 +}
@@ -448,10 +448,13 @@ index cb70833c..220e420e 100644
 +#if defined(_WIN32)
 +constexpr UINT_PTR kModalFrameTimerId = 0x50495849;
 +
++class Renderer;
++
 +struct ModalFrameState {
 +    HWND hwnd = nullptr;
 +    WNDPROC previousWindowProc = nullptr;
 +    Napi::FunctionReference callback;
++    Renderer* renderer = nullptr;
 +    bool invoking = false;
 +};
 +
@@ -566,6 +569,10 @@ index cb70833c..220e420e 100644
 +
 +    Napi::Value getCurrentTexture(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
++        if (!_surfaceConfigured || _wgpuSurface == nullptr) {
++            Napi::Error::New(env, "surface is not configured").ThrowAsJavaScriptException();
++            return env.Undefined();
++        }
 +
 +        WGPUSurfaceTexture wgpuSurfaceTexture = {};
 +        procs->surfaceGetCurrentTexture(_wgpuSurface, &wgpuSurfaceTexture);
@@ -582,6 +589,10 @@ index cb70833c..220e420e 100644
 +
 +    Napi::Value getCurrentTextureView(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
++        if (!_surfaceConfigured || _wgpuSurface == nullptr) {
++            Napi::Error::New(env, "surface is not configured").ThrowAsJavaScriptException();
++            return env.Undefined();
++        }
 +
 +        WGPUSurfaceTexture wgpuSurfaceTexture = {};
 +        procs->surfaceGetCurrentTexture(_wgpuSurface, &wgpuSurfaceTexture);
@@ -596,6 +607,10 @@ index cb70833c..220e420e 100644
 +
 +    Napi::Value swap(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
++        if (!_surfaceConfigured || _wgpuSurface == nullptr) {
++            Napi::Error::New(env, "surface is not configured").ThrowAsJavaScriptException();
++            return env.Undefined();
++        }
 +        procs->surfacePresent(_wgpuSurface);
 +        return env.Undefined();
 +    }
@@ -627,9 +642,24 @@ index cb70833c..220e420e 100644
 +
 +    Napi::Value resize(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
-+        _createSurface(env);
++        _configureSurface(
++            std::max(1u, _window.Get("_pixelWidth").ToNumber().Uint32Value()),
++            std::max(1u, _window.Get("_pixelHeight").ToNumber().Uint32Value())
++        );
 +        return env.Undefined();
 +    }
++
++#if defined(_WIN32)
++    void resizeToClientArea() {
++        RECT clientRect = {};
++        HWND hwnd = static_cast<HWND>(_nativeWindow);
++        if (hwnd == nullptr || !GetClientRect(hwnd, &clientRect)) return;
++        _configureSurface(
++            std::max(1l, clientRect.right - clientRect.left),
++            std::max(1l, clientRect.bottom - clientRect.top)
++        );
++    }
++#endif
 +
 +    Napi::Value destroy(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
@@ -653,16 +683,27 @@ index cb70833c..220e420e 100644
 +    WGPUSurface _wgpuSurface = nullptr;
 +    WGPUTextureFormat _wgpuPreferredFormat;
 +    void* _nativeWindow = nullptr;
++    bool _surfaceConfigured = false;
++    bool _surfaceConfiguring = false;
++    uint32_t _surfaceWidth = 0;
++    uint32_t _surfaceHeight = 0;
++    uint32_t _pendingSurfaceWidth = 0;
++    uint32_t _pendingSurfaceHeight = 0;
 +
 +    void _destroySurface() {
 +        if (_wgpuSurface == nullptr) return;
-+        procs->surfaceUnconfigure(_wgpuSurface);
-+        procs->surfaceRelease(_wgpuSurface);
++        WGPUSurface surface = _wgpuSurface;
 +        _wgpuSurface = nullptr;
++        if (_surfaceConfigured) {
++            _surfaceConfigured = false;
++            procs->surfaceUnconfigure(surface);
++        }
++        procs->surfaceRelease(surface);
++        _surfaceWidth = 0;
++        _surfaceHeight = 0;
 +    }
 +
 +    void _createSurface(const Napi::Env &env) {
-+        _destroySurface();
 +        Napi::Buffer<char> buffer = { env, _window.Get("_native").As<Napi::Object>().Get("gpu") };
 +        _wgpuSurface = wgpu::sdl::CreateSurfaceForWindow(procs, _wgpuInstance, buffer.Data());
 +
@@ -677,15 +718,49 @@ index cb70833c..220e420e 100644
 +            }
 +        }
 +
++        _configureSurface(
++            std::max(1u, _window.Get("_pixelWidth").ToNumber().Uint32Value()),
++            std::max(1u, _window.Get("_pixelHeight").ToNumber().Uint32Value())
++        );
++    }
++
++    void _configureSurface(uint32_t width, uint32_t height) {
++        if (_wgpuSurface == nullptr) return;
++        width = std::max(1u, width);
++        height = std::max(1u, height);
++        if (_surfaceConfiguring) {
++            _pendingSurfaceWidth = width;
++            _pendingSurfaceHeight = height;
++            return;
++        }
++        if (_surfaceConfigured && width == _surfaceWidth && height == _surfaceHeight) return;
++
++        _surfaceConfiguring = true;
 +        WGPUSurfaceConfiguration wgpuConfig = {};
 +        wgpuConfig.device = _wgpuDevice;
 +        wgpuConfig.format = _wgpuPreferredFormat;
 +        wgpuConfig.usage = WGPUTextureUsage_RenderAttachment;
 +        wgpuConfig.alphaMode = WGPUCompositeAlphaMode_Opaque;
-+        wgpuConfig.width = _window.Get("_pixelWidth").ToNumber().Uint32Value();
-+        wgpuConfig.height = _window.Get("_pixelHeight").ToNumber().Uint32Value();
++        wgpuConfig.width = width;
++        wgpuConfig.height = height;
 +        wgpuConfig.presentMode = _wgpuPresentMode;
 +        procs->surfaceConfigure(_wgpuSurface, &wgpuConfig);
++        _surfaceWidth = width;
++        _surfaceHeight = height;
++        _surfaceConfigured = true;
++        _surfaceConfiguring = false;
++
++        if (_pendingSurfaceWidth != 0 &&
++            (_pendingSurfaceWidth != width || _pendingSurfaceHeight != height)) {
++            const uint32_t pendingWidth = _pendingSurfaceWidth;
++            const uint32_t pendingHeight = _pendingSurfaceHeight;
++            _pendingSurfaceWidth = 0;
++            _pendingSurfaceHeight = 0;
++            _configureSurface(pendingWidth, pendingHeight);
++        } else {
++            _pendingSurfaceWidth = 0;
++            _pendingSurfaceHeight = 0;
++        }
 +    }
 +
 +#if defined(_WIN32)
@@ -697,12 +772,13 @@ index cb70833c..220e420e 100644
 +        auto previous = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
 +            hwnd,
 +            GWLP_WNDPROC,
-+            reinterpret_cast<LONG_PTR>(&ModalWindowProc),
++            reinterpret_cast<LONG_PTR>(&ModalWindowProc)
 +        ));
 +        if (previous == nullptr && GetLastError() != ERROR_SUCCESS) return;
 +
 +        gModalFrameState.hwnd = hwnd;
 +        gModalFrameState.previousWindowProc = previous;
++        gModalFrameState.renderer = this;
 +    }
 +
 +    void _uninstallModalFrameHook() {
@@ -714,10 +790,11 @@ index cb70833c..220e420e 100644
 +            SetWindowLongPtrW(
 +                hwnd,
 +                GWLP_WNDPROC,
-+                reinterpret_cast<LONG_PTR>(gModalFrameState.previousWindowProc),
++                reinterpret_cast<LONG_PTR>(gModalFrameState.previousWindowProc)
 +            );
 +        }
 +        gModalFrameState.callback.Reset();
++        gModalFrameState.renderer = nullptr;
 +        gModalFrameState.hwnd = nullptr;
 +        gModalFrameState.previousWindowProc = nullptr;
 +        gModalFrameState.invoking = false;
@@ -737,11 +814,15 @@ index cb70833c..220e420e 100644
 +            if (hwnd == gModalFrameState.hwnd &&
 +                wParam == kModalFrameTimerId &&
 +                !gModalFrameState.callback.IsEmpty() &&
++                gModalFrameState.renderer != nullptr &&
 +                !gModalFrameState.invoking) {
 +                gModalFrameState.invoking = true;
++                gModalFrameState.renderer->resizeToClientArea();
++                Napi::Env env = gModalFrameState.callback.Env();
++                Napi::HandleScope scope(env);
 +                gModalFrameState.callback.Call({});
-+                if (gModalFrameState.callback.Env().IsExceptionPending()) {
-+                    gModalFrameState.callback.Env().GetAndClearPendingException();
++                if (env.IsExceptionPending()) {
++                    env.GetAndClearPendingException();
 +                }
 +                gModalFrameState.invoking = false;
 +                return 0;

@@ -27,7 +27,7 @@ test("Sprite scene adds and removes animated batches without leaking tweens", ()
 
         assert.equal(scene.addRandomSprites(), 10);
         assert.equal(scene.addRandomSprites(), 20);
-        const dynamicSprites = scene.children.slice(5) as Sprite[];
+        const dynamicSprites = scene.children.slice(4) as Sprite[];
         assert.equal(dynamicSprites.length, 20);
         assert.ok(dynamicSprites.every((sprite) => sprite.texture === Texture.EMPTY));
         assert.ok(
@@ -61,6 +61,7 @@ test("Sprite scene adds and removes animated batches without leaking tweens", ()
             baselineTweens,
         );
     } finally {
+        gsap.ticker.sleep();
         BitmapFont.uninstall(DYNAMIC_BITMAP_FONT_NAME);
     }
 });

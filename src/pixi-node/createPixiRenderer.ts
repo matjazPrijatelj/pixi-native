@@ -18,6 +18,7 @@ import {
 import * as sdl from "@kmamal/sdl";
 import type { Sdl } from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
+import { requireWindowsModalFrameSupport } from "./modalFrame.ts";
 
 const require = createRequire(import.meta.url);
 const gpu = require("../../native/gpu") as NodeGPUApi;
@@ -157,6 +158,16 @@ export async function createPixiRenderer(): Promise<{
     presentMode: "fifo",
   });
 
+  try {
+    requireWindowsModalFrameSupport(renderer);
+  } catch (error) {
+    renderer.destroy();
+    device.destroy();
+    if (!window.destroyed) window.destroy();
+    gpu.destroy(instance);
+    throw error;
+  }
+
   const canvas = new NodeGPUCanvas(
     renderer,
     window.pixelWidth,
@@ -168,7 +179,15 @@ export async function createPixiRenderer(): Promise<{
     process.platform === "win32" && renderer.waitForPresent
       ? renderer.waitForPresent.bind(renderer)
       : undefined;
-  new NodeDOMAdapter(instance, refreshRateHz, waitForPresent).install();
+  const domAdapter = new NodeDOMAdapter(
+    instance,
+    refreshRateHz,
+    waitForPresent,
+  );
+  domAdapter.install();
+  renderer.setModalFrameCallback?.(() => {
+    domAdapter.dispatchModalFrame(performance.now());
+  });
 
   const app = new Application();
   await app.init({
@@ -231,6 +250,7 @@ export async function createPixiRenderer(): Promise<{
     if (destroyed) return;
     destroyed = true;
     rgbaUploadBuffers.clear();
+    renderer.setModalFrameCallback?.();
     renderer.destroy();
     device.destroy();
 

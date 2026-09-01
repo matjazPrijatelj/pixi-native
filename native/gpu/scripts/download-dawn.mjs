@@ -13,6 +13,6 @@ execFileSync('git', [...C.gitConfigArgs, 'checkout', 'FETCH_HEAD'], { stdio: 'in
 
 console.log("applying dawn.patch")
 process.chdir(C.dir.dawn)
-execFileSync('git', [...C.gitConfigArgs, 'apply', '--ignore-space-change', '--ignore-whitespace', '--exclude=DEPS', Path.join(C.dir.root, 'dawn.patch')], {
+execFileSync('git', [...C.gitConfigArgs, 'apply', '--recount', '--ignore-space-change', '--ignore-whitespace', '--exclude=DEPS', Path.join(C.dir.root, 'dawn.patch')], {
 	stdio: 'inherit',
 })

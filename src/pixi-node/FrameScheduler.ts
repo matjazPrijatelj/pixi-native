@@ -66,6 +66,11 @@ export class VSyncFrameScheduler {
         }
     }
 
+    /** Dispatches the current RAF batch from a native Windows modal loop. */
+    public dispatchNow(timestamp = this.now()): number {
+        return this.dispatchCallbacks(timestamp);
+    }
+
     private schedule(): void {
         if (
             this.waiting ||
@@ -90,11 +95,15 @@ export class VSyncFrameScheduler {
             return;
         }
 
+        this.dispatchCallbacks(this.now());
+    }
+
+    private dispatchCallbacks(timestamp: number): number {
         const pending = [...this.callbacks.values()];
         this.callbacks.clear();
-        const timestamp = this.now();
         for (const callback of pending) callback(timestamp);
         this.schedule();
+        return pending.length;
     }
 }
 
@@ -163,6 +172,18 @@ export class FrameScheduler {
         }
     }
 
+    /** Dispatches the current RAF batch from a native Windows modal loop. */
+    public dispatchNow(timestamp = this.now()): number {
+        if (this.timer !== undefined) this.clearTimer(this.timer);
+        this.timer = undefined;
+        if (this.callbacks.size === 0) {
+            this.deadline = undefined;
+            return 0;
+        }
+        this.deadline = timestamp;
+        return this.dispatchCallbacks(timestamp);
+    }
+
     private dispatch(): void {
         this.timer = undefined;
         const timestamp = this.now();
@@ -174,17 +195,7 @@ export class FrameScheduler {
             return;
         }
 
-        const pending = [...this.callbacks.values()];
-        this.callbacks.clear();
-        this.advanceDeadline(timestamp);
-
-        this.dispatching = true;
-        try {
-            for (const callback of pending) callback(timestamp);
-        } finally {
-            this.dispatching = false;
-            this.schedule();
-        }
+        this.dispatchCallbacks(timestamp);
     }
 
     private schedule(): void {
@@ -208,5 +219,20 @@ export class FrameScheduler {
         const minimumDeadline =
             timestamp + this.frameIntervalMS * this.minimumFrameSpacingRatio;
         this.deadline = Math.max(deadline, minimumDeadline);
+    }
+
+    private dispatchCallbacks(timestamp: number): number {
+        const pending = [...this.callbacks.values()];
+        this.callbacks.clear();
+        this.advanceDeadline(timestamp);
+
+        this.dispatching = true;
+        try {
+            for (const callback of pending) callback(timestamp);
+        } finally {
+            this.dispatching = false;
+            this.schedule();
+        }
+        return pending.length;
     }
 }

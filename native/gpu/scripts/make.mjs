@@ -4,10 +4,7 @@ import { execFileSync } from 'child_process'
 import C from './util/common.js'
 
 console.log("build in", C.dir.build)
-const ninjaCommand = C.platform === 'win32'
-	? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'ninja.bat', '-v', '-C', C.dir.build, 'dawn.node']]
-	: ['ninja', ['-v', '-C', C.dir.build, 'dawn.node']]
-execFileSync(ninjaCommand[0], ninjaCommand[1], {
+execFileSync('cmake', ['--build', C.dir.build, '--target', 'dawn.node', '--verbose'], {
 	stdio: 'inherit',
 	env: {
 		...process.env,

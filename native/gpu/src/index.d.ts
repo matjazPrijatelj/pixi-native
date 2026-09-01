@@ -3036,6 +3036,7 @@ interface Renderer {
   getCurrentTextureView(): GPUTextureView
   swap()
   waitForPresent(): Promise<boolean>
+  setModalFrameCallback(callback?: () => void): void
   resize()
 }
 

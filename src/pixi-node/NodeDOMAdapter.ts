@@ -14,6 +14,7 @@ export class NodeDOMAdapter {
     private readonly gpu: NodeGPUInstance;
     private readonly refreshRateHz: number;
     private readonly waitForPresent?: () => Promise<boolean>;
+    private frameScheduler?: FrameScheduler | VSyncFrameScheduler;
 
     public constructor(
         gpu: NodeGPUInstance,
@@ -98,6 +99,7 @@ export class NodeDOMAdapter {
                   fallbackFrameIntervalMS: 1000 / this.refreshRateHz,
               })
             : new FrameScheduler({ frameIntervalMS: 1000 / this.refreshRateHz });
+        this.frameScheduler = scheduler;
         console.log({
             animationFrameSource: this.waitForPresent
                 ? "DXGI frame-latency signal"
@@ -109,6 +111,11 @@ export class NodeDOMAdapter {
         (globalThis as any).cancelAnimationFrame = (id: number): void => {
             scheduler.cancel(id);
         };
+    }
+
+    /** Runs every pending RAF consumer while Windows owns the modal move/resize loop. */
+    public dispatchModalFrame(timestamp = performance.now()): number {
+        return this.frameScheduler?.dispatchNow(timestamp) ?? 0;
     }
 
     public install(): void {
@@ -163,7 +170,7 @@ export class NodeDOMAdapter {
                 removeEventListener() {}
             };
         }
-        if (!globalThis.requestAnimationFrame) this.installFrameScheduler();
+        this.installFrameScheduler();
     }
 }
 

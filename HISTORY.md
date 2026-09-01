@@ -2,7 +2,12 @@
 
 ## 2026-09-01
 
-- Added a Windows modal move/resize frame callback through the native renderer so GSAP, video clocks, and Pixi rendering continue during title-bar dragging and live resizing.
+- Routed the Windows modal move/resize timer through the shared RAF scheduler so every pending consumer, including GSAP, video clocks, Pixi ticker work, and rendering, continues while the title bar owns the event loop.
+- Reconfigured the existing Dawn surface from the live Win32 client area during drag-resize, with configured-state and re-entry guards that avoid repeated surface destruction, double unconfigure, and `Surface is not configured` crashes.
+- Added fail-fast detection for stale Windows Dawn addons, safe N-API callback scopes and teardown, and regression tests for timer/DXGI modal dispatch without duplicate RAF callbacks.
+- Made the pinned Windows native build reproducible by disabling depot_tools self-update, restoring its expected Git shim, applying Dawn patches with recounted hunks, and invoking the CMake-selected Ninja executable directly.
+- Restored the Sprite stress-test default to the documented ten-sprite batch, corrected its dynamic-child assertion, and stopped the GSAP ticker during test teardown so the suite exits without leaked RAF handles.
+- Verified TypeScript, all 54 Node tests, a complete MSVC/Dawn native build, binary modal-callback presence, and a Windows Pixi WebGPU/D3D12 startup on the DXGI 60 Hz signal.
 - Fixed Linux local image loading by converting `file://` URLs to filesystem paths before passing them to `@napi-rs/canvas`, restoring bitmap-font atlas startup and adding regression coverage.
 - Added a transparent illustrated drum-kit texture and a synthesized eight-sound MP3 audio atlas with normalized hit regions for future pointer input; scene `6` maps U/I/O/P/J/K/L/Č to the kit and flashes each struck component.
 - Made repeated per-voice fades latest-wins from the actual mixer volume, suppressed stale delayed fade events with generation tokens, and moved fade timing to a monotonic voice clock so it remains correct across music-loop boundaries.

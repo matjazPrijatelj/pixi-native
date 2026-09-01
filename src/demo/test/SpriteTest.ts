@@ -3,7 +3,7 @@ import { gsap } from "gsap";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 
-const DEFAULT_BATCH_SIZE = 25;
+const DEFAULT_BATCH_SIZE = 10;
 const TITLE_MARGIN = 90;
 
 export interface SpriteTestBounds {

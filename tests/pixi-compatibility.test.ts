@@ -9,6 +9,7 @@ import {
     prepareRgbaPixelsForUpload,
 } from "../src/pixi-node/rgbaUpload.ts";
 import { normalizeGpuBindGroupIndex } from "../src/pixi-node/gpuCompatibility.ts";
+import { requireWindowsModalFrameSupport } from "../src/pixi-node/modalFrame.ts";
 
 test("Canvas RGBA pixels are reordered for BGRA textures", () => {
     const source = new Uint8ClampedArray([255, 32, 64, 255]);
@@ -131,6 +132,27 @@ test("canceling the final frame request clears its timer", () => {
     assert.deepEqual(clearedTimers, [42]);
 });
 
+test("modal timer dispatch runs the current RAF batch exactly once", () => {
+    const clearedTimers: unknown[] = [];
+    const scheduler = new FrameScheduler({
+        now: () => 0,
+        setTimer: () => 42,
+        clearTimer: (timer) => clearedTimers.push(timer),
+    });
+    const timestamps: number[] = [];
+
+    scheduler.request((timestamp) => {
+        timestamps.push(timestamp);
+        scheduler.request((nextTimestamp) => timestamps.push(nextTimestamp));
+    });
+
+    assert.equal(scheduler.dispatchNow(25), 1);
+    assert.deepEqual(timestamps, [25]);
+    assert.deepEqual(clearedTimers, [42]);
+    assert.equal(scheduler.dispatchNow(40), 1);
+    assert.deepEqual(timestamps, [25, 40]);
+});
+
 test("VSync frame scheduler batches callbacks on the native present signal", async () => {
     const waiters: Array<(signaled: boolean) => void> = [];
     const scheduler = new VSyncFrameScheduler({
@@ -174,4 +196,38 @@ test("VSync frame scheduler falls back to a timer and honors cancellation", asyn
 
     timers[0].callback();
     assert.deepEqual(timestamps, [200]);
+});
+
+test("modal VSync dispatch does not duplicate callbacks when its wait resolves", async () => {
+    const waiters: Array<(signaled: boolean) => void> = [];
+    const scheduler = new VSyncFrameScheduler({
+        waitForPresent: () =>
+            new Promise<boolean>((resolve) => waiters.push(resolve)),
+    });
+    const timestamps: number[] = [];
+
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    assert.equal(scheduler.dispatchNow(12), 1);
+    assert.equal(scheduler.dispatchNow(13), 0);
+    assert.deepEqual(timestamps, [12]);
+
+    waiters[0](true);
+    await Promise.resolve();
+    assert.deepEqual(timestamps, [12]);
+});
+
+test("Windows startup rejects a Dawn addon without modal frame support", () => {
+    assert.throws(
+        () => requireWindowsModalFrameSupport({}, "win32"),
+        /pnpm native:build/,
+    );
+    assert.doesNotThrow(() =>
+        requireWindowsModalFrameSupport({}, "linux"),
+    );
+    assert.doesNotThrow(() =>
+        requireWindowsModalFrameSupport(
+            { setModalFrameCallback: () => undefined },
+            "win32",
+        ),
+    );
 });
