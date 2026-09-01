@@ -226,17 +226,32 @@ const destroySpriteTextures = async (): Promise<void> => {
   await Assets.unload(drumTexturePath);
 };
 
+/**
+ * Application.destroy() destroys the stage before the renderer. That order
+ * is unsafe for WebGPU because stage-owned texture sources notify bind groups
+ * while those bind groups are still alive. Release GPU systems first.
+ */
+const destroyPixiApplication = (): void => {
+  app.renderer.destroy({ removeView: true });
+  app.stage.destroy({ children: true, context: true, style: true });
+  app.ticker.destroy();
+};
+
+const stopActiveScene = (): void => {
+  (scene as typeof scene & { dispose?: () => void }).dispose?.();
+};
+
 const shutdown = async (): Promise<void> => {
   if (shuttingDown) return;
   shuttingDown = true;
   app.ticker.stop();
-  disposeDemoScene(scene);
+  stopActiveScene();
   const queue = native.device.queue as GPUQueue & {
     onSubmittedWorkDone?: () => Promise<void>;
   };
   await queue.onSubmittedWorkDone?.();
+  destroyPixiApplication();
   await destroySpriteTextures();
-  app.destroy({ removeView: true }, { children: true, context: true, style: true });
   await destroyBitmapFonts();
   Howler.unload();
   native.destroy();
@@ -257,7 +272,7 @@ const restartApp = async (): Promise<void> => {
   shuttingDown = true;
 
   app.ticker.stop();
-  disposeDemoScene(scene);
+  stopActiveScene();
 
   try {
     const queue = native.device.queue as GPUQueue & {
@@ -268,8 +283,8 @@ const restartApp = async (): Promise<void> => {
   } catch {}
 
   try {
+    destroyPixiApplication();
     await destroySpriteTextures();
-    app.destroy({ removeView: true }, { children: true, context: true, style: true });
   } catch {}
 
   try {

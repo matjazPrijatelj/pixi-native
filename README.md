@@ -15,16 +15,59 @@ Minimal proof of concept for rendering PixiJS 8 directly into a native SDL windo
 
 The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }`. Pixi is initialized with `preference: ["webgpu"]`, so initialization fails instead of falling back to WebGL.
 
+## Requirements
+
+The supported development targets are Linux x64 and Windows 11 x64. The same Node.js and pnpm versions should be used on both platforms:
+
+- Node.js 24 LTS
+- pnpm 9.15.9
+- Git
+- CMake
+- Go 1.26 or newer (required by Dawn's native build generators)
+- Rust and Cargo (required by the native video bridge)
+- FFmpeg available as `ffmpeg` and, preferably, `ffprobe` when using video or audio scenes
+
+The repository contains the TypeScript source and project patches, but native build output is platform-specific. Build the GPU addon on the platform where it will run; Linux and Windows artifacts must not be shared.
+
 ## Run on Ubuntu 24
+
+Before building on Ubuntu/Debian, install the native packages:
+
+```sh
+sudo apt update
+sudo apt install build-essential cmake curl git libx11-xcb-dev pkg-config ffmpeg
+```
+
+Install Rust and Cargo using the official `rustup` installer if they are not already available. Install Go 1.26 or newer and make sure the selected binary is first in `PATH`:
+
+```sh
+go version
+cargo --version
+```
+
+Then build and run:
 
 ```sh
 pnpm install
 pnpm native:build
 pnpm native:video:build
+pnpm typecheck
+pnpm test
 pnpm dev
 ```
 
-The first native build downloads a pinned Dawn source tree and creates the Linux x64 addon in `native/gpu/dist/linux-x64/`. On Ubuntu, install the native build prerequisites with `sudo apt install cmake g++ libx11-xcb-dev`; Go must be 1.26 or newer. Vulkan is selected by default and can be overridden with `WGPU_BACKEND`.
+The first GPU build downloads a pinned Dawn source tree and creates the Linux x64 addon in `native/gpu/dist/linux-x64/`. Vulkan is selected by default and can be overridden with `WGPU_BACKEND`.
+
+If `go version` still reports an older system Go after installing a newer release, fix the current shell before running the build, for example:
+
+```sh
+export PATH="$HOME/.local/opt/go1.26.5/bin:$PATH"
+export GOTOOLCHAIN=local
+hash -r
+go version
+```
+
+Use the actual installation directory on your machine. These exports affect only the current shell; add the `PATH` line to your shell profile if it should persist.
 
 ## Run on Windows 11 x64
 
@@ -34,6 +77,8 @@ Install these prerequisites first:
 - MSVC v143 and Windows 11 SDK 10.0.26100.0 or newer
 - CMake and Git in `PATH`
 - Go 1.26 or newer in `PATH`
+- Rust and Cargo in `PATH` (required for the video bridge)
+- FFmpeg in `PATH` (required for the video/audio scenes); `ffprobe` is recommended for metadata probing
 
 Open **Developer PowerShell for VS 2022**, then run:
 

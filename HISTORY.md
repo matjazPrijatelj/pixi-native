@@ -2,6 +2,7 @@
 
 ## 2026-09-01
 
+- Fixed shutdown and restart bind-group warnings by releasing WebGPU bind groups before destroying Pixi stage-owned texture sources.
 - Fixed Windows native configure/build to use Dawn's pinned `ninja.exe` directly, avoiding `CMAKE_MAKE_PROGRAM is not set` after a successful `gclient sync`.
 - Made `pnpm native:build` discover Visual Studio 2022 through `vswhere.exe` and import the x64 MSVC/Windows SDK environment automatically when launched from a normal PowerShell or terminal.
 - Made native checkout cleanup retry transient Windows locks and fail explicitly instead of reusing a partially removed Dawn repository with an existing `origin` remote.
