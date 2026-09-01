@@ -88,18 +88,18 @@ test("BT.709 limited conversion maps video black and white", () => {
 test("NativeVideo restarts at currentTime for pause, resume, and seek", async () => {
     const factory = new FakeDecoderFactory();
     const video = new NativeVideo(
-        "video.mp4",
+        "video.mp4#t=1.25",
         { width: 2, height: 2, fps: 24 },
         factory,
     );
 
     await video.play();
     assert.equal(video.paused, false);
-    assert.equal(factory.options[0].startTime, 0);
+    assert.equal(factory.options[0].startTime, 1.25);
 
     factory.decoders[0].frame = createFrame(1_250_000);
     assert.equal(video.takeLatestFrame()?.timestampUs, 1_250_000);
-    assert.equal(video.currentTime, 1.25);
+    assert.ok(Math.abs(video.currentTime - 1.25) < 0.05);
     video.markFramePresented();
 
     video.pause();
@@ -107,7 +107,7 @@ test("NativeVideo restarts at currentTime for pause, resume, and seek", async ()
     assert.equal(factory.decoders[0].closed, true);
 
     await video.play();
-    assert.equal(factory.options[1].startTime, 1.25);
+    assert.ok(Math.abs((factory.options[1].startTime ?? 0) - 1.25) < 0.05);
 
     video.currentTime = 8.5;
     assert.equal(factory.decoders[1].closed, true);
@@ -179,6 +179,46 @@ test("NativeVideo uses audio as its playback clock and holds early frames", asyn
     assert.equal(audio.destroyed, true);
 });
 
+test("file playback waits for a decoded frame before starting audio", async () => {
+    const factory = new FakeAudioVideoFactory();
+    factory.decoderReady = false;
+    const video = new NativeVideo(
+        "video-with-audio.mp4",
+        { width: 2, height: 2 },
+        factory,
+    );
+
+    const playing = video.play();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(factory.decoders.length, 1);
+    assert.equal(factory.audios.length, 0);
+
+    factory.decoders[0].ready = true;
+    await playing;
+    assert.equal(factory.audios.length, 1);
+    assert.equal(factory.audios[0].played, true);
+    video.destroy();
+});
+
+test("pausing during file prebuffer prevents a late audio start", async () => {
+    const factory = new FakeAudioVideoFactory();
+    factory.decoderReady = false;
+    const video = new NativeVideo(
+        "video-with-audio.mp4",
+        { width: 2, height: 2 },
+        factory,
+    );
+
+    const playing = video.play();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    video.pause();
+    await playing;
+
+    assert.equal(factory.decoders[0].closed, true);
+    assert.equal(factory.audios.length, 0);
+    video.destroy();
+});
+
 test("NativeVideo drains due frames in order without blocking the decoder queue", async () => {
     const factory = new FakeAudioVideoFactory();
     const video = new NativeVideo(
@@ -210,7 +250,26 @@ test("NativeVideo drains due frames in order without blocking the decoder queue"
     assert.ok(Math.abs(video.stats.syncOffsetMs - 10) < 0.01);
 });
 
-test("NativeVideo without audio keeps latest-frame-wins behavior", async () => {
+test("NativeVideo requests native catch-up when a file frame is too late", async () => {
+    const factory = new FakeAudioVideoFactory();
+    const video = new NativeVideo(
+        "video-with-audio.mp4",
+        { width: 2, height: 2, fps: 60 },
+        factory,
+    );
+
+    await video.play();
+    const audio = factory.audios[0];
+    const decoder = factory.decoders[0];
+    decoder.enqueue(createFrame(500_000));
+    audio.currentTime = 1;
+
+    assert.equal(video.takeLatestFrame()?.timestampUs, 500_000);
+    assert.deepEqual(decoder.catchUpTargets, [980_000]);
+    video.destroy();
+});
+
+test("NativeVideo without audio presents file frames on its monotonic clock", async () => {
     const factory = new FakeDecoderFactory();
     const video = new NativeVideo(
         "video.mp4",
@@ -225,6 +284,8 @@ test("NativeVideo without audio keeps latest-frame-wins behavior", async () => {
         createFrame(66_667),
     );
 
+    assert.equal(video.takeLatestFrame()?.timestampUs, 0);
+    await new Promise<void>((resolve) => setTimeout(resolve, 75));
     assert.equal(video.takeLatestFrame()?.timestampUs, 66_667);
     assert.equal(video.stats.queuedFrames, 0);
 });
@@ -244,7 +305,7 @@ test("NativeVideo dispatches Electron-compatible events and loops without ended"
     video.onended = () => { propertyEnded++; };
 
     await video.play();
-    factory.decoders[0].frame = createFrame(500_000);
+    factory.decoders[0].frame = createFrame(0);
     assert.ok(video.takeLatestFrame());
     factory.decoders[0].finished = true;
     assert.equal(video.takeLatestFrame(), null);
@@ -273,7 +334,7 @@ test("NativeVideo emits pause then ended at a natural file end", async () => {
     video.destroy();
 });
 
-test("modal playback discards audio and resumes at the latest silent video frame", async () => {
+test("modal playback keeps audio as master clock without restarting A/V", async () => {
     const factory = new FakeAudioVideoFactory();
     const video = new NativeVideo("video.mp4", { width: 2, height: 2 }, factory);
     await video.play();
@@ -282,14 +343,16 @@ test("modal playback discards audio and resumes at the latest silent video frame
     video.takeLatestFrame();
 
     video.setModalState(true);
-    assert.equal(factory.audios[0].destroyed, true);
+    assert.equal(factory.audios[0].destroyed, false);
+    factory.audios[0].currentTime = 2;
     factory.decoders[0].frame = createFrame(2_000_000);
     assert.equal(video.takeLatestFrame()?.timestampUs, 2_000_000);
     video.setModalState(false);
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    assert.equal(factory.audios[1].currentTime, 2);
-    assert.equal(factory.options.at(-1)?.startTime, 2);
+    assert.equal(factory.audios.length, 1);
+    assert.equal(factory.decoders.length, 1);
+    assert.equal(video.currentTime, 2);
     video.destroy();
 });
 
@@ -355,6 +418,13 @@ class FakeDecoderFactory implements NativeVideoDependencies {
 class FakeAudioVideoFactory extends FakeDecoderFactory {
     public readonly audios: FakeAudio[] = [];
     public readonly audioPlaybackRates: number[] = [];
+    public decoderReady = true;
+
+    public override createDecoder(options: NativeVideoDecoderOptions): FakeDecoder {
+        const decoder = super.createDecoder(options);
+        decoder.ready = this.decoderReady;
+        return decoder;
+    }
 
     public createAudio(
         _source: string,
@@ -405,6 +475,8 @@ class FakeDecoder implements NativeVideoDecoderLike {
     public skipped = 0;
     public finished = false;
     public closed = false;
+    public ready = true;
+    public readonly catchUpTargets: number[] = [];
 
     public open(_source: string): void {}
 
@@ -432,6 +504,15 @@ class FakeDecoder implements NativeVideoDecoderLike {
 
     public queuedFrames(): number {
         return this.frames.length;
+    }
+
+    public catchUpTo(timestampUs: number): void {
+        this.catchUpTargets.push(timestampUs);
+        this.frames = [];
+    }
+
+    public isReady(): boolean {
+        return this.ready;
     }
 
     public pollError(): string | null {

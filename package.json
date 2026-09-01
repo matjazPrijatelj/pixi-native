@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "native:build": "node native/gpu/scripts/build.mjs",
+    "native:audio:build": "node native/audio/scripts/build.mjs",
     "native:video:build": "node native/video/scripts/build.mjs",
     "assets:bitmap-font": "node scripts/generate-bitmap-font-test.mjs",
     "assets:audio-test": "node scripts/generate-audio-test.mjs",

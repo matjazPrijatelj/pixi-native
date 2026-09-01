@@ -2,6 +2,17 @@
 
 ## 2026-09-01
 
+- Enabled looping for every local video demo and expanded the Graphics test to nine independently animated primitives, including five new ellipse, triangle, star, ring, and Bezier shapes.
+- Fixed demanding Windows 4K A/V synchronization by prebuffering the first video frame before starting the native audio clock, replacing FFmpeg wall-clock input pacing with a bounded decoder queue, and adding in-place stale-frame catch-up without audio or decoder restarts.
+- Added a pre-scale 30 fps ceiling for UHD 4:2:2/4:4:4 sources that D3D11VA cannot decode efficiently; the 4K 59.94 fps `water_netflix` acceptance run held A/V between roughly -10 ms and +17 ms with zero decoder drops and zero audio underruns.
+- Added a monotonic media clock for files without an audio track so bounded decoding stays at the requested playback rate; the 10-second 720p Big Buck Bunny regression no longer finishes in roughly two seconds.
+- Fixed long-running Windows video audio crackling and decoder frame drops by removing the shared voice/stream mutexes and per-frame producer wakeups from the WASAPI callback; the callback now owns the mixer, consumes bounded lock-free PCM blocks, and publishes atomic clocks for video synchronization.
+- Added real queue/underrun diagnostics and a 15-second Windows video-audio regression: the repaired stream advanced 15.03 seconds in 15.02 seconds with roughly two seconds queued and zero underruns, versus 13.68 seconds and 64,910 missing frames before the fix; a combined native A/V run completed with zero decoder drops.
+- Replaced the Windows x64 JS/worker/SDL audio pump with a packaged napi-rs WASAPI engine using CPAL, native FFmpeg decode threads, a bounded streaming buffer, overlapping-voice mixing, sample-clock fades/loops, and synchronous audible playback clocks; Linux retains the existing SDL worker backend.
+- Added ordered native audio event batching through a bounded thread-safe callback so blocked JavaScript delays Howler listeners without stopping playback or duplicating `fade`/`end`, plus explicit missing-addon diagnostics and `pnpm native:audio:build` packaging under `native/audio/dist/win32-x64`.
+- Kept video audio and its decoder alive through Win32 modal move/resize, retaining audio as the master clock and presenting the latest due frame without an A/V restart or seek when the modal loop ends.
+- Added native mixer, loop, fade, streaming backpressure/underrun, teardown, credential-redaction, JS-blocking clock/event-order, binding-preflight, and modal video lifecycle regressions.
+- Verified TypeScript, all 69 Node tests, eleven native audio Rust tests, Clippy with warnings denied, the release addon build, and Windows WASAPI tests for blocked JS plus sustained video-audio playback.
 - Fixed shutdown and restart bind-group warnings by releasing WebGPU bind groups before destroying Pixi stage-owned texture sources.
 - Fixed Windows native configure/build to use Dawn's pinned `ninja.exe` directly, avoiding `CMAKE_MAKE_PROGRAM is not set` after a successful `gclient sync`.
 - Made `pnpm native:build` discover Visual Studio 2022 through `vswhere.exe` and import the x64 MSVC/Windows SDK environment automatically when launched from a normal PowerShell or terminal.

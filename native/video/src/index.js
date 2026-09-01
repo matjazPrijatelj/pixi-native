@@ -25,6 +25,10 @@ class NativeVideoDecoder {
         return this.decoder.queuedFrames();
     }
 
+    catchUpTo(timestampUs) {
+        this.decoder.catchUpTo(timestampUs);
+    }
+
     pollError() {
         return this.decoder.pollError();
     }

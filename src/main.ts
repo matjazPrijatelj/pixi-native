@@ -9,7 +9,8 @@ if (!(globalThis as any).navigator) {
   });
 }
 const { Assets, BitmapFont, Texture } = await import("pixi.js");
-const { createPixiRenderer } = await import("./pixi-node/createPixiRenderer.ts");
+const { createPixiRenderer } =
+  await import("./pixi-node/createPixiRenderer.ts");
 const { NodeCanvas } = await import("./pixi-node/NodeCanvas.ts");
 const { supportsNativeVideo } = await import("./pixi-node/platform.ts");
 const {
@@ -33,11 +34,15 @@ const { getSceneIndexForKey, getSpriteCountDeltaForKey, getVideoIndexForKey } =
 
 const { app, native } = await createPixiRenderer();
 
-const texturePaths = ["test-texture.png", "batman.png", "mario.png"].map((file) =>
-  fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
+const texturePaths = ["test-texture.png", "batman.png", "mario.png"].map(
+  (file) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
 );
-const bitmapFontPath = fileURLToPath(new URL("../assets/bitmap-font/native-pixel.fnt", import.meta.url));
-const drumTexturePath = fileURLToPath(new URL("../assets/drum-kit.png", import.meta.url));
+const bitmapFontPath = fileURLToPath(
+  new URL("../assets/bitmap-font/native-pixel.fnt", import.meta.url),
+);
+const drumTexturePath = fileURLToPath(
+  new URL("../assets/drum-kit.png", import.meta.url),
+);
 
 installDynamicBitmapTextFont();
 await Assets.load(bitmapFontPath);
@@ -60,16 +65,16 @@ const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
   });
 };
 
-const spriteTextures = (await Promise.all(texturePaths.map(loadNativeTexture))) as [
-  PixiTexture,
-  PixiTexture,
-  PixiTexture,
-];
+const spriteTextures = (await Promise.all(
+  texturePaths.map(loadNativeTexture),
+)) as [PixiTexture, PixiTexture, PixiTexture];
 const drumTexture = await loadNativeTexture(drumTexturePath);
 
 const videos = [
-  { file: "Big_Buck_Bunny_1080_10s_5MB.mp4", fps: 60 },
+  { file: "jerneja_en_doubleZero.mp4", fps: 30 },
   { file: "Big_Buck_Bunny_1080_30s.mp4", fps: 24 },
+  { file: "Sync_Check-720p30fps.mp4", fps: 30 },
+  { file: "Big_Buck_Bunny_1080_10s_5MB.mp4", fps: 60 },
   { file: "Big_Buck_Bunny_720_10s_20MB.mp4", fps: 30 },
   {
     file: "cutting_orange_tuil_8s_3484kbps_2160p_59.94fps_h264.mp4",
@@ -81,9 +86,11 @@ const videos = [
   },
 ];
 
-const videoPaths = videos.map(({ file }) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)));
+const videoPaths = videos.map(({ file }) =>
+  fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
+);
 
-let videoIndex = 1;
+let videoIndex = 0;
 
 const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createGraphicsTest(),
@@ -96,7 +103,9 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createBitmapTextTest(),
 ];
 
-const videoSceneIndex = supportsNativeVideo(process.platform) ? scenes.length : null;
+const videoSceneIndex = supportsNativeVideo(process.platform)
+  ? scenes.length
+  : null;
 
 if (videoSceneIndex !== null) {
   scenes.push(() =>
@@ -117,10 +126,12 @@ scenes.push(() =>
 );
 
 if (supportsNativeVideo(process.platform)) {
-  scenes.push(() => createRtpVideoTest({
-    width: native.canvas.width,
-    height: native.canvas.height,
-  }));
+  scenes.push(() =>
+    createRtpVideoTest({
+      width: native.canvas.width,
+      height: native.canvas.height,
+    }),
+  );
 }
 
 let index = 0;
@@ -175,7 +186,11 @@ native.window.on("keyDown", (event) => {
   const spriteScene = scene as unknown as Partial<SpriteTestScene>;
   const spriteCountDelta = getSpriteCountDeltaForKey(event.key, event.repeat);
 
-  if (spriteCountDelta !== null && spriteScene.addRandomSprites && spriteScene.removeRandomSprites) {
+  if (
+    spriteCountDelta !== null &&
+    spriteScene.addRandomSprites &&
+    spriteScene.removeRandomSprites
+  ) {
     if (spriteCountDelta > 0) {
       spriteScene.addRandomSprites(spriteCountDelta);
     } else {
@@ -184,14 +199,24 @@ native.window.on("keyDown", (event) => {
     return;
   }
 
-  const nextVideoIndex = getVideoIndexForKey(event.key, videoIndex, videoPaths.length, event.repeat);
+  const nextVideoIndex = getVideoIndexForKey(
+    event.key,
+    videoIndex,
+    videoPaths.length,
+    event.repeat,
+  );
 
   if (nextVideoIndex !== null) {
     selectVideo(nextVideoIndex);
     return;
   }
 
-  const nextIndex = getSceneIndexForKey(event.key, index, scenes.length, event.repeat);
+  const nextIndex = getSceneIndexForKey(
+    event.key,
+    index,
+    scenes.length,
+    event.repeat,
+  );
 
   if (nextIndex !== null) selectScene(nextIndex);
 });

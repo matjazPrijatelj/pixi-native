@@ -7,6 +7,7 @@ import {
 import { fitVideoRect } from "../videoLayout.ts";
 import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
+import { nativeAudioEngine } from "../../pixi-node/audio/index.ts";
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -36,6 +37,7 @@ export function createVideoTest(
     width: WIDTH,
     height: HEIGHT,
     fps,
+    loop: true,
   });
   const sprite = new NativeVideoSprite(video);
   const uploadFpsMeter = new VideoFpsMeter();
@@ -62,6 +64,7 @@ export function createVideoTest(
   let nextStatusUpdateTime = 0;
   videoScene.update = () => {
     const stats = video.stats;
+    const audioDiagnostics = nativeAudioEngine.diagnostics;
     if (stats.presentedFrames !== previousPresentedFrames) {
       previousPresentedFrames = stats.presentedFrames;
       measuredUploadFps =
@@ -93,6 +96,8 @@ export function createVideoTest(
       `${stats.presentedFrames}/${stats.droppedFrames}` +
       ` | queue/skipped: ${stats.queuedFrames}/${stats.skippedFrames}` +
       ` | A/V: ${stats.syncOffsetMs.toFixed(1)} ms` +
+      ` | audio queue/underruns: ${audioDiagnostics.queuedMs.toFixed(0)} ms/` +
+      `${audioDiagnostics.underruns}` +
       ` | ${(stats.bytesPerFrame / 1_000_000).toFixed(3)} MB/frame` +
       ` | ${audioState} | ${state}`;
   };

@@ -25,6 +25,7 @@ export class NativeVideoDecoder {
     public pollLatest(): VideoFrame | null;
     public pollNext(): VideoFrame | null;
     public queuedFrames(): number;
+    public catchUpTo(timestampUs: number): void;
     public pollError(): string | null;
     public backend(): string;
     public decodedFrames(): number;

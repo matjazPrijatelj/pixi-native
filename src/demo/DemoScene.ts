@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container } from "pixi.js";
 import { createGraphicsTest } from "./test/GraphicsTest.ts";
 import { createSpriteTest } from "./test/SpriteTest.ts";
 import { createTextTest } from "./test/TextTest.ts";
@@ -26,15 +26,6 @@ export function animateDemoScene(
   deltaMS: number,
   now = performance.now(),
 ): void {
-  const graphics = scene.children[1];
-  if (graphics instanceof Graphics) {
-    graphics.pivot.x = graphics.width;
-    graphics.pivot.y = graphics.height;
-    graphics.x = graphics.width;
-    graphics.y = graphics.height;
-    graphics.rotation += deltaMS * 0.001;
-  }
-
   (
     scene as Container & {
       update?: (deltaMS: number, now: number) => void;

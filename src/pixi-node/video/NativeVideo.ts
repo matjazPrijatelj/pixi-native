@@ -9,6 +9,13 @@ import { parseMediaSource, redactMediaSource } from "./mediaSource.ts";
 
 const require = createRequire(import.meta.url);
 const AUDIO_FRAME_LEAD_SECONDS = 0.02;
+const DECODER_READY_POLL_MS = 5;
+const DECODER_START_TIMEOUT_MS = 10_000;
+const MINIMUM_CATCH_UP_LAG_SECONDS = 0.1;
+const CATCH_UP_LAG_FRAMES = 3;
+const MAXIMUM_SOFTWARE_4K_FPS = 30;
+const UHD_PIXEL_COUNT = 3840 * 2160;
+const SOFTWARE_CHROMA_PIXEL_FORMAT = /^yuv(?:422|444)p/;
 
 export interface Nv12FrameLayout {
     readonly yBytes: number;
@@ -41,6 +48,7 @@ interface NativeDecoderBinding {
     pollLatest(): NativePackedVideoFrame | null;
     pollNext(): NativePackedVideoFrame | null;
     queuedFrames(): number;
+    catchUpTo(timestampUs: number): void;
     pollError(): string | null;
     backend(): string;
     decodedFrames(): number;
@@ -119,6 +127,8 @@ export interface NativeVideoDecoderLike {
     pollLatest(): NativeVideoFrame | null;
     pollNext(): NativeVideoFrame | null;
     queuedFrames(): number;
+    catchUpTo(timestampUs: number): void;
+    isReady(): boolean;
     pollError(): string | null;
     backend(): string;
     decodedFrames(): number;
@@ -262,6 +272,7 @@ interface ProbedMetadata {
     readonly duration?: number;
     readonly width?: number;
     readonly height?: number;
+    readonly pixelFormat?: string;
 }
 
 function probeMedia(
@@ -276,7 +287,7 @@ function probeMedia(
                 "-v", "error",
                 ...inputArgs,
                 "-select_streams", "v:0",
-                "-show_entries", "stream=width,height:format=duration",
+                "-show_entries", "stream=width,height,pix_fmt:format=duration",
                 "-of", "json",
                 "-i", source,
             ],
@@ -290,13 +301,18 @@ function probeMedia(
                 try {
                     const data = JSON.parse(stdout) as {
                         format?: { duration?: string };
-                        streams?: Array<{ width?: number; height?: number }>;
+                        streams?: Array<{
+                            width?: number;
+                            height?: number;
+                            pix_fmt?: string;
+                        }>;
                     };
                     const duration = Number(data.format?.duration);
                     resolve({
                         duration: Number.isFinite(duration) ? duration : undefined,
                         width: data.streams?.[0]?.width,
                         height: data.streams?.[0]?.height,
+                        pixelFormat: data.streams?.[0]?.pix_fmt,
                     });
                 } catch {
                     resolve(null);
@@ -360,6 +376,14 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
 
     public queuedFrames(): number {
         return this.decoder.queuedFrames();
+    }
+
+    public catchUpTo(timestampUs: number): void {
+        this.decoder.catchUpTo(timestampUs);
+    }
+
+    public isReady(): boolean {
+        return this.decoder.queuedFrames() > 0;
     }
 
     public pollError(): string | null {
@@ -500,7 +524,6 @@ type NativeVideoEventHandler = ((this: NativeVideo, event: Event) => void) | nul
 const activeVideos = new Set<WeakRef<NativeVideo>>();
 
 export function setNativeVideoModalState(active: boolean): void {
-    if (active) nativeAudioEngine.clearQueuedOutput();
     for (const reference of activeVideos) {
         const video = reference.deref();
         if (video) video.setModalState(active);
@@ -543,8 +566,11 @@ export class NativeVideo extends EventTarget {
     private skippedFrameCount = 0;
     private syncOffsetMilliseconds = 0;
     private audio?: NativeVideoAudioLike;
+    private playbackClockStartedAtMs?: number;
+    private playbackClockStartSeconds = 0;
     private lastAudioError: Error | null = null;
     private pendingFrame: NativeVideoFrame | null = null;
+    private catchUpTargetUs?: number;
     private audioVolume: number;
     private audioMuted: boolean;
     private playbackGeneration = 0;
@@ -556,12 +582,11 @@ export class NativeVideo extends EventTarget {
     private loopValue: boolean;
     private readyStateValue = 0;
     private durationValue: number;
+    private sourcePixelFormat?: string;
     private metadataDispatched = false;
     private dataDispatched = false;
     private playingDispatched = false;
     private lastTimeUpdateMs = Number.NEGATIVE_INFINITY;
-    private modalActive = false;
-    private wasPlayingBeforeModal = false;
     private reconnectAttempt = 0;
     private reconnectAtMs = 0;
     private readonly registryReference: WeakRef<NativeVideo>;
@@ -720,7 +745,7 @@ export class NativeVideo extends EventTarget {
     public get currentTime(): number {
         return this.audio && !this.audio.ended
             ? this.audio.currentTime
-            : this.positionSeconds;
+            : (this.filePlaybackClockTime() ?? this.positionSeconds);
     }
 
     public set currentTime(value: number) {
@@ -789,13 +814,11 @@ export class NativeVideo extends EventTarget {
         try {
             await this.ensureMetadata();
             if (generation !== this.playbackGeneration || this.isPaused) return;
-            if (this.shouldUseAudio() && !this.modalActive) {
-                await this.startAudio(this.positionSeconds, generation);
-            }
-            if (generation !== this.playbackGeneration || this.isPaused) return;
-            this.startDecoder(this.positionSeconds);
+            await this.startPlaybackAt(this.positionSeconds, generation);
         } catch (error) {
             this.lastError = asError(error);
+            this.stopDecoder();
+            this.stopAudio();
             this.emit("error");
             if (this.options.mediaType === "live" && this.options.reconnect !== false) {
                 this.scheduleReconnect();
@@ -840,18 +863,22 @@ export class NativeVideo extends EventTarget {
             return null;
         }
 
-        const audioTime = this.audio && !this.audio.ended
+        const synchronizationTime = this.audio && !this.audio.ended
             ? this.audio.currentTime
-            : undefined;
-        const frame = audioTime === undefined
+            : this.filePlaybackClockTime();
+        const frame = synchronizationTime === undefined
             ? this.takeNewestDecodedFrame()
-            : this.takeAudioSynchronizedFrame(audioTime);
+            : this.takeSynchronizedFrame(synchronizationTime);
         if (frame) {
             this.handlePresentedFrameState();
             return frame;
         }
 
-        if (this.decoder.isFinished()) {
+        if (
+            this.decoder.isFinished() &&
+            this.pendingFrame === null &&
+            this.decoder.queuedFrames() === 0
+        ) {
             if (this.options.mediaType === "live") {
                 this.stopDecoder();
                 this.lastError = new Error("Live video stream ended");
@@ -898,7 +925,7 @@ export class NativeVideo extends EventTarget {
         this.stopDecoder();
         const decoder = this.dependencies.createDecoder({
             ...this.options,
-            fps: this.fps,
+            fps: this.decoderFrameRate(),
             startTime,
             endTime: this.segmentEnd,
             playbackRate: this.playbackRateValue,
@@ -919,8 +946,81 @@ export class NativeVideo extends EventTarget {
         }
     }
 
+    // D3D11VA cannot decode the 4:2:2/4:4:4 H.264 fixtures in hardware. Limiting
+    // their pre-scale output rate avoids an unbounded A/V lag in the CPU path.
+    private decoderFrameRate(): number {
+        const sourcePixels = this.videoWidth * this.videoHeight;
+        const needsSoftwareChromaConversion =
+            process.platform === "win32" &&
+            sourcePixels >= UHD_PIXEL_COUNT &&
+            this.sourcePixelFormat !== undefined &&
+            SOFTWARE_CHROMA_PIXEL_FORMAT.test(this.sourcePixelFormat);
+        return needsSoftwareChromaConversion
+            ? Math.min(this.fps, MAXIMUM_SOFTWARE_4K_FPS)
+            : this.fps;
+    }
+
     private shouldUseAudio(): boolean {
         return this.options.audio !== false && this.dependencies.createAudio !== undefined;
+    }
+
+    private async startPlaybackAt(startTime: number, generation: number): Promise<void> {
+        if (this.options.mediaType === "live") {
+            if (this.shouldUseAudio()) await this.startAudio(startTime, generation);
+            if (this.isPlaybackGenerationActive(generation)) this.startDecoder(startTime);
+            return;
+        }
+
+        this.startDecoder(startTime);
+        const ready = await this.waitForDecoderReady(generation);
+        if (!ready) return;
+        if (this.shouldUseAudio()) await this.startAudio(startTime, generation);
+        if (!this.audio && this.isPlaybackGenerationActive(generation)) {
+            this.startFilePlaybackClock(startTime);
+        }
+    }
+
+    private async waitForDecoderReady(generation: number): Promise<boolean> {
+        const deadline = performance.now() + DECODER_START_TIMEOUT_MS;
+        while (this.isPlaybackGenerationActive(generation)) {
+            const decoder = this.decoder;
+            if (!decoder) return false;
+            const message = decoder.pollError();
+            if (message) throw new Error(message);
+            if (decoder.isReady()) return true;
+            if (decoder.isFinished()) {
+                throw new Error("Video decoder ended before producing its first frame");
+            }
+            if (performance.now() >= deadline) {
+                throw new Error(
+                    `Video decoder did not produce a frame within ${DECODER_START_TIMEOUT_MS / 1000} seconds`,
+                );
+            }
+            await new Promise<void>((resolve) => setTimeout(resolve, DECODER_READY_POLL_MS));
+        }
+        return false;
+    }
+
+    private isPlaybackGenerationActive(generation: number): boolean {
+        return generation === this.playbackGeneration && !this.destroyed && !this.isPaused;
+    }
+
+    private startFilePlaybackClock(startTime: number): void {
+        this.playbackClockStartSeconds = startTime;
+        this.playbackClockStartedAtMs = performance.now();
+    }
+
+    private filePlaybackClockTime(): number | undefined {
+        if (
+            this.options.mediaType === "live" ||
+            this.playbackClockStartedAtMs === undefined ||
+            this.isPaused
+        ) return undefined;
+        const elapsedSeconds =
+            (performance.now() - this.playbackClockStartedAtMs) / 1000;
+        return this.clampFileTime(
+            this.playbackClockStartSeconds + elapsedSeconds * this.playbackRateValue,
+        );
     }
 
     private async startAudio(startTime: number, generation: number): Promise<void> {
@@ -953,19 +1053,14 @@ export class NativeVideo extends EventTarget {
     private async restartWithAudio(startTime: number, generation: number): Promise<void> {
         try {
             this.stopDecoder();
-            await this.startAudio(startTime, generation);
-            if (
-                generation === this.playbackGeneration &&
-                !this.isPaused &&
-                !this.destroyed
-            ) {
-                this.startDecoder(startTime);
-            }
+            await this.startPlaybackAt(startTime, generation);
         } catch (error) {
             if (generation !== this.playbackGeneration || this.destroyed) return;
             this.lastError = asError(error);
             this.isPaused = true;
+            this.stopDecoder();
             this.stopAudio();
+            this.emit("error");
         }
     }
 
@@ -974,15 +1069,15 @@ export class NativeVideo extends EventTarget {
         this.audio = undefined;
     }
 
-    private takeAudioSynchronizedFrame(audioTime: number): NativeVideoFrame | null {
+    private takeSynchronizedFrame(masterTime: number): NativeVideoFrame | null {
         let frame = this.pendingFrame ?? this.decoder?.pollNext() ?? null;
         let selected: NativeVideoFrame | null = null;
         this.pendingFrame = null;
-        this.positionSeconds = audioTime;
+        this.positionSeconds = masterTime;
 
         while (frame) {
             const frameTime = frame.timestampUs / 1_000_000;
-            const offsetSeconds = frameTime - audioTime;
+            const offsetSeconds = frameTime - masterTime;
             if (offsetSeconds > AUDIO_FRAME_LEAD_SECONDS) {
                 this.pendingFrame = frame;
                 if (!selected) this.syncOffsetMilliseconds = offsetSeconds * 1000;
@@ -996,9 +1091,36 @@ export class NativeVideo extends EventTarget {
 
         if (selected) {
             this.syncOffsetMilliseconds =
-                (selected.timestampUs / 1_000_000 - audioTime) * 1000;
+                (selected.timestampUs / 1_000_000 - masterTime) * 1000;
+            this.requestDecoderCatchUp(selected, masterTime);
         }
         return selected;
+    }
+
+    private requestDecoderCatchUp(frame: NativeVideoFrame, audioTime: number): void {
+        if (this.options.mediaType === "live" || !this.decoder) return;
+        if (
+            this.catchUpTargetUs !== undefined &&
+            frame.timestampUs >= this.catchUpTargetUs
+        ) {
+            this.catchUpTargetUs = undefined;
+        }
+        if (this.catchUpTargetUs !== undefined) return;
+
+        const maximumLagSeconds = Math.max(
+            MINIMUM_CATCH_UP_LAG_SECONDS,
+            CATCH_UP_LAG_FRAMES / this.fps,
+        );
+        const frameTime = frame.timestampUs / 1_000_000;
+        if (frameTime >= audioTime - maximumLagSeconds) return;
+
+        const targetSeconds = Math.max(
+            this.segmentStart,
+            audioTime - AUDIO_FRAME_LEAD_SECONDS,
+        );
+        this.catchUpTargetUs = Math.round(targetSeconds * 1_000_000);
+        this.pendingFrame = null;
+        this.decoder.catchUpTo(this.catchUpTargetUs);
     }
 
     private takeNewestDecodedFrame(): NativeVideoFrame | null {
@@ -1018,6 +1140,8 @@ export class NativeVideo extends EventTarget {
 
     private stopDecoder(): void {
         this.pendingFrame = null;
+        this.catchUpTargetUs = undefined;
+        this.playbackClockStartedAtMs = undefined;
         if (!this.decoder) return;
         this.decodedFrameBase += this.decoder.decodedFrames();
         this.droppedFrameBase += this.decoder.droppedFrames();
@@ -1028,22 +1152,9 @@ export class NativeVideo extends EventTarget {
     }
 
     public setModalState(active: boolean): void {
-        if (this.destroyed || active === this.modalActive) return;
-        this.modalActive = active;
-        if (active) {
-            this.wasPlayingBeforeModal = !this.isPaused;
-            if (!this.wasPlayingBeforeModal) return;
-            this.positionSeconds = this.currentTime;
-            this.playbackGeneration++;
-            this.stopAudio();
-            return;
-        }
-
-        const shouldResume = this.wasPlayingBeforeModal && !this.hasEnded;
-        this.wasPlayingBeforeModal = false;
-        if (shouldResume && this.options.mediaType !== "live") {
-            void this.restartPlayback(this.positionSeconds);
-        }
+        // Native audio and the decoder keep their own clocks/threads. Modal RAF
+        // continues presenting the newest frame due on that same audio clock.
+        void active;
     }
 
     private pauseInternal(dispatch: boolean): void {
@@ -1063,19 +1174,13 @@ export class NativeVideo extends EventTarget {
         this.positionSeconds = startTime;
         this.hasEnded = false;
         try {
-            if (this.shouldUseAudio() && !this.modalActive) {
-                await this.startAudio(startTime, generation);
-            }
-            if (
-                generation !== this.playbackGeneration ||
-                this.destroyed ||
-                this.isPaused
-            ) return;
-            this.startDecoder(startTime);
+            await this.startPlaybackAt(startTime, generation);
         } catch (error) {
             if (generation !== this.playbackGeneration || this.destroyed) return;
             this.lastError = asError(error);
             this.isPaused = true;
+            this.stopDecoder();
+            this.stopAudio();
             this.emit("error");
         }
     }
@@ -1108,6 +1213,7 @@ export class NativeVideo extends EventTarget {
                 if (this.destroyed) return;
                 if (metadata?.width) this.videoWidth = metadata.width;
                 if (metadata?.height) this.videoHeight = metadata.height;
+                this.sourcePixelFormat = metadata?.pixelFormat;
                 if (this.segmentEnd !== undefined) {
                     this.durationValue = this.segmentEnd;
                 } else if (metadata?.duration !== undefined) {

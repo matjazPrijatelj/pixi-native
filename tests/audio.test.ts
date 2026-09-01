@@ -155,6 +155,98 @@ test("Howler-compatible sprites overlap and fade through the native mixer", asyn
     }
 });
 
+test("Windows native audio advances while JS is blocked and batches audible events once", {
+    skip: process.platform !== "win32" || process.arch !== "x64",
+}, async () => {
+    const { Howl, Howler } = await import("../src/pixi-node/audio/index.ts");
+    const howl = new Howl({
+        src: [source],
+        sprite: { blocked: [0, 350] },
+        preloadSprites: true,
+    });
+
+    try {
+        await waitForEvent(howl, "load", 5_000);
+        const id = howl.play("blocked");
+        await waitForEvent(howl, "play", 5_000, id);
+        const events: string[] = [];
+        howl.on("fade", () => events.push("fade"), id);
+        howl.on("end", () => events.push("end"), id);
+        howl.fade(1, 0.5, 100, id);
+
+        const startedAt = performance.now();
+        const initialTime = howl.seek(id) as number;
+        let blockedTime = initialTime;
+        while (performance.now() - startedAt < 500) {
+            if (performance.now() - startedAt >= 150 && blockedTime === initialTime) {
+                blockedTime = howl.seek(id) as number;
+            }
+        }
+
+        assert.ok(blockedTime >= initialTime + 0.08);
+        assert.deepEqual(events, []);
+        await waitUntil(() => events.length === 2, 2_000);
+        assert.deepEqual(events, ["fade", "end"]);
+        await delay(50);
+        assert.deepEqual(events, ["fade", "end"]);
+    } finally {
+        howl.unload();
+        Howler.unload();
+    }
+});
+
+test("Windows streaming audio keeps pace for fifteen seconds without underruns", {
+    skip: process.platform !== "win32" || process.arch !== "x64",
+    timeout: 25_000,
+}, async () => {
+    const { Howl, Howler, nativeAudioEngine } = await import(
+        "../src/pixi-node/audio/index.ts"
+    );
+    const videoSource = fileURLToPath(
+        new URL("../assets/Big_Buck_Bunny_1080_30s.mp4", import.meta.url),
+    );
+    const audio = new Howl({
+        src: [videoSource],
+        sprite: { video: [0, 20_000] },
+        html5: true,
+        preload: false,
+    });
+
+    try {
+        const id = audio.play("video");
+        await waitForEvent(audio, "play", 5_000, id);
+        const initialTime = audio.seek(id) as number;
+        const initialUnderruns = nativeAudioEngine.diagnostics.underruns;
+        const startedAt = performance.now();
+        await delay(15_000);
+        const elapsedSeconds = (performance.now() - startedAt) / 1000;
+        const advancedSeconds = (audio.seek(id) as number) - initialTime;
+        const diagnostics = nativeAudioEngine.diagnostics;
+
+        assert.ok(Math.abs(advancedSeconds - elapsedSeconds) < 0.1);
+        assert.equal(diagnostics.underruns, initialUnderruns);
+        assert.ok(diagnostics.queuedMs >= 1_500);
+        assert.ok(diagnostics.queuedMs <= 2_100);
+    } finally {
+        audio.unload();
+        Howler.unload();
+    }
+});
+
+test("Windows native audio binding preflight is platform-specific", async () => {
+    const { resolveWindowsNativeAudioBindingPath } = await import(
+        "../src/pixi-node/audio/NativeAudioEngine.ts"
+    );
+    assert.throws(
+        () => resolveWindowsNativeAudioBindingPath("linux", "x64"),
+        /only Windows x64/,
+    );
+    assert.match(
+        resolveWindowsNativeAudioBindingPath("win32", "x64"),
+        /native[\\/]audio[\\/]dist[\\/]win32-x64[\\/]native_audio\.node$/,
+    );
+});
+
 interface EventSource {
     once(event: AudioTestEvent, callback: (id?: number) => void, id?: number): unknown;
     off(event: AudioTestEvent, callback: (id?: number) => void, id?: number): unknown;
@@ -183,4 +275,12 @@ function waitForEvent(
 
 function delay(milliseconds: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<void> {
+    const deadline = performance.now() + timeoutMs;
+    while (!predicate()) {
+        if (performance.now() >= deadline) throw new Error("Timed out waiting for condition");
+        await delay(5);
+    }
 }
