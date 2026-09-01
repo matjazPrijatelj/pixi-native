@@ -2,6 +2,7 @@
 
 ## 2026-09-01
 
+- Added a Windows modal move/resize frame callback through the native renderer so GSAP, video clocks, and Pixi rendering continue during title-bar dragging and live resizing.
 - Fixed Linux local image loading by converting `file://` URLs to filesystem paths before passing them to `@napi-rs/canvas`, restoring bitmap-font atlas startup and adding regression coverage.
 - Added a transparent illustrated drum-kit texture and a synthesized eight-sound MP3 audio atlas with normalized hit regions for future pointer input; scene `6` maps U/I/O/P/J/K/L/Č to the kit and flashes each struck component.
 - Made repeated per-voice fades latest-wins from the actual mixer volume, suppressed stale delayed fade events with generation tokens, and moved fade timing to a monotonic voice clock so it remains correct across music-loop boundaries.

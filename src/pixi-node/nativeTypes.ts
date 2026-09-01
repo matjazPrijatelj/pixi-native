@@ -18,6 +18,7 @@ export interface NodeWindowRenderer {
   getCurrentTextureView(): GPUTextureView;
   swap(): void;
   waitForPresent?(): Promise<boolean>;
+  setModalFrameCallback?(callback?: () => void): void;
   resize(): void;
   destroy(): void;
 }

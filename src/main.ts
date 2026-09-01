@@ -194,12 +194,17 @@ native.window.on("keyUp", (event) => {
   }
 });
 
+const renderFrame = (timestamp = performance.now()): void => {
+  app.ticker.update(timestamp);
+};
+
 app.ticker.add((ticker) => {
   animateDemoScene(scene, ticker.deltaMS);
   fpsOverlay.tick(ticker.deltaMS);
   app.renderer.render(app.stage);
   native.renderer.swap();
 });
+native.renderer.setModalFrameCallback?.(renderFrame);
 app.ticker.start();
 
 let shuttingDown = false;
@@ -231,6 +236,7 @@ const shutdown = async (): Promise<void> => {
   app.destroy({ removeView: true }, { children: true, context: true, style: true });
   await destroyBitmapFonts();
   Howler.unload();
+  native.renderer.setModalFrameCallback?.();
   native.destroy();
   process.exit(0);
 };
@@ -270,6 +276,10 @@ const restartApp = async (): Promise<void> => {
 
   try {
     Howler.unload();
+  } catch {}
+
+  try {
+    native.renderer.setModalFrameCallback?.();
   } catch {}
 
   try {

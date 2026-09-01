@@ -402,11 +402,14 @@ diff --git a/src/dawn/node/Module.cpp b/src/dawn/node/Module.cpp
 index cb70833c..220e420e 100644
 --- a/src/dawn/node/Module.cpp
 +++ b/src/dawn/node/Module.cpp
-@@ -30,10 +30,22 @@
+@@ -30,10 +30,25 @@
  #include <tuple>
  #include <utility>
  #include <vector>
 +#include <map>
++#if defined(_WIN32)
++#include <windows.h>
++#endif
  
  #include "dawn/dawn_proc.h"
  #include "src/dawn/node/binding/Flags.h"
@@ -425,7 +428,7 @@ index cb70833c..220e420e 100644
  
  #ifdef DAWN_EMIT_COVERAGE
  extern "C" {
-@@ -43,10 +55,45 @@ int __llvm_profile_write_file(void);
+@@ -43,10 +55,59 @@ int __llvm_profile_write_file(void);
  }
  #endif  // DAWN_EMIT_COVERAGE
  
@@ -442,6 +445,20 @@ index cb70833c..220e420e 100644
 +
  namespace {
  
++#if defined(_WIN32)
++constexpr UINT_PTR kModalFrameTimerId = 0x50495849;
++
++struct ModalFrameState {
++    HWND hwnd = nullptr;
++    WNDPROC previousWindowProc = nullptr;
++    Napi::FunctionReference callback;
++    bool invoking = false;
++};
++
++ModalFrameState gModalFrameState;
++
++LRESULT CALLBACK ModalWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
++#endif
 +class PresentWaitWorker : public Napi::AsyncWorker {
 +  public:
 +    PresentWaitWorker(Napi::Env env, void* nativeWindow)
@@ -472,7 +489,7 @@ index cb70833c..220e420e 100644
  
      std::tuple<std::vector<std::string>> args;
      if (auto res = wgpu::interop::FromJS(info, args); !res) {
-@@ -68,7 +115,212 @@ Napi::Value CreateGPU(const Napi::CallbackInfo& info) {
+@@ -68,7 +115,315 @@ Napi::Value CreateGPU(const Napi::CallbackInfo& info) {
      }
  
      // Construct a wgpu::interop::GPU interface, implemented by wgpu::bindings::GPU.
@@ -494,6 +511,7 @@ index cb70833c..220e420e 100644
 +            InstanceMethod("getCurrentTextureView", &Renderer::getCurrentTextureView),
 +            InstanceMethod("swap", &Renderer::swap),
 +            InstanceMethod("waitForPresent", &Renderer::waitForPresent),
++            InstanceMethod("setModalFrameCallback", &Renderer::setModalFrameCallback),
 +            InstanceMethod("resize", &Renderer::resize),
 +            InstanceMethod("destroy", &Renderer::destroy),
 +        });
@@ -522,7 +540,16 @@ index cb70833c..220e420e 100644
 +        _nativeWindow = wgpu::sdl::GetNativeWindowHandle(nativeData.Data());
 +
 +        _createSurface(env);
++#if defined(_WIN32)
++        _installModalFrameHook();
++#endif
 +    };
++
++    ~Renderer() {
++#if defined(_WIN32)
++        _uninstallModalFrameHook();
++#endif
++    }
 +
 +    static Napi::Object NewInstance(Napi::Env env, Napi::Value device, Napi::Value window, Napi::Value presentMode) {
 +        return constructor.New({ device, window, presentMode });
@@ -580,6 +607,24 @@ index cb70833c..220e420e 100644
 +        return promise;
 +    }
 +
++    Napi::Value setModalFrameCallback(const Napi::CallbackInfo& info) {
++        const Napi::Env& env = info.Env();
++        if (info.Length() > 1 || (info.Length() == 1 &&
++            !info[0].IsFunction() && !info[0].IsUndefined())) {
++            Napi::TypeError::New(env, "modal frame callback must be a function or undefined")
++                .ThrowAsJavaScriptException();
++            return env.Undefined();
++        }
++#if defined(_WIN32)
++        if (info.Length() == 0 || info[0].IsUndefined()) {
++            gModalFrameState.callback.Reset();
++        } else {
++            gModalFrameState.callback.Reset(info[0].As<Napi::Function>(), 1);
++        }
++#endif
++        return env.Undefined();
++    }
++
 +    Napi::Value resize(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
 +        _createSurface(env);
@@ -588,6 +633,9 @@ index cb70833c..220e420e 100644
 +
 +    Napi::Value destroy(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
++#if defined(_WIN32)
++        _uninstallModalFrameHook();
++#endif
 +        _destroySurface();
 +        _device.Reset();
 +        _window.Reset();
@@ -639,7 +687,79 @@ index cb70833c..220e420e 100644
 +        wgpuConfig.presentMode = _wgpuPresentMode;
 +        procs->surfaceConfigure(_wgpuSurface, &wgpuConfig);
 +    }
++
++#if defined(_WIN32)
++    void _installModalFrameHook() {
++        HWND hwnd = static_cast<HWND>(_nativeWindow);
++        if (hwnd == nullptr || gModalFrameState.hwnd != nullptr) return;
++
++        SetLastError(ERROR_SUCCESS);
++        auto previous = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
++            hwnd,
++            GWLP_WNDPROC,
++            reinterpret_cast<LONG_PTR>(&ModalWindowProc),
++        ));
++        if (previous == nullptr && GetLastError() != ERROR_SUCCESS) return;
++
++        gModalFrameState.hwnd = hwnd;
++        gModalFrameState.previousWindowProc = previous;
++    }
++
++    void _uninstallModalFrameHook() {
++        HWND hwnd = static_cast<HWND>(_nativeWindow);
++        if (hwnd == nullptr || gModalFrameState.hwnd != hwnd) return;
++
++        KillTimer(hwnd, kModalFrameTimerId);
++        if (gModalFrameState.previousWindowProc != nullptr) {
++            SetWindowLongPtrW(
++                hwnd,
++                GWLP_WNDPROC,
++                reinterpret_cast<LONG_PTR>(gModalFrameState.previousWindowProc),
++            );
++        }
++        gModalFrameState.callback.Reset();
++        gModalFrameState.hwnd = nullptr;
++        gModalFrameState.previousWindowProc = nullptr;
++        gModalFrameState.invoking = false;
++    }
++#endif
 +};
++
++#if defined(_WIN32)
++LRESULT CALLBACK ModalWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
++    const auto previousWindowProc = gModalFrameState.previousWindowProc;
++    switch (message) {
++        case WM_ENTERSIZEMOVE:
++        case WM_ENTERMENULOOP:
++            SetTimer(hwnd, kModalFrameTimerId, 16, nullptr);
++            break;
++        case WM_TIMER:
++            if (hwnd == gModalFrameState.hwnd &&
++                wParam == kModalFrameTimerId &&
++                !gModalFrameState.callback.IsEmpty() &&
++                !gModalFrameState.invoking) {
++                gModalFrameState.invoking = true;
++                gModalFrameState.callback.Call({});
++                if (gModalFrameState.callback.Env().IsExceptionPending()) {
++                    gModalFrameState.callback.Env().GetAndClearPendingException();
++                }
++                gModalFrameState.invoking = false;
++                return 0;
++            }
++            break;
++        case WM_EXITSIZEMOVE:
++        case WM_EXITMENULOOP:
++            KillTimer(hwnd, kModalFrameTimerId);
++            break;
++        default:
++            break;
++    }
++
++    return previousWindowProc == nullptr
++        ? DefWindowProcW(hwnd, message, wParam, lParam)
++        : CallWindowProcW(previousWindowProc, hwnd, message, wParam, lParam);
++}
++#endif
 +
 +Napi::Value RenderGPUDeviceToWindow(const Napi::CallbackInfo& info) {
 +    const Napi::Env& env = info.Env();
