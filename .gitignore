@@ -38,17 +38,6 @@ native/**/build/
 native/**/dawn/
 native/**/depot_tools/
 
-# Keep the Linux x64 prebuilt addon;
-native/**/dist/
-!native/gpu/dist/
-native/gpu/dist/*
-!native/gpu/dist/linux-x64/
-native/gpu/dist/linux-x64/*
-!native/gpu/dist/linux-x64/dawn.node
-!native/gpu/dist/win32-x64/
-native/gpu/dist/win32-x64/*
-!native/gpu/dist/win32-x64/d3dcompiler_47.dll
-!native/gpu/dist/win32-x64/dawn.node
 
 # Crash dumps
 core
