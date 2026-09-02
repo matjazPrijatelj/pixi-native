@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import type { SpriteTestScene } from "./demo/test/SpriteTest.ts";
 import type { AudioTestScene } from "./demo/test/AudioTest.ts";
 import type { RainSpriteTestScene } from "./demo/test/RainSpriteTest.ts";
+import type { VideoTestScene } from "./demo/test/VideoTest.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -26,12 +27,14 @@ const {
   createAudioTest,
   createRtpVideoTest,
   createRainSpriteTest,
+  createParticleTest,
   disposeDemoScene,
   DYNAMIC_BITMAP_FONT_NAME,
   installDynamicBitmapTextFont,
 } = await import("./demo/DemoScene.ts");
 
 const { FpsOverlay } = await import("./demo/FpsOverlay.ts");
+const { ParticleEmitter } = await import("./demo/ParticleEmitter.ts");
 const { Howler } = await import("./pixi-node/audio/index.ts");
 const { getSceneIndexForKey, getSpriteCountDeltaForKey, getVideoIndexForKey } =
   await import("./demo/sceneNavigation.ts");
@@ -149,19 +152,33 @@ scenes.push(() =>
   }),
 );
 
+const particleSceneIndex = scenes.length;
+scenes.push(() => createParticleTest());
+
 let index = 0;
 let scene = scenes[index]();
+app.stage.sortableChildren = true;
+scene.zIndex = 0;
 app.stage.addChild(scene);
+const particleEmitter = new ParticleEmitter(spriteTextures[0], {
+  width: native.canvas.width,
+  height: native.canvas.height,
+});
+app.stage.addChild(particleEmitter.container);
+particleEmitter.container.zIndex = 100;
 const fpsOverlay = new FpsOverlay();
 app.stage.addChild(fpsOverlay);
+fpsOverlay.zIndex = 200;
 fpsOverlay.alignRight(native.canvas.width);
 
 const selectScene = (nextIndex: number): void => {
   if (nextIndex === index) return;
   disposeDemoScene(scene);
+  if (index === particleSceneIndex) particleEmitter.setEnabled(false);
   index = nextIndex;
   scene = scenes[index]();
   app.stage.addChild(scene);
+  if (index === particleSceneIndex) particleEmitter.setEnabled(true);
 };
 
 const selectVideo = (nextVideoIndex: number): void => {
@@ -177,6 +194,7 @@ const resizeActiveScene = (): void => {
     resize?: (width: number, height: number) => void;
   };
   resizable.resize?.(native.canvas.width, native.canvas.height);
+  particleEmitter.resize(native.canvas.width, native.canvas.height);
   fpsOverlay.alignRight(native.canvas.width);
 };
 
@@ -245,6 +263,11 @@ native.window.on("keyDown", (event) => {
     return;
   }
 
+  if (String(event.key ?? "").toLowerCase() === "tab" && !event.repeat) {
+    particleEmitter.setEnabled(!particleEmitter.enabled);
+    return;
+  }
+
   if (event?.key === "r") {
     console.warn("Restarting...");
     restartApp();
@@ -256,6 +279,9 @@ native.window.on("keyDown", (event) => {
 
   const rainScene = scene as unknown as Partial<RainSpriteTestScene>;
   if (rainScene.handleKey?.(event.key, event.repeat)) return;
+
+  const videoScene = scene as unknown as Partial<VideoTestScene>;
+  if (videoScene.handleKey?.(event.key, event.repeat)) return;
 
   const spriteScene = scene as unknown as Partial<SpriteTestScene>;
   const spriteCountDelta = getSpriteCountDeltaForKey(event.key, event.repeat);
@@ -316,6 +342,9 @@ native.window.on("keyUp", (event) => {
 
 app.ticker.add((ticker) => {
   animateDemoScene(scene, ticker.deltaMS);
+  (scene as typeof scene & { renderMask?: (renderer: typeof app.renderer) => void })
+    .renderMask?.(app.renderer);
+  particleEmitter.update(ticker.deltaMS);
   fpsOverlay.tick(ticker.deltaMS);
   app.renderer.render(app.stage);
   native.renderer.swap();
@@ -360,6 +389,7 @@ const shutdown = async (): Promise<void> => {
   shuttingDown = true;
   app.ticker.stop();
   stopActiveScene();
+  particleEmitter.destroy();
   const queue = native.device.queue as GPUQueue & {
     onSubmittedWorkDone?: () => Promise<void>;
   };
@@ -387,6 +417,7 @@ const restartApp = async (): Promise<void> => {
 
   app.ticker.stop();
   stopActiveScene();
+  particleEmitter.destroy();
 
   try {
     const queue = native.device.queue as GPUQueue & {

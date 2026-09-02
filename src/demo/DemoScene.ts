@@ -7,6 +7,7 @@ import { createVideoTest } from "./test/VideoTest.ts";
 import { createAudioTest } from "./test/AudioTest.ts";
 import { createRtpVideoTest } from "./test/RtpVideoTest.ts";
 import { createRainSpriteTest } from "./test/RainSpriteTest.ts";
+import { createParticleTest } from "./test/ParticleTest.ts";
 
 export {
   createGraphicsTest,
@@ -17,6 +18,7 @@ export {
   createAudioTest,
   createRtpVideoTest,
   createRainSpriteTest,
+  createParticleTest,
 };
 export type { AudioTestScene } from "./test/AudioTest.ts";
 export type { SpriteTestScene } from "./test/SpriteTest.ts";

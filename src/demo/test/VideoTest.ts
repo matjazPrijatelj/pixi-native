@@ -1,4 +1,4 @@
-import { Container, Text } from "pixi.js";
+import { Container, Graphics, RenderTexture, Sprite, Text, type Renderer } from "pixi.js";
 import {
   NativeVideo,
   NativeVideoSprite,
@@ -13,25 +13,31 @@ const WIDTH = 1280;
 const HEIGHT = 720;
 const VIDEO_TOP_INSET = 92;
 
+export interface VideoTestScene extends DisposableDemoScene {
+  handleKey(key: string | null, repeat?: number): boolean;
+  resize(width: number, height: number): void;
+  update(deltaMS?: number): void;
+  renderMask(renderer: Renderer): void;
+}
+
 export function createVideoTest(
   source: string,
   viewport: { width: number; height: number },
   label = source,
   fps = 30,
-): DisposableDemoScene {
-  const scene = new Container() as DisposableDemoScene;
+): VideoTestScene {
+  const scene = new Container() as VideoTestScene;
   const fileName = label.split(/[\\/]/).pop() ?? label;
-  scene.addChild(
-    new Text({
-      text: `VIDEO TEST  [5]  ${fileName}  [UP/DOWN: change video]`,
-      style: {
-        fontFamily: "Arial",
-        fontSize: 26,
-        fill: 0xffffff,
-        stroke: { color: 0x000000, width: 3 },
-      },
-    }),
-  );
+  const title = new Text({
+    text: `VIDEO TEST  [5]  ${fileName}  [UP/DOWN: change video]  [M: mask off]`,
+    style: {
+      fontFamily: "Arial",
+      fontSize: 26,
+      fill: 0xffffff,
+      stroke: { color: 0x000000, width: 3 },
+    },
+  });
+  scene.addChild(title);
 
   const video = new NativeVideo(source, {
     width: WIDTH,
@@ -46,23 +52,69 @@ export function createVideoTest(
 
   const status = createMetricBitmapText("NV12 video loading...", 18);
   status.position.set(24, 60);
+  const maskGraphics = new Graphics();
+  const maskTexture = RenderTexture.create({
+    width: Math.max(1, viewport.width),
+    height: Math.max(1, viewport.height),
+  });
+  const maskSprite = new Sprite(maskTexture);
+  let maskEnabled = false;
+  let maskTime = 0;
+  let videoRect = fitVideoRect(
+    WIDTH,
+    HEIGHT,
+    viewport.width,
+    viewport.height,
+    VIDEO_TOP_INSET,
+  );
 
-  const videoScene = scene as DisposableDemoScene & {
-    resize(width: number, height: number): void;
-    update(): void;
+  const redrawMask = (): void => {
+    const centerX = videoRect.x + videoRect.width * (0.5 + Math.sin(maskTime) * 0.28);
+    const centerY = videoRect.y + videoRect.height * (0.5 + Math.cos(maskTime * 1.27) * 0.2);
+    const radiusX = videoRect.width * (0.28 + Math.sin(maskTime * 1.6) * 0.06);
+    const radiusY = videoRect.height * (0.34 + Math.cos(maskTime * 1.15) * 0.06);
+    maskGraphics.clear().ellipse(centerX, centerY, radiusX, radiusY).fill(0xffffff);
   };
+
+  const updateMaskState = (): void => {
+    sprite.mask = maskEnabled ? maskSprite : null;
+    title.text =
+      `VIDEO TEST  [5]  ${fileName}  [UP/DOWN: change video]` +
+      `  [M: mask ${maskEnabled ? "on" : "off"}]`;
+  };
+
+  const videoScene = scene;
   videoScene.resize = (width, height) => {
-    const rect = fitVideoRect(WIDTH, HEIGHT, width, height, VIDEO_TOP_INSET);
-    sprite.position.set(rect.x, rect.y);
-    sprite.width = rect.width;
-    sprite.height = rect.height;
+    videoRect = fitVideoRect(WIDTH, HEIGHT, width, height, VIDEO_TOP_INSET);
+    sprite.position.set(videoRect.x, videoRect.y);
+    sprite.width = videoRect.width;
+    sprite.height = videoRect.height;
+    maskTexture.resize(Math.max(1, width), Math.max(1, height));
+    redrawMask();
   };
 
-  scene.addChild(sprite, status);
+  scene.addChild(sprite, maskSprite, status);
   videoScene.resize(viewport.width, viewport.height);
+  updateMaskState();
+
+  videoScene.renderMask = (renderer): void => {
+    if (!maskEnabled) return;
+    renderer.render(maskGraphics, { renderTexture: maskTexture });
+  };
+
+  videoScene.handleKey = (key, repeat = 0): boolean => {
+    if (repeat || String(key ?? "").toLowerCase() !== "m") return false;
+    maskEnabled = !maskEnabled;
+    updateMaskState();
+    return true;
+  };
 
   let nextStatusUpdateTime = 0;
-  videoScene.update = () => {
+  videoScene.update = (deltaMS = 0) => {
+    if (maskEnabled) {
+      maskTime += deltaMS / 1000;
+      redrawMask();
+    }
     const stats = video.stats;
     const audioDiagnostics = nativeAudioEngine.diagnostics;
     if (stats.presentedFrames !== previousPresentedFrames) {
@@ -114,6 +166,9 @@ export function createVideoTest(
     if (disposed) return;
     disposed = true;
     videoScene.update = (): void => undefined;
+    videoScene.renderMask = (): void => undefined;
+    sprite.mask = null;
+    maskTexture.destroy(true);
     video.destroy();
   };
   return videoScene;

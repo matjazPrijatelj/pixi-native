@@ -1,5 +1,9 @@
 # Development history
 
+- Added an opt-in animated Graphics mask to the video test, toggled with `M`.
+
+- Added a global bounded PixiJS ParticleContainer test on scene 9, with Tab toggling and scene-aware enable/disable lifecycle.
+
 ## 2026-09-02
 
 - Restored Dawn AsyncRunner polling through `setTimeout(..., 33)` for testing instead of unbounded `setImmediate` scheduling.

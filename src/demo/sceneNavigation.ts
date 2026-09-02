@@ -20,6 +20,7 @@ export function getSceneIndexForKey(
   const numberedIndex = key === null ? undefined : NUMBER_KEYS[key];
   if (numberedIndex !== undefined && numberedIndex < sceneCount)
     return numberedIndex;
+  if (key === "9") return sceneCount - 1;
   if (key === "left") return (currentIndex - 1 + sceneCount) % sceneCount;
   if (key === "right") return (currentIndex + 1) % sceneCount;
   return null;

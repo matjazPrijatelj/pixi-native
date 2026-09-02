@@ -60,18 +60,19 @@ export function createRainSpriteTest(
     const scene = new Container() as RainSpriteTestScene;
     const drops: RainDrop[] = [];
     const animationTicker = { deltaTime: 0 } as Ticker;
-    const frameWidth = Math.max(1, Math.floor(dropTexture.width / FRAME_COLUMNS));
-    const frameHeight = Math.max(1, Math.floor(dropTexture.height / FRAME_ROWS));
     const frameTextures = Array.from({ length: FRAME_COUNT }, (_, index) =>
-        new Texture({
-            source: dropTexture.source,
-            frame: new Rectangle(
-                (index % FRAME_COLUMNS) * frameWidth,
-                Math.floor(index / FRAME_COLUMNS) * frameHeight,
-                frameWidth,
-                frameHeight,
-            ),
-        }),
+        (() => {
+            const column = index % FRAME_COLUMNS;
+            const row = Math.floor(index / FRAME_COLUMNS);
+            const left = Math.round((column * dropTexture.width) / FRAME_COLUMNS);
+            const right = Math.round(((column + 1) * dropTexture.width) / FRAME_COLUMNS);
+            const top = Math.round((row * dropTexture.height) / FRAME_ROWS);
+            const bottom = Math.round(((row + 1) * dropTexture.height) / FRAME_ROWS);
+            return new Texture({
+                source: dropTexture.source,
+                frame: new Rectangle(left, top, right - left, bottom - top),
+            });
+        })(),
     );
     const title = createMetricBitmapText(
         "RAIN SPRITE TEST  [8]  |  drops: 0  |  UP +2 / DOWN -2",

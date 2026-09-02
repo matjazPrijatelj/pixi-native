@@ -15,6 +15,8 @@ test("number keys select the matching scene", () => {
     assert.equal(getSceneIndexForKey("6", 0, 6), 5);
     assert.equal(getSceneIndexForKey("7", 0, 7), 6);
     assert.equal(getSceneIndexForKey("8", 0, 8), 7);
+    assert.equal(getSceneIndexForKey("9", 0, 9), 8);
+    assert.equal(getSceneIndexForKey("9", 0, 6), 5);
 });
 
 test("arrow keys navigate with wraparound", () => {
