@@ -2,6 +2,8 @@
 
 ## 2026-09-02
 
+- Kept Dawn's AsyncRunner on setImmediate and limited the event-scheduler patch to an idle-task early exit, removing the broad 100 ms delay from all WebGPU async operations.
+- Split the Dawn customization into four ordered patches for the window surface adapter, D3D12 frame-latency wait, Node renderer surface, and Node event scheduler; updated the Dawn bootstrap to apply each patch separately and verified reverse-apply checks plus TypeScript.
 - Moved the Windows modal move/resize frame hook out of the Dawn Node binding into a separate native window addon with per-window state, preserving synchronous 16 ms modal rendering and A/V state callbacks.
 - Removed the modal callback surface from the Dawn renderer binding and added `pnpm native:window:build`; verified the refactor with `pnpm typecheck`, native builds, and a Windows move/resize smoke test.
 - Retried D3D11VA/VA-API decoding up to five times before CPU fallback, with interruptible 500 ms delays and first-frame success as the hardware acceptance boundary.

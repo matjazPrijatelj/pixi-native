@@ -12,8 +12,16 @@ execFileSync('git', [...C.gitConfigArgs, 'remote', 'add', 'origin', C.dawn.url],
 execFileSync('git', [...C.gitConfigArgs, 'fetch', '--depth', '1', 'origin', C.dawn.commit], { stdio: 'inherit', cwd: C.dir.dawn })
 execFileSync('git', [...C.gitConfigArgs, 'checkout', 'FETCH_HEAD'], { stdio: 'inherit', cwd: C.dir.dawn })
 
-console.log("applying dawn.patch")
+console.log("applying Dawn patches")
 process.chdir(C.dir.dawn)
-execFileSync('git', [...C.gitConfigArgs, 'apply', '--recount', '--ignore-space-change', '--ignore-whitespace', '--exclude=DEPS', Path.join(C.dir.root, 'dawn.patch')], {
-	stdio: 'inherit',
-})
+const patchDirectory = Path.join(C.dir.root, 'patches')
+const patchFiles = (await Fs.promises.readdir(patchDirectory))
+	.filter((file) => file.endsWith('.patch'))
+	.sort()
+
+for (const patchFile of patchFiles) {
+	console.log(`applying ${patchFile}`)
+	execFileSync('git', [...C.gitConfigArgs, 'apply', '--recount', '--ignore-space-change', '--ignore-whitespace', Path.join(patchDirectory, patchFile)], {
+		stdio: 'inherit',
+	})
+}

@@ -1,0 +1,25 @@
+diff --git a/src/dawn/CMakeLists.txt b/src/dawn/CMakeLists.txt
+index 5a7863321..338cf068d 100644
+--- a/src/dawn/CMakeLists.txt
++++ b/src/dawn/CMakeLists.txt
+@@ -199,6 +199,8 @@ if (DAWN_BUILD_NODE_BINDINGS)
+   add_subdirectory(node)
+ endif()
+ 
++add_subdirectory(sdl)
++
+ ###############################################################################
+ # libdawn_proc
+ #   Only built when not building for Emscripten
+diff --git a/src/dawn/node/CMakeLists.txt b/src/dawn/node/CMakeLists.txt
+index f28474bfa..cb98a384e 100644
+--- a/src/dawn/node/CMakeLists.txt
++++ b/src/dawn/node/CMakeLists.txt
+@@ -113,6 +113,7 @@ target_link_libraries(dawn_node
+         dawn_proc
+         dawn_warnings_config
+         libtint
++        dawn_sdl
+ )
+ target_include_directories(dawn_node
+     PRIVATE
