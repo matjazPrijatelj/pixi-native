@@ -6,6 +6,7 @@ import { createBitmapTextTest } from "./test/BitmapTextTest.ts";
 import { createVideoTest } from "./test/VideoTest.ts";
 import { createAudioTest } from "./test/AudioTest.ts";
 import { createRtpVideoTest } from "./test/RtpVideoTest.ts";
+import { createRainSpriteTest } from "./test/RainSpriteTest.ts";
 
 export {
   createGraphicsTest,
@@ -15,9 +16,11 @@ export {
   createVideoTest,
   createAudioTest,
   createRtpVideoTest,
+  createRainSpriteTest,
 };
 export type { AudioTestScene } from "./test/AudioTest.ts";
 export type { SpriteTestScene } from "./test/SpriteTest.ts";
+export type { RainSpriteTestScene } from "./test/RainSpriteTest.ts";
 export * from "./bitmapFonts.ts";
 export * from "./sceneLifecycle.ts";
 

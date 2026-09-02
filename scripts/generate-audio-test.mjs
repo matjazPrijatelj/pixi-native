@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createCanvas } from "@napi-rs/canvas";
 
 const SAMPLE_RATE = 48_000;
 const CHANNELS = 2;
@@ -77,6 +78,53 @@ await writeFile(
         2,
     )}\n`,
 );
+
+const rainDropFrameCount = Math.ceil(SAMPLE_RATE * 0.18);
+const rainDropWav = Buffer.alloc(44 + rainDropFrameCount * CHANNELS * 2);
+rainDropWav.write("RIFF", 0);
+rainDropWav.writeUInt32LE(36 + rainDropFrameCount * CHANNELS * 2, 4);
+rainDropWav.write("WAVEfmt ", 8);
+rainDropWav.writeUInt32LE(16, 16);
+rainDropWav.writeUInt16LE(1, 20);
+rainDropWav.writeUInt16LE(CHANNELS, 22);
+rainDropWav.writeUInt32LE(SAMPLE_RATE, 24);
+rainDropWav.writeUInt32LE(SAMPLE_RATE * CHANNELS * 2, 28);
+rainDropWav.writeUInt16LE(CHANNELS * 2, 32);
+rainDropWav.writeUInt16LE(16, 34);
+rainDropWav.write("data", 36);
+rainDropWav.writeUInt32LE(rainDropFrameCount * CHANNELS * 2, 40);
+for (let frame = 0; frame < rainDropFrameCount; frame++) {
+    const time = frame / SAMPLE_RATE;
+    const envelope = Math.exp(-time * 24);
+    const sample = Math.sin(2 * Math.PI * (950 - time * 3800) * time) * envelope * 0.55;
+    const value = toPcm16(sample);
+    const offset = 44 + frame * CHANNELS * 2;
+    rainDropWav.writeInt16LE(value, offset);
+    rainDropWav.writeInt16LE(value, offset + 2);
+}
+await writeFile(join(outputDirectory, "rain-drop.wav"), rainDropWav);
+
+const rainCanvas = createCanvas(384, 128);
+const rainContext = rainCanvas.getContext("2d");
+for (let frame = 0; frame < 4; frame++) {
+    const centerX = frame * 96 + 48;
+    const tipY = 6 + frame * 2;
+    const bodyY = 72 + (frame % 2) * 3;
+    const radius = 31 - (frame % 2) * 2;
+    const gradient = rainContext.createLinearGradient(centerX, tipY, centerX, 120);
+    gradient.addColorStop(0, "#d9f7ff");
+    gradient.addColorStop(0.45, "#47cfff");
+    gradient.addColorStop(1, "#1874d1");
+    rainContext.fillStyle = gradient;
+    rainContext.beginPath();
+    rainContext.moveTo(centerX, tipY);
+    rainContext.bezierCurveTo(centerX - 6, 22, centerX - radius, 46, centerX - radius, bodyY);
+    rainContext.arc(centerX, bodyY, radius, Math.PI, 0);
+    rainContext.bezierCurveTo(centerX + radius, 46, centerX + 6, 22, centerX, tipY);
+    rainContext.closePath();
+    rainContext.fill();
+}
+await writeFile(join(repositoryRoot, "assets", "rain-drop.png"), rainCanvas.toBuffer("image/png"));
 
 const drumSprite = {};
 let drumDurationSeconds = DRUM_PADDING_SECONDS;

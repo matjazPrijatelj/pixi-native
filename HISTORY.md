@@ -2,6 +2,10 @@
 
 ## 2026-09-02
 
+- Rain Sprite scena se začne s štirimi kapljicami, uporablja en ponovno uporaben ticker adapter in po dolgem frame-u ne izvaja catch-up landing zanke.
+- Made Rain Sprite mute mode skip Howl creation and native audio preload until audio is explicitly enabled.
+- Made Rain Sprite audio muted by default with an M toggle for controlled freeze diagnosis.
+- Added Rain Sprite scene `8` with animated falling raindrops, UP +2/DOWN -2 controls, and a generated landing sound for every completed fall.
 - Added SDL-to-DOM-like keyboard event dispatch with key, code, modifier, and repeat data while preserving existing scene navigation and audio shortcuts.
 - Added SDL-to-DOM-like mouse input dispatch for Pixi, including native canvas listeners, global pointer lifecycle delivery, and clickable drum pads in the Audio test scene.
 - Kept Dawn's AsyncRunner on setImmediate and limited the event-scheduler patch to an idle-task early exit, removing the broad 100 ms delay from all WebGPU async operations.

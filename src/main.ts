@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import type { SpriteTestScene } from "./demo/test/SpriteTest.ts";
 import type { AudioTestScene } from "./demo/test/AudioTest.ts";
+import type { RainSpriteTestScene } from "./demo/test/RainSpriteTest.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -24,6 +25,7 @@ const {
   createVideoTest,
   createAudioTest,
   createRtpVideoTest,
+  createRainSpriteTest,
   disposeDemoScene,
   DYNAMIC_BITMAP_FONT_NAME,
   installDynamicBitmapTextFont,
@@ -44,6 +46,9 @@ const bitmapFontPath = fileURLToPath(
 );
 const drumTexturePath = fileURLToPath(
   new URL("../assets/drum-kit.png", import.meta.url),
+);
+const rainDropTexturePath = fileURLToPath(
+  new URL("../assets/rain-drop.png", import.meta.url),
 );
 
 installDynamicBitmapTextFont();
@@ -71,6 +76,7 @@ const spriteTextures = (await Promise.all(
   texturePaths.map(loadNativeTexture),
 )) as [PixiTexture, PixiTexture, PixiTexture];
 const drumTexture = await loadNativeTexture(drumTexturePath);
+const rainDropTexture = await loadNativeTexture(rainDropTexturePath);
 
 const videos = [
   { file: "jerneja_en_doubleZero.mp4", fps: 30 },
@@ -135,6 +141,13 @@ if (supportsNativeVideo(process.platform)) {
     }),
   );
 }
+
+scenes.push(() =>
+  createRainSpriteTest(rainDropTexture, {
+    width: native.canvas.width,
+    height: native.canvas.height,
+  }),
+);
 
 let index = 0;
 let scene = scenes[index]();
@@ -241,6 +254,9 @@ native.window.on("keyDown", (event) => {
   const audioScene = scene as unknown as Partial<AudioTestScene>;
   if (audioScene.handleKey?.(event.key, event.repeat)) return;
 
+  const rainScene = scene as unknown as Partial<RainSpriteTestScene>;
+  if (rainScene.handleKey?.(event.key, event.repeat)) return;
+
   const spriteScene = scene as unknown as Partial<SpriteTestScene>;
   const spriteCountDelta = getSpriteCountDeltaForKey(event.key, event.repeat);
 
@@ -320,6 +336,8 @@ const destroySpriteTextures = async (): Promise<void> => {
   await Promise.all(texturePaths.map((path) => Assets.unload(path)));
   drumTexture.destroy(true);
   await Assets.unload(drumTexturePath);
+  rainDropTexture.destroy(true);
+  await Assets.unload(rainDropTexturePath);
 };
 
 /**
