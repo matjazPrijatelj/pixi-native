@@ -48,7 +48,7 @@ const drumTexturePath = fileURLToPath(
   new URL("../assets/drum-kit.png", import.meta.url),
 );
 const rainDropTexturePath = fileURLToPath(
-  new URL("../assets/rain-drop.png", import.meta.url),
+  new URL("../assets/rain-drop-30.png", import.meta.url),
 );
 
 installDynamicBitmapTextFont();

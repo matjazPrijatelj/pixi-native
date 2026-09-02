@@ -9,6 +9,9 @@ const INITIAL_DROP_COUNT = 4;
 const TITLE_MARGIN = 96;
 const MAX_UPDATE_MS = 100;
 const ANIMATION_TICK_MS = 1000 / 60;
+const FRAME_COLUMNS = 5;
+const FRAME_ROWS = 6;
+const FRAME_COUNT = FRAME_COLUMNS * FRAME_ROWS;
 const RAIN_DROP_SOURCE = fileURLToPath(
     new URL("../../../assets/audio/rain-drop.wav", import.meta.url),
 );
@@ -57,13 +60,18 @@ export function createRainSpriteTest(
     const scene = new Container() as RainSpriteTestScene;
     const drops: RainDrop[] = [];
     const animationTicker = { deltaTime: 0 } as Ticker;
-    const frameWidth = Math.max(1, Math.floor(dropTexture.width / 4));
-    const frameTextures = [0, 1, 2, 3].map(
-        (index) =>
-            new Texture({
-                source: dropTexture.source,
-                frame: new Rectangle(index * frameWidth, 0, frameWidth, dropTexture.height),
-            }),
+    const frameWidth = Math.max(1, Math.floor(dropTexture.width / FRAME_COLUMNS));
+    const frameHeight = Math.max(1, Math.floor(dropTexture.height / FRAME_ROWS));
+    const frameTextures = Array.from({ length: FRAME_COUNT }, (_, index) =>
+        new Texture({
+            source: dropTexture.source,
+            frame: new Rectangle(
+                (index % FRAME_COLUMNS) * frameWidth,
+                Math.floor(index / FRAME_COLUMNS) * frameHeight,
+                frameWidth,
+                frameHeight,
+            ),
+        }),
     );
     const title = createMetricBitmapText(
         "RAIN SPRITE TEST  [8]  |  drops: 0  |  UP +2 / DOWN -2",

@@ -2,7 +2,15 @@ diff --git a/src/dawn/node/binding/AsyncRunner.cpp b/src/dawn/node/binding/Async
 index 9c16028b5..ffb4d11ab 100644
 --- a/src/dawn/node/binding/AsyncRunner.cpp
 +++ b/src/dawn/node/binding/AsyncRunner.cpp
-@@ -78,6 +78,11 @@ void AsyncRunner::ScheduleProcessEvents(Napi::Env env) {
+@@ -67,6 +67,6 @@ void AsyncRunner::ScheduleProcessEvents(Napi::Env env) {
+     auto weak_self = weak_this_;
+     env.Global()
+-        .Get("setImmediate")
++        .Get("setTimeout")
+         .As<Napi::Function>()
+         .Call({
+             // TODO(crbug.com/dawn/1127): Create once, reuse.
+@@ -78,9 +78,15 @@ void AsyncRunner::ScheduleProcessEvents(Napi::Env env) {
                                      }
  
                                      self->process_events_queued_ = false;
@@ -14,3 +22,5 @@ index 9c16028b5..ffb4d11ab 100644
                                      wgpuInstanceProcessEvents(self->instance_->Get());
                                      self->ScheduleProcessEvents(env);
                                  }),
++            Napi::Number::New(env, 33)
+         });

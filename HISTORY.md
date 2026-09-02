@@ -2,6 +2,8 @@
 
 ## 2026-09-02
 
+- Restored Dawn AsyncRunner polling through `setTimeout(..., 33)` for testing instead of unbounded `setImmediate` scheduling.
+- Restored the missing `webgpu_sdl.h` header in the split Dawn surface patch so clean Windows builds can configure `dawn_sdl`.
 - Rain Sprite scena se začne s štirimi kapljicami, uporablja en ponovno uporaben ticker adapter in po dolgem frame-u ne izvaja catch-up landing zanke.
 - Made Rain Sprite mute mode skip Howl creation and native audio preload until audio is explicitly enabled.
 - Made Rain Sprite audio muted by default with an M toggle for controlled freeze diagnosis.
