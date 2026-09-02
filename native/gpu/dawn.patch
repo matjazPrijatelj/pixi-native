@@ -445,24 +445,6 @@ index cb70833c..220e420e 100644
 +
  namespace {
  
-+#if defined(_WIN32)
-+constexpr UINT_PTR kModalFrameTimerId = 0x50495849;
-+
-+class Renderer;
-+
-+struct ModalFrameState {
-+    HWND hwnd = nullptr;
-+    WNDPROC previousWindowProc = nullptr;
-+    Napi::FunctionReference callback;
-+    Napi::FunctionReference stateCallback;
-+    Renderer* renderer = nullptr;
-+    bool invoking = false;
-+};
-+
-+ModalFrameState gModalFrameState;
-+
-+LRESULT CALLBACK ModalWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
-+#endif
 +class PresentWaitWorker : public Napi::AsyncWorker {
 +  public:
 +    PresentWaitWorker(Napi::Env env, void* nativeWindow)
@@ -515,8 +497,6 @@ index cb70833c..220e420e 100644
 +            InstanceMethod("getCurrentTextureView", &Renderer::getCurrentTextureView),
 +            InstanceMethod("swap", &Renderer::swap),
 +            InstanceMethod("waitForPresent", &Renderer::waitForPresent),
-+            InstanceMethod("setModalFrameCallback", &Renderer::setModalFrameCallback),
-+            InstanceMethod("setModalStateCallback", &Renderer::setModalStateCallback),
 +            InstanceMethod("resize", &Renderer::resize),
 +            InstanceMethod("destroy", &Renderer::destroy),
 +        });
@@ -545,16 +525,8 @@ index cb70833c..220e420e 100644
 +        _nativeWindow = wgpu::sdl::GetNativeWindowHandle(nativeData.Data());
 +
 +        _createSurface(env);
-+#if defined(_WIN32)
-+        _installModalFrameHook();
-+#endif
 +    };
 +
-+    ~Renderer() {
-+#if defined(_WIN32)
-+        _uninstallModalFrameHook();
-+#endif
-+    }
 +
 +    static Napi::Object NewInstance(Napi::Env env, Napi::Value device, Napi::Value window, Napi::Value presentMode) {
 +        return constructor.New({ device, window, presentMode });
@@ -624,41 +596,7 @@ index cb70833c..220e420e 100644
 +        return promise;
 +    }
 +
-+    Napi::Value setModalFrameCallback(const Napi::CallbackInfo& info) {
-+        const Napi::Env& env = info.Env();
-+        if (info.Length() > 1 || (info.Length() == 1 &&
-+            !info[0].IsFunction() && !info[0].IsUndefined())) {
-+            Napi::TypeError::New(env, "modal frame callback must be a function or undefined")
-+                .ThrowAsJavaScriptException();
-+            return env.Undefined();
-+        }
-+#if defined(_WIN32)
-+        if (info.Length() == 0 || info[0].IsUndefined()) {
-+            gModalFrameState.callback.Reset();
-+        } else {
-+            gModalFrameState.callback.Reset(info[0].As<Napi::Function>(), 1);
-+        }
-+#endif
-+        return env.Undefined();
-+    }
 +
-+    Napi::Value setModalStateCallback(const Napi::CallbackInfo& info) {
-+        const Napi::Env& env = info.Env();
-+        if (info.Length() > 1 || (info.Length() == 1 &&
-+            !info[0].IsFunction() && !info[0].IsUndefined())) {
-+            Napi::TypeError::New(env, "modal state callback must be a function or undefined")
-+                .ThrowAsJavaScriptException();
-+            return env.Undefined();
-+        }
-+#if defined(_WIN32)
-+        if (info.Length() == 0 || info[0].IsUndefined()) {
-+            gModalFrameState.stateCallback.Reset();
-+        } else {
-+            gModalFrameState.stateCallback.Reset(info[0].As<Napi::Function>(), 1);
-+        }
-+#endif
-+        return env.Undefined();
-+    }
 +
 +    Napi::Value resize(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
@@ -683,9 +621,6 @@ index cb70833c..220e420e 100644
 +
 +    Napi::Value destroy(const Napi::CallbackInfo& info) {
 +        const Napi::Env& env = info.Env();
-+#if defined(_WIN32)
-+        _uninstallModalFrameHook();
-+#endif
 +        _destroySurface();
 +        _device.Reset();
 +        _window.Reset();
@@ -783,97 +718,7 @@ index cb70833c..220e420e 100644
 +        }
 +    }
 +
-+#if defined(_WIN32)
-+    void _installModalFrameHook() {
-+        HWND hwnd = static_cast<HWND>(_nativeWindow);
-+        if (hwnd == nullptr || gModalFrameState.hwnd != nullptr) return;
-+
-+        SetLastError(ERROR_SUCCESS);
-+        auto previous = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
-+            hwnd,
-+            GWLP_WNDPROC,
-+            reinterpret_cast<LONG_PTR>(&ModalWindowProc)
-+        ));
-+        if (previous == nullptr && GetLastError() != ERROR_SUCCESS) return;
-+
-+        gModalFrameState.hwnd = hwnd;
-+        gModalFrameState.previousWindowProc = previous;
-+        gModalFrameState.renderer = this;
-+    }
-+
-+    void _uninstallModalFrameHook() {
-+        HWND hwnd = static_cast<HWND>(_nativeWindow);
-+        if (hwnd == nullptr || gModalFrameState.hwnd != hwnd) return;
-+
-+        KillTimer(hwnd, kModalFrameTimerId);
-+        if (gModalFrameState.previousWindowProc != nullptr) {
-+            SetWindowLongPtrW(
-+                hwnd,
-+                GWLP_WNDPROC,
-+                reinterpret_cast<LONG_PTR>(gModalFrameState.previousWindowProc)
-+            );
-+        }
-+        gModalFrameState.callback.Reset();
-+        gModalFrameState.stateCallback.Reset();
-+        gModalFrameState.renderer = nullptr;
-+        gModalFrameState.hwnd = nullptr;
-+        gModalFrameState.previousWindowProc = nullptr;
-+        gModalFrameState.invoking = false;
-+    }
-+#endif
 +};
-+
-+#if defined(_WIN32)
-+LRESULT CALLBACK ModalWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
-+    const auto previousWindowProc = gModalFrameState.previousWindowProc;
-+    switch (message) {
-+        case WM_ENTERSIZEMOVE:
-+        case WM_ENTERMENULOOP:
-+            if (!gModalFrameState.stateCallback.IsEmpty()) {
-+                Napi::Env env = gModalFrameState.stateCallback.Env();
-+                Napi::HandleScope scope(env);
-+                gModalFrameState.stateCallback.Call({Napi::Boolean::New(env, true)});
-+                if (env.IsExceptionPending()) env.GetAndClearPendingException();
-+            }
-+            SetTimer(hwnd, kModalFrameTimerId, 16, nullptr);
-+            break;
-+        case WM_TIMER:
-+            if (hwnd == gModalFrameState.hwnd &&
-+                wParam == kModalFrameTimerId &&
-+                !gModalFrameState.callback.IsEmpty() &&
-+                gModalFrameState.renderer != nullptr &&
-+                !gModalFrameState.invoking) {
-+                gModalFrameState.invoking = true;
-+                gModalFrameState.renderer->resizeToClientArea();
-+                Napi::Env env = gModalFrameState.callback.Env();
-+                Napi::HandleScope scope(env);
-+                gModalFrameState.callback.Call({});
-+                if (env.IsExceptionPending()) {
-+                    env.GetAndClearPendingException();
-+                }
-+                gModalFrameState.invoking = false;
-+                return 0;
-+            }
-+            break;
-+        case WM_EXITSIZEMOVE:
-+        case WM_EXITMENULOOP:
-+            KillTimer(hwnd, kModalFrameTimerId);
-+            if (!gModalFrameState.stateCallback.IsEmpty()) {
-+                Napi::Env env = gModalFrameState.stateCallback.Env();
-+                Napi::HandleScope scope(env);
-+                gModalFrameState.stateCallback.Call({Napi::Boolean::New(env, false)});
-+                if (env.IsExceptionPending()) env.GetAndClearPendingException();
-+            }
-+            break;
-+        default:
-+            break;
-+    }
-+
-+    return previousWindowProc == nullptr
-+        ? DefWindowProcW(hwnd, message, wParam, lParam)
-+        : CallWindowProcW(previousWindowProc, hwnd, message, wParam, lParam);
-+}
-+#endif
 +
 +Napi::Value RenderGPUDeviceToWindow(const Napi::CallbackInfo& info) {
 +    const Napi::Env& env = info.Env();

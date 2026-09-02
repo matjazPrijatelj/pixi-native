@@ -9,7 +9,6 @@ import {
     prepareRgbaPixelsForUpload,
 } from "../src/pixi-node/rgbaUpload.ts";
 import { normalizeGpuBindGroupIndex } from "../src/pixi-node/gpuCompatibility.ts";
-import { requireWindowsModalFrameSupport } from "../src/pixi-node/modalFrame.ts";
 
 test("Canvas RGBA pixels are reordered for BGRA textures", () => {
     const source = new Uint8ClampedArray([255, 32, 64, 255]);
@@ -214,23 +213,4 @@ test("modal VSync dispatch does not duplicate callbacks when its wait resolves",
     waiters[0](true);
     await Promise.resolve();
     assert.deepEqual(timestamps, [12]);
-});
-
-test("Windows startup rejects a Dawn addon without modal frame support", () => {
-    assert.throws(
-        () => requireWindowsModalFrameSupport({}, "win32"),
-        /pnpm native:build/,
-    );
-    assert.doesNotThrow(() =>
-        requireWindowsModalFrameSupport({}, "linux"),
-    );
-    assert.doesNotThrow(() =>
-        requireWindowsModalFrameSupport(
-            {
-                setModalFrameCallback: () => undefined,
-                setModalStateCallback: () => undefined,
-            },
-            "win32",
-        ),
-    );
 });

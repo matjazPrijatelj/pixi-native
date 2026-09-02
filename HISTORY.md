@@ -2,6 +2,8 @@
 
 ## 2026-09-02
 
+- Moved the Windows modal move/resize frame hook out of the Dawn Node binding into a separate native window addon with per-window state, preserving synchronous 16 ms modal rendering and A/V state callbacks.
+- Removed the modal callback surface from the Dawn renderer binding and added `pnpm native:window:build`; verified the refactor with `pnpm typecheck`, native builds, and a Windows move/resize smoke test.
 - Retried D3D11VA/VA-API decoding up to five times before CPU fallback, with interruptible 500 ms delays and first-frame success as the hardware acceptance boundary.
 - Added a five-second live-video presentation watchdog so an unplugged UDP/SDP camera whose FFmpeg process remains alive is restarted and can recover independently after reconnection.
 - Documented the staged Windows zero CPU-copy video architecture, strict zero-copy conditions, production acceptance criteria, and delivery estimate in `NEXT.md`.

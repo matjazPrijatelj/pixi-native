@@ -18,11 +18,17 @@ import {
 import * as sdl from "@kmamal/sdl";
 import type { Sdl } from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
-import { requireWindowsModalFrameSupport } from "./modalFrame.ts";
 import { setNativeVideoModalState } from "./video/NativeVideo.ts";
 
 const require = createRequire(import.meta.url);
 const gpu = require("../../native/gpu") as NodeGPUApi;
+const nativeWindow = require("../../native/window") as {
+  create(
+    nativeData: Uint8Array,
+    onFrame: () => void,
+    onState: (active: boolean) => void,
+  ): { detach(): void };
+};
 
 export interface NodeRendererContext {
   readonly gpu: NodeGPUInstance;
@@ -159,16 +165,6 @@ export async function createPixiRenderer(): Promise<{
     presentMode: "fifo",
   });
 
-  try {
-    requireWindowsModalFrameSupport(renderer);
-  } catch (error) {
-    renderer.destroy();
-    device.destroy();
-    if (!window.destroyed) window.destroy();
-    gpu.destroy(instance);
-    throw error;
-  }
-
   const canvas = new NodeGPUCanvas(
     renderer,
     window.pixelWidth,
@@ -186,10 +182,9 @@ export async function createPixiRenderer(): Promise<{
     waitForPresent,
   );
   domAdapter.install();
-  renderer.setModalFrameCallback?.(() => {
+  const modalController = nativeWindow.create((window as any)._native.gpu, () => {
     domAdapter.dispatchModalFrame(performance.now());
-  });
-  renderer.setModalStateCallback?.((active) => {
+  }, (active) => {
     setNativeVideoModalState(active);
   });
 
@@ -254,8 +249,7 @@ export async function createPixiRenderer(): Promise<{
     if (destroyed) return;
     destroyed = true;
     rgbaUploadBuffers.clear();
-    renderer.setModalFrameCallback?.();
-    renderer.setModalStateCallback?.();
+    modalController.detach();
     renderer.destroy();
     device.destroy();
 

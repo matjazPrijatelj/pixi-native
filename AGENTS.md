@@ -29,3 +29,6 @@ Write all tasks progress to HISTORY.md
 
 Name long regexes and place comments on functions that are harder to read, understand, or maintain.
 Code should be readable prefer for/for-of in (tight loops) over forEach when possible.
+
+Before every `native:build`, warn Matjaz and wait for explicit confirmation because the build is long-running and he runs it manually.
+Never start a competing `native:build` while his manual build is active.
