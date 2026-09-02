@@ -1,8 +1,14 @@
 const { createRequire } = require("node:module");
+const path = require("node:path");
 const { getBindingPath } = require("./binding-path.js");
 const requireNative = createRequire(__filename);
 
-const native = requireNative(getBindingPath());
+const bindingPath = getBindingPath();
+if (process.platform === "win32") {
+    const runtimeDirectory = path.dirname(bindingPath);
+    process.env.PATH = `${runtimeDirectory};${process.env.PATH ?? ""}`;
+}
+const native = requireNative(bindingPath);
 
 class NativeVideoDecoder {
     constructor(options) {
@@ -58,4 +64,7 @@ class NativeVideoDecoder {
     }
 }
 
-module.exports = { NativeVideoDecoder };
+module.exports = {
+    NativeVideoDecoder,
+    linkedFfmpegVersion: native.linkedFfmpegVersion,
+};

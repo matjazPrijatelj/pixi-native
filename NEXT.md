@@ -23,28 +23,30 @@ The target path is:
 H.264/H.265 input
 -> in-process FFmpeg/libavcodec
 -> D3D11VA NV12 surface
--> DXGI shared texture
+-> D3D11 VideoProcessor
+-> shareable BGRA texture
 -> Dawn SharedTextureMemory
--> NativeVideoSprite NV12 shader
+-> NativeVideoSprite
 -> swapchain
 ```
 
 ### Delivery stages
 
-1. Prove one local H.264 video can remain GPU-resident from D3D11VA decode to Dawn presentation.
+1. Prove one local H.264 video can remain GPU-resident through D3D11 VideoProcessor BGRA conversion and Dawn presentation.
 2. Add local-video lifecycle behavior: bounded surface pool, playback clock, loop, seek, teardown, and device-loss recovery.
 3. Extend the same surface path to RTP/live streams, keeping latest-frame presentation and bounded backpressure.
 4. Validate audio/video playback and eight simultaneous streams on the production Ryzen and RTX 3050 hardware.
 
-Prefer direct NV12 surface import with Y and UV plane sampling. If decoder surfaces cannot be imported reliably, use a D3D11 VideoProcessor to convert into a shared BGRA texture. That fallback performs one GPU conversion/copy but still removes the expensive CPU round trip and is expected to be comparable to Electron's practical video path.
+The first production implementation must use a D3D11 VideoProcessor to convert decoder NV12 surfaces into shareable BGRA textures. This performs one GPU operation but removes the GPU-to-CPU-to-JavaScript-to-GPU round trip and avoids making multiplanar driver support a production prerequisite. Direct NV12 surface import with Y and UV plane sampling is a later, independently measured optimization after the BGRA path is stable.
 
 ### Required native changes
 
 - Replace the per-video `ffmpeg.exe` raw-frame subprocess with in-process FFmpeg demux and decode while retaining D3D11VA.
-- Allocate a bounded pool of shareable D3D11 textures and retain each surface until Dawn has finished reading it.
+- Use the pinned project FFmpeg 8 LGPL shared SDK and package its runtime DLLs; preserve the manual rebuild procedure in `native/ffmpeg/README.md` whenever the dependency changes.
+- Allocate a bounded pool of shareable BGRA D3D11 textures and retain each texture until Dawn has finished reading it.
 - Expose a narrow Windows binding for DXGI shared-texture import and fence synchronization through Dawn `SharedTextureMemory`.
 - Pass native GPU-frame references through the video queue instead of pixel `Uint8Array` objects.
-- Update `NativeVideoSprite` to sample imported NV12 planes, or the shared BGRA fallback, without per-frame `writeTexture` calls.
+- Update `NativeVideoSprite` to sample imported BGRA textures without per-frame `writeTexture` calls.
 - Preserve current frame scheduling, A/V clock behavior, reconnect handling, and resource cleanup.
 
 ### Acceptance criteria
@@ -68,4 +70,5 @@ These estimates include native integration and focused validation, but not unrel
 
 - Do not replace the public Pixi video API solely for this optimization.
 - Do not introduce a generic media-backend abstraction before a second real backend exists.
+- Do not make direct multiplanar NV12 import part of the first production implementation; add it only as a measured optimization after shared BGRA is stable.
 - Do not claim strict zero-copy based only on enabled hardware decoding or shared-texture support; confirm it with GPU tracing.

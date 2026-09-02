@@ -11,6 +11,26 @@ use std::time::Duration;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
+#[napi]
+pub fn linked_ffmpeg_version() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        // FFmpeg owns this process-lifetime version string.
+        let version = unsafe { rsmpeg::ffi::av_version_info() };
+        if version.is_null() {
+            return "unknown".to_string();
+        }
+        return unsafe { std::ffi::CStr::from_ptr(version) }
+            .to_string_lossy()
+            .into_owned();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        "external-process".to_string()
+    }
+}
+
 const FRAME_QUEUE_CAPACITY: usize = 4;
 const HARDWARE_DECODE_ATTEMPTS: usize = 5;
 const HARDWARE_RETRY_DELAY: Duration = Duration::from_millis(500);

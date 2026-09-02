@@ -10,5 +10,8 @@ crate-type = ["cdylib"]
 napi = { version = "3.12.2", features = ["napi9"] }
 napi-derive = "3.2.5"
 
+[target.'cfg(windows)'.dependencies]
+rsmpeg = { version = "=0.18.0", default-features = false, features = ["ffmpeg8"] }
+
 [build-dependencies]
 napi-build = "2.2.3"

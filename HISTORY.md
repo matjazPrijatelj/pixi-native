@@ -2,6 +2,9 @@
 
 ## 2026-09-02
 
+- Added a checksum-pinned project FFmpeg 8.1 LGPL shared SDK/runtime dependency, automatic `pnpm install` caching, native-video link/package integration, and a linked-library version probe verified against the packaged DLLs.
+- Recorded the exact FFmpeg source and BtbN recipe commits plus the manual Windows rebuild, validation, licensing, and immutable-release update procedure.
+- Changed the first production zero-CPU-copy target to D3D11VA NV12 through D3D11 VideoProcessor into shareable BGRA for Dawn; direct multiplanar NV12 import is now a later measured optimization.
 - Retried D3D11VA/VA-API decoding up to five times before CPU fallback, with interruptible 500 ms delays and first-frame success as the hardware acceptance boundary.
 - Added a five-second live-video presentation watchdog so an unplugged UDP/SDP camera whose FFmpeg process remains alive is restarted and can recover independently after reconnection.
 - Documented the staged Windows zero CPU-copy video architecture, strict zero-copy conditions, production acceptance criteria, and delivery estimate in `NEXT.md`.

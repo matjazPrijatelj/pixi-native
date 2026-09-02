@@ -1,0 +1,19 @@
+{
+    "version": "8.1.2-50-g1a748fe2cd",
+    "sourceCommit": "1a748fe2cd43e3ead22fafb1b5b7d77f153898a8",
+    "buildRecipe": {
+        "repository": "https://github.com/BtbN/FFmpeg-Builds.git",
+        "commit": "8267213e26c1031621e6e1210fe3aa4867214f6a",
+        "target": "win64",
+        "variant": "lgpl-shared",
+        "addin": "8.1"
+    },
+    "platforms": {
+        "win32-x64": {
+            "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-01-13-13/ffmpeg-n8.1.2-50-g1a748fe2cd-win64-lgpl-shared-8.1.zip",
+            "sha256": "7aeceacf1d52f19a9d3eb232a094d8cfe2883dfd0f566e5c00ea84151b146a55",
+            "archiveBytes": 70835254,
+            "license": "LGPL-3.0-or-later"
+        }
+    }
+}

@@ -19,6 +19,8 @@ export interface VideoFrame {
     data: Uint8Array;
 }
 
+export function linkedFfmpegVersion(): string;
+
 export class NativeVideoDecoder {
     public constructor(options: DecoderOptions);
     public open(source: string): void;

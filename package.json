@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node native/ffmpeg/scripts/ensure.mjs",
+    "ffmpeg:ensure": "node native/ffmpeg/scripts/ensure.mjs",
     "native:build": "node native/gpu/scripts/build.mjs",
     "native:audio:build": "node native/audio/scripts/build.mjs",
     "native:video:build": "node native/video/scripts/build.mjs",
