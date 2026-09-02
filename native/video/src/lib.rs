@@ -6,11 +6,14 @@ use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 const FRAME_QUEUE_CAPACITY: usize = 4;
+const HARDWARE_DECODE_ATTEMPTS: usize = 5;
+const HARDWARE_RETRY_DELAY: Duration = Duration::from_millis(500);
 
 #[napi(object)]
 pub struct DecoderOptions {
@@ -266,8 +269,39 @@ impl NativeVideoDecoder {
             .map_err(|error| Error::from_reason(error.to_string()))?;
 
         thread::spawn(move || {
-            let result =
-                consume_ffmpeg_output(initial_stdout, width, height, fps, start_time, &state);
+            let mut result =
+                consume_decoder_attempt(initial_stdout, width, height, fps, start_time, &state);
+
+            if active_backend != DecoderBackend::Cpu {
+                for attempt in 2..=HARDWARE_DECODE_ATTEMPTS {
+                    if result.is_ok() || !should_retry_hardware(attempt - 1, &state) {
+                        break;
+                    }
+                    let error = result
+                        .as_ref()
+                        .expect_err("failed hardware attempt checked above");
+                    eprintln!(
+                        "FFmpeg {} decoder attempt {}/{} failed: {error}; retrying in {} ms",
+                        active_backend.name(),
+                        attempt - 1,
+                        HARDWARE_DECODE_ATTEMPTS,
+                        HARDWARE_RETRY_DELAY.as_millis(),
+                    );
+                    match wait_for_hardware_retry(&state) {
+                        Ok(true) => {}
+                        Ok(false) => break,
+                        Err(wait_error) => {
+                            result = Err(wait_error);
+                            break;
+                        }
+                    }
+                    result = spawn_ffmpeg(&request, active_backend)
+                        .and_then(|spawned| install_child(&state, spawned))
+                        .and_then(|stdout| {
+                            consume_decoder_attempt(stdout, width, height, fps, start_time, &state)
+                        });
+                }
+            }
 
             if let Err(error) = result {
                 let has_frames = state.decoded_frames.load(Ordering::SeqCst) > 0;
@@ -276,15 +310,16 @@ impl NativeVideoDecoder {
                     && !state.closed.load(Ordering::SeqCst)
                 {
                     eprintln!(
-                        "FFmpeg {} decoder failed; retrying with CPU decoder: {error}",
-                        active_backend.name()
+                        "FFmpeg {} decoder failed after {} attempts; retrying with CPU decoder: {error}",
+                        active_backend.name(),
+                        HARDWARE_DECODE_ATTEMPTS,
                     );
                     set_backend_name(&state, "CPU fallback");
 
                     let fallback_result = spawn_ffmpeg(&request, DecoderBackend::Cpu)
                         .and_then(|spawned| install_child(&state, spawned))
                         .and_then(|stdout| {
-                            consume_ffmpeg_output(stdout, width, height, fps, start_time, &state)
+                            consume_decoder_attempt(stdout, width, height, fps, start_time, &state)
                         });
 
                     if let Err(fallback_error) = fallback_result {
@@ -617,6 +652,46 @@ fn consume_ffmpeg_output(
     Ok(())
 }
 
+fn consume_decoder_attempt(
+    stdout: ChildStdout,
+    width: usize,
+    height: usize,
+    fps: f64,
+    start_time: f64,
+    state: &DecoderState,
+) -> io::Result<()> {
+    let result = consume_ffmpeg_output(stdout, width, height, fps, start_time, state);
+    result?;
+    if !state.closed.load(Ordering::SeqCst) && state.decoded_frames.load(Ordering::SeqCst) == 0 {
+        return Err(io::Error::other(
+            "FFmpeg ended before producing its first video frame",
+        ));
+    }
+    Ok(())
+}
+
+fn should_retry_hardware(completed_attempts: usize, state: &DecoderState) -> bool {
+    completed_attempts < HARDWARE_DECODE_ATTEMPTS
+        && state.decoded_frames.load(Ordering::SeqCst) == 0
+        && !state.closed.load(Ordering::SeqCst)
+}
+
+fn wait_for_hardware_retry(state: &DecoderState) -> io::Result<bool> {
+    if state.closed.load(Ordering::SeqCst) {
+        return Ok(false);
+    }
+    let (frames, available) = &*state.frames;
+    let frames = frames
+        .lock()
+        .map_err(|_| io::Error::other("Video frame queue lock poisoned"))?;
+    let (_frames, _) = available
+        .wait_timeout_while(frames, HARDWARE_RETRY_DELAY, |_| {
+            !state.closed.load(Ordering::SeqCst)
+        })
+        .map_err(|_| io::Error::other("Video frame queue lock poisoned"))?;
+    Ok(!state.closed.load(Ordering::SeqCst))
+}
+
 fn enqueue_frame(
     frame: PendingFrame,
     frame_bytes: usize,
@@ -831,6 +906,22 @@ mod tests {
         let (frames, _) = &*state.frames;
         let mut frames = frames.lock().unwrap();
         assert_eq!(frames.pop_next().unwrap().timestamp_us, 30);
+    }
+
+    #[test]
+    fn hardware_retry_stops_after_five_attempts_or_first_frame() {
+        let state = decoder_state(false);
+        for completed_attempts in 1..HARDWARE_DECODE_ATTEMPTS {
+            assert!(should_retry_hardware(completed_attempts, &state));
+        }
+        assert!(!should_retry_hardware(HARDWARE_DECODE_ATTEMPTS, &state));
+
+        state.decoded_frames.store(1, Ordering::SeqCst);
+        assert!(!should_retry_hardware(1, &state));
+
+        state.decoded_frames.store(0, Ordering::SeqCst);
+        state.closed.store(true, Ordering::SeqCst);
+        assert!(!should_retry_hardware(1, &state));
     }
 
     fn pending(timestamp_us: i64) -> PendingFrame {

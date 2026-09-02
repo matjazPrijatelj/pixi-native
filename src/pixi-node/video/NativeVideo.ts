@@ -11,6 +11,7 @@ const require = createRequire(import.meta.url);
 const AUDIO_FRAME_LEAD_SECONDS = 0.02;
 const DECODER_READY_POLL_MS = 5;
 const DECODER_START_TIMEOUT_MS = 10_000;
+const LIVE_PRESENTATION_STALL_TIMEOUT_MS = 5_000;
 const MINIMUM_CATCH_UP_LAG_SECONDS = 0.1;
 const CATCH_UP_LAG_FRAMES = 3;
 const MAXIMUM_SOFTWARE_4K_FPS = 30;
@@ -589,6 +590,8 @@ export class NativeVideo extends EventTarget {
     private lastTimeUpdateMs = Number.NEGATIVE_INFINITY;
     private reconnectAttempt = 0;
     private reconnectAtMs = 0;
+    private livePresentationDeadlineMs = 0;
+    private frameAwaitingPresentation = false;
     private readonly registryReference: WeakRef<NativeVideo>;
     private metadataPromise?: Promise<void>;
 
@@ -850,6 +853,10 @@ export class NativeVideo extends EventTarget {
             return null;
         }
 
+        if (this.frameAwaitingPresentation && this.recoverStalledLiveVideo()) {
+            return null;
+        }
+
         const message = this.decoder.pollError();
         if (message) {
             this.lastError = new Error(message);
@@ -870,7 +877,7 @@ export class NativeVideo extends EventTarget {
             ? this.takeNewestDecodedFrame()
             : this.takeSynchronizedFrame(synchronizationTime);
         if (frame) {
-            this.handlePresentedFrameState();
+            this.frameAwaitingPresentation = true;
             return frame;
         }
 
@@ -903,12 +910,16 @@ export class NativeVideo extends EventTarget {
                 }
             }
         }
+        if (this.recoverStalledLiveVideo()) return null;
         this.tryReconnect();
         return null;
     }
 
     public markFramePresented(): void {
-        if (!this.destroyed) this.presentedFrameCount++;
+        if (this.destroyed || !this.frameAwaitingPresentation) return;
+        this.frameAwaitingPresentation = false;
+        this.presentedFrameCount++;
+        this.handlePresentedFrameState();
     }
 
     public destroy(): void {
@@ -940,6 +951,10 @@ export class NativeVideo extends EventTarget {
             decoder.open(this.decodedSource);
             this.decoder = decoder;
             this.lastBackend = decoder.backend();
+            if (this.options.mediaType === "live") {
+                this.livePresentationDeadlineMs =
+                    performance.now() + LIVE_PRESENTATION_STALL_TIMEOUT_MS;
+            }
         } catch (error) {
             decoder.close();
             throw error;
@@ -1142,6 +1157,8 @@ export class NativeVideo extends EventTarget {
         this.pendingFrame = null;
         this.catchUpTargetUs = undefined;
         this.playbackClockStartedAtMs = undefined;
+        this.livePresentationDeadlineMs = 0;
+        this.frameAwaitingPresentation = false;
         if (!this.decoder) return;
         this.decodedFrameBase += this.decoder.decodedFrames();
         this.droppedFrameBase += this.decoder.droppedFrames();
@@ -1231,6 +1248,10 @@ export class NativeVideo extends EventTarget {
 
     private handlePresentedFrameState(): void {
         this.lastError = null;
+        if (this.options.mediaType === "live") {
+            this.livePresentationDeadlineMs =
+                performance.now() + LIVE_PRESENTATION_STALL_TIMEOUT_MS;
+        }
         if (!this.dataDispatched) {
             this.dataDispatched = true;
             this.readyStateValue = 4;
@@ -1249,6 +1270,23 @@ export class NativeVideo extends EventTarget {
             this.lastTimeUpdateMs = now;
             this.emit("timeupdate");
         }
+    }
+
+    private recoverStalledLiveVideo(): boolean {
+        if (
+            this.options.mediaType !== "live" ||
+            this.livePresentationDeadlineMs === 0 ||
+            performance.now() < this.livePresentationDeadlineMs
+        ) return false;
+
+        this.lastError = new Error(
+            `Live video produced no presented frame for ${LIVE_PRESENTATION_STALL_TIMEOUT_MS / 1000} seconds`,
+        );
+        this.stopDecoder();
+        this.emit("error");
+        if (this.options.reconnect !== false) this.scheduleReconnect();
+        else this.isPaused = true;
+        return true;
     }
 
     private scheduleReconnect(): void {

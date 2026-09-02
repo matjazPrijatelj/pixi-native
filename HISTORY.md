@@ -1,5 +1,11 @@
 # Development history
 
+## 2026-09-02
+
+- Retried D3D11VA/VA-API decoding up to five times before CPU fallback, with interruptible 500 ms delays and first-frame success as the hardware acceptance boundary.
+- Added a five-second live-video presentation watchdog so an unplugged UDP/SDP camera whose FFmpeg process remains alive is restarted and can recover independently after reconnection.
+- Documented the staged Windows zero CPU-copy video architecture, strict zero-copy conditions, production acceptance criteria, and delivery estimate in `NEXT.md`.
+
 ## 2026-09-01
 
 - Enabled looping for every local video demo and expanded the Graphics test to nine independently animated primitives, including five new ellipse, triangle, star, ring, and Bezier shapes.

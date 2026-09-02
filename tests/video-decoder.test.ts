@@ -307,6 +307,7 @@ test("NativeVideo dispatches Electron-compatible events and loops without ended"
     await video.play();
     factory.decoders[0].frame = createFrame(0);
     assert.ok(video.takeLatestFrame());
+    video.markFramePresented();
     factory.decoders[0].finished = true;
     assert.equal(video.takeLatestFrame(), null);
 
@@ -381,6 +382,58 @@ test("live video forwards FFmpeg arguments and reconnects without read pacing", 
     assert.equal(factory.decoders.length, 2);
     assert.equal(video.ended, false);
     video.destroy();
+});
+
+test("a stalled live camera reconnects independently and recovers on presentation", async () => {
+    let now = 10_000;
+    Object.defineProperty(performance, "now", {
+        configurable: true,
+        value: (): number => now,
+    });
+
+    const reconnect = { initialDelayMs: 0, maxDelayMs: 0 } as const;
+    const firstFactory = new FakeDecoderFactory();
+    const secondFactory = new FakeDecoderFactory();
+    const first = new NativeVideo(
+        "http://camera-1/live.sdp",
+        { width: 2, height: 2, audio: false, mediaType: "live", reconnect },
+        firstFactory,
+    );
+    const second = new NativeVideo(
+        "http://camera-2/live.sdp",
+        { width: 2, height: 2, audio: false, mediaType: "live", reconnect },
+        secondFactory,
+    );
+
+    try {
+        await Promise.all([first.play(), second.play()]);
+        secondFactory.decoders[0].frame = createFrame(0);
+        assert.ok(second.takeLatestFrame());
+        second.markFramePresented();
+
+        now += 5_000;
+        assert.equal(first.takeLatestFrame(), null);
+        assert.equal(firstFactory.decoders[0].closed, true);
+        assert.match(first.error?.message ?? "", /no presented frame/);
+
+        assert.equal(first.takeLatestFrame(), null);
+        assert.equal(firstFactory.decoders.length, 2);
+        assert.equal(secondFactory.decoders.length, 1);
+
+        firstFactory.decoders[1].decoded = 1;
+        firstFactory.decoders[1].frame = createFrame(0);
+        assert.ok(first.takeLatestFrame());
+        assert.notEqual(first.error, null);
+        first.markFramePresented();
+        assert.equal(first.error, null);
+        assert.equal(first.reconnectAttempts, 0);
+        assert.equal(first.stats.presentedFrames, 1);
+        assert.equal(second.stats.presentedFrames, 1);
+    } finally {
+        first.destroy();
+        second.destroy();
+        delete (performance as unknown as { now?: () => number }).now;
+    }
 });
 
 test("playbackRate restarts file audio and video at the same media time", async () => {
