@@ -3085,6 +3085,10 @@ interface WebGPU {
   GPUUncapturedErrorEvent: GPUUncapturedErrorEvent
 
   create(args: string[]): GPU
+  getGPUDeviceAdapterLuid(device: GPUDevice): {
+    lowPart: number,
+    highPart: number,
+  }
   renderGPUDeviceToWindow(options: {
     device: GPUDevice,
     window: any,

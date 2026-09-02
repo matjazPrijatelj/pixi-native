@@ -2,6 +2,14 @@
 
 ## 2026-09-02
 
+- Closed `RenderGPUDeviceToWindow` before the adapter-LUID callback declaration; the missing brace had nested the callback and caused `GetGPUDeviceAdapterLuid` to be undeclared at module registration.
+- Registered the adapter-LUID callback with the explicit `Napi::Function::New(env, callback)` overload required by the current node-addon-api headers.
+- Normalized explicit Windows compiler, linker, resource-compiler, and manifest-tool paths to CMake forward-slash syntax, avoiding `Invalid character escape '\\P'` during configure.
+- Changed `pnpm native:build` to reuse an existing Dawn checkout and CMake/Ninja build by default; set `DAWN_CLEAN_BUILD=1` when a fully clean reproducible rebuild is required.
+- Passed explicit Windows SDK `rc.exe`/`mt.exe` paths to Dawn's CMake configure and synchronized `PATH`/`Path` casing so Ninja manifest linking does not resolve `CMAKE_MT-NOTFOUND`.
+- Forced the Windows Dawn/Ninja configure step to use the initialized MSVC `cl.exe` and matching `link.exe`, removing inherited LLVM clang/lld selection that failed CMake's CRT compiler probe.
+- Fixed the canonical Dawn patch after the adapter-LUID hunk had been inserted as a duplicate `Module.cpp` diff; a fresh Dawn checkout now passes `git apply --check` before any native build starts.
+- Added a Windows GPU adapter-LUID query to the native Dawn binding so the future D3D11 VideoProcessor device can be created on the same DXGI adapter as Dawn's D3D12 device; the canonical `dawn.patch` includes the change.
 - Added a checksum-pinned project FFmpeg 8.1 LGPL shared SDK/runtime dependency, automatic `pnpm install` caching, native-video link/package integration, and a linked-library version probe verified against the packaged DLLs.
 - Recorded the exact FFmpeg source and BtbN recipe commits plus the manual Windows rebuild, validation, licensing, and immutable-release update procedure.
 - Changed the first production zero-CPU-copy target to D3D11VA NV12 through D3D11 VideoProcessor into shareable BGRA for Dawn; direct multiplanar NV12 import is now a later measured optimization.

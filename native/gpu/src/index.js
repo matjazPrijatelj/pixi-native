@@ -9,6 +9,7 @@ const binding = require(bindingPath)
 
 const {
 	_create,
+	getGPUDeviceAdapterLuid,
 	renderGPUDeviceToWindow,
 	globals,
 } = binding
@@ -40,6 +41,7 @@ const destroy = (instance) => {
 module.exports = {
 	create,
 	destroy,
+	getGPUDeviceAdapterLuid,
 	renderGPUDeviceToWindow,
 	...globals,
 }

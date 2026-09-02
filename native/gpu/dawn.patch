@@ -419,7 +419,10 @@ index cb70833c..220e420e 100644
 +
 +#include "webgpu/webgpu_sdl.h"
 +#if defined(_WIN32)
++#include <dxgi.h>
 +#include <windows.h>
++
++#include "dawn/native/D3DBackend.h"
 +
 +namespace dawn::native::d3d {
 +bool WaitForWindowFrame(void* window, uint32_t timeoutMilliseconds);
@@ -917,8 +920,40 @@ index cb70833c..220e420e 100644
 +    }
 +
 +    return Renderer::NewInstance(env, jsDevice, jsWindow, jsPresentMode);
- }
- 
++
++}
++Napi::Value GetGPUDeviceAdapterLuid(const Napi::CallbackInfo& info) {
++    const Napi::Env& env = info.Env();
++#if defined(_WIN32)
++    if (info.Length() != 1 || !info[0].IsObject()) {
++        Napi::TypeError::New(env, "getGPUDeviceAdapterLuid expects one GPUDevice")
++            .ThrowAsJavaScriptException();
++        return env.Undefined();
++    }
++    auto* device = reinterpret_cast<wgpu::binding::GPUDevice*>(
++        wgpu::interop::GPUDevice::Unwrap(info[0].As<Napi::Object>()));
++    if (device == nullptr) {
++        Napi::TypeError::New(env, "getGPUDeviceAdapterLuid expects a native GPUDevice")
++            .ThrowAsJavaScriptException();
++        return env.Undefined();
++    }
++    auto adapter = dawn::native::d3d::GetDXGIAdapter(wgpuDeviceGetAdapter(device->device_.Get()));
++    DXGI_ADAPTER_DESC description{};
++    if (FAILED(adapter->GetDesc(&description))) {
++        Napi::Error::New(env, "Failed to read the GPU adapter LUID").ThrowAsJavaScriptException();
++        return env.Undefined();
++    }
++    Napi::Object luid = Napi::Object::New(env);
++    luid.Set("lowPart", Napi::Number::New(env, description.AdapterLuid.LowPart));
++    luid.Set("highPart", Napi::Number::New(env, description.AdapterLuid.HighPart));
++    return luid;
++#else
++    Napi::Error::New(env, "GPU adapter LUID is available only on Windows")
++        .ThrowAsJavaScriptException();
++    return env.Undefined();
++#endif
++}
+
  #ifdef DAWN_EMIT_COVERAGE
 @@ -104,13 +289,18 @@ struct Coverage {
  // object.
@@ -938,6 +973,8 @@ index cb70833c..220e420e 100644
 +    Renderer::Init(env);
 +
 +    exports.Set(Napi::String::New(env, "renderGPUDeviceToWindow"), Napi::Function::New<RenderGPUDeviceToWindow>(env));
++    auto getGPUDeviceAdapterLuid = Napi::Function::New(env, GetGPUDeviceAdapterLuid);
++    exports.Set("getGPUDeviceAdapterLuid", getGPUDeviceAdapterLuid);
  
  #ifdef DAWN_EMIT_COVERAGE
      Coverage* coverage = new Coverage();

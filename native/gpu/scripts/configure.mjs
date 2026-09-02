@@ -40,13 +40,17 @@ if (!Fs.existsSync(C.dir.ninja)) {
 	throw new Error(`Pinned Dawn Ninja executable was not found: ${C.dir.ninja}`)
 }
 
-await Fs.promises.rm(C.dir.build, { recursive: true }).catch(() => {})
+if (process.env.DAWN_CLEAN_BUILD === '1') {
+	await Fs.promises.rm(C.dir.build, { recursive: true }).catch(() => {})
+}
 await Fs.promises.mkdir(C.dir.build, { recursive: true })
 
 let CFLAGS
 let LDFLAGS
 let crossCompileFlag
 let backendFlags = []
+let windowsToolchainArgs = []
+const cmakePath = (value) => value.replaceAll('\\', '/')
 if (C.platform === 'darwin') {
 	let arch = process.env.CROSS_COMPILE_ARCH ?? C.arch
 	if (arch === 'x64') { arch = 'x86_64' }
@@ -75,6 +79,30 @@ else if (C.platform === 'win32') {
 	backendFlags = [
 		'-DDAWN_USE_WINDOWS_UI=ON',
 		'-DDAWN_ENABLE_D3D12=ON',
+	]
+	// CMake may prefer an LLVM clang installation found earlier in PATH even
+	// after VsDevCmd initialized MSVC. Resolve the compiler and linker from the
+	// same MSVC bin directory so Ninja cannot silently mix CRT/toolchains.
+	const clOutput = execFileSync('where.exe', ['cl.exe'], { encoding: 'utf8' })
+	const clPath = clOutput.split(/\r?\n/u).map((line) => line.trim()).find(Boolean)
+	if (!clPath) throw new Error('MSVC cl.exe was not found after Visual Studio initialization.')
+	const msvcBin = Path.dirname(clPath)
+	const linkPath = Path.join(msvcBin, 'link.exe')
+	if (!Fs.existsSync(linkPath)) throw new Error(`MSVC linker was not found beside cl.exe: ${linkPath}`)
+	const findWindowsTool = (name) => {
+		const output = execFileSync('where.exe', [`${name}.exe`], { encoding: 'utf8' })
+		const resolved = output.split(/\r?\n/u).map((line) => line.trim()).find(Boolean)
+		if (!resolved) throw new Error(`Windows SDK tool ${name}.exe was not found after Visual Studio initialization.`)
+		return resolved
+	}
+	const rcPath = findWindowsTool('rc')
+	const mtPath = findWindowsTool('mt')
+	windowsToolchainArgs = [
+		`-DCMAKE_C_COMPILER=${cmakePath(clPath)}`,
+		`-DCMAKE_CXX_COMPILER=${cmakePath(clPath)}`,
+		`-DCMAKE_LINKER=${cmakePath(linkPath)}`,
+		`-DCMAKE_RC_COMPILER=${cmakePath(rcPath)}`,
+		`-DCMAKE_MT=${cmakePath(mtPath)}`,
 	]
 }
 
@@ -105,11 +133,24 @@ const cmakeArgs = [
 	'-DDAWN_ENABLE_SPIRV_VALIDATION=OFF',
 	'-DDAWN_ALWAYS_ASSERT=ON',
 	crossCompileFlag,
+	...windowsToolchainArgs,
 	...backendFlags,
 ].filter(Boolean)
 const childEnv = {
 	...process.env,
 	...C.depotTools.env,
+}
+if (C.platform === 'win32') {
+	// Do not let inherited Unix/LLVM compiler hints override the explicit MSVC
+	// CMake cache entries above.
+	delete childEnv.CC
+	delete childEnv.CXX
+	delete childEnv.CMAKE_C_COMPILER
+	delete childEnv.CMAKE_CXX_COMPILER
+	delete childEnv.CMAKE_LINKER
+	// Node can expose both case variants after importing `set` output from
+	// VsDevCmd.bat; keep them identical when spawning CMake/Ninja.
+	childEnv.Path = childEnv.PATH
 }
 if (CFLAGS) childEnv.CFLAGS = CFLAGS
 if (LDFLAGS) childEnv.LDFLAGS = LDFLAGS
