@@ -2,6 +2,8 @@
 
 ## 2026-09-02
 
+- Added SDL-to-DOM-like keyboard event dispatch with key, code, modifier, and repeat data while preserving existing scene navigation and audio shortcuts.
+- Added SDL-to-DOM-like mouse input dispatch for Pixi, including native canvas listeners, global pointer lifecycle delivery, and clickable drum pads in the Audio test scene.
 - Kept Dawn's AsyncRunner on setImmediate and limited the event-scheduler patch to an idle-task early exit, removing the broad 100 ms delay from all WebGPU async operations.
 - Split the Dawn customization into four ordered patches for the window surface adapter, D3D12 frame-latency wait, Node renderer surface, and Node event scheduler; updated the Dawn bootstrap to apply each patch separately and verified reverse-apply checks plus TypeScript.
 - Moved the Windows modal move/resize frame hook out of the Dawn Node binding into a separate native window addon with per-window state, preserving synchronous 16 ms modal rendering and A/V state callbacks.

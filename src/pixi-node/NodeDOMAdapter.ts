@@ -7,6 +7,62 @@ import type { NodeGPUInstance } from "./nativeTypes.ts";
 import { NodeCanvas } from "./NodeCanvas.ts";
 import { FrameScheduler, VSyncFrameScheduler } from "./FrameScheduler.ts";
 
+export interface NativeMouseEventData {
+    readonly type: string;
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly button: number;
+    readonly buttons: number;
+    readonly movementX?: number;
+    readonly movementY?: number;
+    readonly deltaX?: number;
+    readonly deltaY?: number;
+}
+
+export function createNativeMouseEvent(data: NativeMouseEventData): Event {
+    return {
+        ...data,
+        pageX: data.clientX,
+        pageY: data.clientY,
+        offsetX: data.clientX,
+        offsetY: data.clientY,
+        screenX: data.clientX,
+        screenY: data.clientY,
+        isTrusted: true,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        preventDefault(): void {},
+        stopPropagation(): void {},
+    } as unknown as Event;
+}
+
+export interface NativeKeyboardEventData {
+    readonly type: "keydown" | "keyup";
+    readonly key: string;
+    readonly code: string;
+    readonly repeat?: boolean;
+    readonly ctrlKey?: boolean;
+    readonly shiftKey?: boolean;
+    readonly altKey?: boolean;
+    readonly metaKey?: boolean;
+}
+
+export function createNativeKeyboardEvent(data: NativeKeyboardEventData): Event {
+    return {
+        ...data,
+        repeat: data.repeat ?? false,
+        ctrlKey: data.ctrlKey ?? false,
+        shiftKey: data.shiftKey ?? false,
+        altKey: data.altKey ?? false,
+        metaKey: data.metaKey ?? false,
+        isTrusted: true,
+        preventDefault(): void {},
+        stopPropagation(): void {},
+    } as unknown as Event;
+}
+
 /** Minimal Pixi environment adapter for Node's native WGPU runtime. */
 export class NodeDOMAdapter {
     public readonly isOffscreenCanvasSupported = false;
@@ -15,6 +71,7 @@ export class NodeDOMAdapter {
     private readonly refreshRateHz: number;
     private readonly waitForPresent?: () => Promise<boolean>;
     private frameScheduler?: FrameScheduler | VSyncFrameScheduler;
+    private readonly globalListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
     public constructor(
         gpu: NodeGPUInstance,
@@ -118,6 +175,16 @@ export class NodeDOMAdapter {
         return this.frameScheduler?.dispatchNow(timestamp) ?? 0;
     }
 
+    /** Delivers SDL-translated events registered on document/window globals. */
+    public dispatchGlobalEvent(type: string, event: Event): void {
+        const listeners = this.globalListeners.get(type);
+        if (!listeners) return;
+        for (const listener of [...listeners]) {
+            if (typeof listener === "function") listener(event);
+            else listener.handleEvent(event);
+        }
+    }
+
     public install(): void {
         const canvas2d = this.createCanvas().getContext("2d");
         if (!canvas2d) throw new Error("Native Canvas2D backend is unavailable");
@@ -134,10 +201,21 @@ export class NodeDOMAdapter {
         for (const [name, value] of Object.entries(globals)) {
             if (!(globalThis as any)[name]) (globalThis as any)[name] = value;
         }
-        if (!(globalThis as any).addEventListener) {
-            (globalThis as any).addEventListener = (): void => undefined;
-            (globalThis as any).removeEventListener = (): void => undefined;
-        }
+        const addGlobalListener = (type: string, listener: EventListenerOrEventListenerObject): void => {
+            let listeners = this.globalListeners.get(type);
+            if (!listeners) {
+                listeners = new Set();
+                this.globalListeners.set(type, listeners);
+            }
+            listeners.add(listener);
+        };
+        const removeGlobalListener = (type: string, listener: EventListenerOrEventListenerObject): void => {
+            const listeners = this.globalListeners.get(type);
+            listeners?.delete(listener);
+            if (listeners?.size === 0) this.globalListeners.delete(type);
+        };
+        (globalThis as any).addEventListener = addGlobalListener;
+        (globalThis as any).removeEventListener = removeGlobalListener;
         if (!globalThis.document) {
             const makeElement = (tagName: string): Record<string, unknown> => {
                 const element: Record<string, unknown> = {
@@ -156,8 +234,8 @@ export class NodeDOMAdapter {
                     },
                     contains(child: Record<string, unknown>) { return (element.children as Record<string, unknown>[]).includes(child); },
                     remove() { (element.parentNode as { removeChild?: (child: Record<string, unknown>) => void } | null)?.removeChild?.(element); },
-                    addEventListener() {},
-                    removeEventListener() {},
+                    addEventListener: addGlobalListener,
+                    removeEventListener: removeGlobalListener,
                     canPlayType() { return ""; }
                 };
                 return element;
@@ -166,8 +244,8 @@ export class NodeDOMAdapter {
                 baseURI: "file:///",
                 createElement: makeElement,
                 createElementNS: (_namespace: string, tagName: string) => makeElement(tagName),
-                addEventListener() {},
-                removeEventListener() {}
+                addEventListener: addGlobalListener,
+                removeEventListener: removeGlobalListener,
             };
         }
         this.installFrameScheduler();

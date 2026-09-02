@@ -8,6 +8,7 @@ import type {
   NodeGPUApi,
   NodeGPUInstance,
   NodeWindowRenderer,
+  NodeNativeInput,
 } from "./nativeTypes.ts";
 import { resolveGpuBackend } from "./platform.ts";
 import {
@@ -37,6 +38,7 @@ export interface NodeRendererContext {
   readonly window: Sdl.Video.Window;
   readonly renderer: NodeWindowRenderer;
   readonly canvas: NodeGPUCanvas;
+  readonly input: NodeNativeInput;
   readonly destroy: () => void;
 }
 
@@ -269,6 +271,10 @@ export async function createPixiRenderer(): Promise<{
       window,
       renderer,
       canvas,
+      input: {
+        dispatchCanvasEvent: (type, event) => canvas.dispatchNativeEvent(type, event),
+        dispatchGlobalEvent: (type, event) => domAdapter.dispatchGlobalEvent(type, event),
+      },
       destroy,
     },
   };

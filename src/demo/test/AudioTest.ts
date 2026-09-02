@@ -19,6 +19,7 @@ export interface AudioTestBounds {
 interface DrumPadView {
     readonly definition: DrumPadDefinition;
     readonly flash: Graphics;
+    readonly hitTarget: Graphics;
     remainingMs: number;
 }
 
@@ -46,7 +47,7 @@ export function createAudioTest(
         },
     });
     const instructions = createMetricBitmapText(
-        "U/I/O/P + J/K/L/Č: drums  |  M: music fade-in  |  F: fade-out  |  SPACE: mute",
+        "U/I/O/P + J/K/L/Č or mouse click: drums  |  M: music fade-in  |  F: fade-out  |  SPACE: mute",
         18,
     );
     instructions.position.set(24, 48);
@@ -55,6 +56,7 @@ export function createAudioTest(
     scene.addChild(title, instructions, status);
 
     const drumContainer = new Container();
+    drumContainer.eventMode = "static";
     const drumSprite = new Sprite(drumTexture);
     drumContainer.addChild(drumSprite);
     const padViews: DrumPadView[] = DRUM_PADS.map((definition) => {
@@ -76,7 +78,18 @@ export function createAudioTest(
             definition.hit.y * drumTexture.height,
         );
         drumContainer.addChild(keyLabel);
-        return { definition, flash, remainingMs: 0 };
+        const hitTarget = new Graphics()
+            .ellipse(
+                definition.hit.x * drumTexture.width,
+                definition.hit.y * drumTexture.height,
+                definition.hit.radiusX * drumTexture.width,
+                definition.hit.radiusY * drumTexture.height,
+            )
+            .fill({ color: 0xffffff, alpha: 0 });
+        hitTarget.eventMode = "static";
+        hitTarget.cursor = "pointer";
+        drumContainer.addChild(hitTarget);
+        return { definition, flash, hitTarget, remainingMs: 0 };
     });
     scene.addChild(drumContainer);
 
@@ -119,6 +132,10 @@ export function createAudioTest(
         if (view) view.remainingMs = 140;
         lastEvent = `${pad.key.toLocaleUpperCase("sl")}: ${pad.label}`;
     };
+
+    for (const view of padViews) {
+        view.hitTarget.on("pointerdown", () => triggerDrum(view.definition));
+    }
 
     scene.handleKey = (key, repeat = 0): boolean => {
         if (repeat) return false;

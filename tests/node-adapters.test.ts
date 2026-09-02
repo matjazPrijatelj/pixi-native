@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import {
+    createNativeKeyboardEvent,
+    createNativeMouseEvent,
     NodeDOMAdapter,
     normalizeRefreshRate,
 } from "../src/pixi-node/NodeDOMAdapter.ts";
@@ -21,6 +23,52 @@ test("NodeGPUCanvas exposes the native WebGPU context and resizes", () => {
     canvas.resize(640.8, 360.2);
     assert.equal(canvas.width, 640);
     assert.equal(canvas.height, 360);
+});
+
+test("NodeGPUCanvas dispatches native mouse events to registered listeners", () => {
+    const renderer = { resize() {}, getCurrentTexture() { return {} as GPUTexture; } };
+    const canvas = new NodeGPUCanvas(renderer as never);
+    let received: Event | undefined;
+    const listener = (event: Event): void => { received = event; };
+
+    canvas.addEventListener("mousedown", listener);
+    canvas.dispatchNativeEvent(
+        "mousedown",
+        createNativeMouseEvent({
+            type: "mousedown",
+            clientX: 123,
+            clientY: 456,
+            button: 0,
+            buttons: 1,
+        }),
+    );
+
+    assert.equal((received as Event & { clientX: number }).clientX, 123);
+    assert.equal((received as Event & { clientY: number }).clientY, 456);
+    canvas.removeEventListener("mousedown", listener);
+});
+
+test("NodeDOMAdapter dispatches native keyboard events to global listeners", () => {
+    const adapter = new NodeDOMAdapter({} as never);
+    adapter.install();
+    let received: Event | undefined;
+    const listener = (event: Event): void => { received = event; };
+    globalThis.addEventListener("keydown", listener);
+
+    adapter.dispatchGlobalEvent(
+        "keydown",
+        createNativeKeyboardEvent({
+            type: "keydown",
+            key: "a",
+            code: "KeyA",
+            repeat: true,
+        }),
+    );
+
+    assert.equal((received as KeyboardEvent).key, "a");
+    assert.equal((received as KeyboardEvent).code, "KeyA");
+    assert.equal((received as KeyboardEvent).repeat, true);
+    globalThis.removeEventListener("keydown", listener);
 });
 
 test("NodeCanvas provides a native Canvas2D context", () => {

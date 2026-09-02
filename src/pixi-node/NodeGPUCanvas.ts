@@ -8,6 +8,7 @@ export class NodeGPUCanvas {
 
   private readonly renderer: NodeWindowRenderer;
   private readonly context: GPUCanvasContext;
+  private readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
   public constructor(renderer: NodeWindowRenderer, width = 1280, height = 720) {
     this.renderer = renderer;
@@ -43,16 +44,37 @@ export class NodeGPUCanvas {
   }
 
   public addEventListener(
-    _type: string,
-    _listener: EventListenerOrEventListenerObject,
+    type: string,
+    listener: EventListenerOrEventListenerObject,
     _options?: boolean | AddEventListenerOptions,
-  ): void {}
+  ): void {
+    let listeners = this.listeners.get(type);
+    if (!listeners) {
+      listeners = new Set();
+      this.listeners.set(type, listeners);
+    }
+    listeners.add(listener);
+  }
 
   public removeEventListener(
-    _type: string,
-    _listener: EventListenerOrEventListenerObject,
+    type: string,
+    listener: EventListenerOrEventListenerObject,
     _options?: boolean | EventListenerOptions,
-  ): void {}
+  ): void {
+    const listeners = this.listeners.get(type);
+    listeners?.delete(listener);
+    if (listeners?.size === 0) this.listeners.delete(type);
+  }
+
+  /** Delivers an SDL-translated event to Pixi's DOM event listeners. */
+  public dispatchNativeEvent(type: string, event: Event): void {
+    const listeners = this.listeners.get(type);
+    if (!listeners) return;
+    for (const listener of [...listeners]) {
+      if (typeof listener === "function") listener(event);
+      else listener.handleEvent(event);
+    }
+  }
 
   public getContext(type: string): unknown {
     if (type !== "webgpu") return null;

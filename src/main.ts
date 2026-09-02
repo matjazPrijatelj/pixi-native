@@ -12,6 +12,8 @@ const { Assets, BitmapFont, Texture } = await import("pixi.js");
 const { createPixiRenderer } =
   await import("./pixi-node/createPixiRenderer.ts");
 const { NodeCanvas } = await import("./pixi-node/NodeCanvas.ts");
+const { createNativeKeyboardEvent, createNativeMouseEvent } =
+  await import("./pixi-node/NodeDOMAdapter.ts");
 const { supportsNativeVideo } = await import("./pixi-node/platform.ts");
 const {
   animateDemoScene,
@@ -167,8 +169,64 @@ const resizeActiveScene = (): void => {
 
 native.window.on("resize", resizeActiveScene);
 
+let mouseButtons = 0;
+native.window.on("mouseButtonDown", (event) => {
+  mouseButtons |= 1 << (event.button - 1);
+  native.input.dispatchCanvasEvent(
+    "mousedown",
+    createNativeMouseEvent({
+      type: "mousedown",
+      clientX: event.x,
+      clientY: event.y,
+      button: event.button - 1,
+      buttons: mouseButtons,
+    }),
+  );
+});
+
+native.window.on("mouseButtonUp", (event) => {
+  mouseButtons &= ~(1 << (event.button - 1));
+  native.input.dispatchGlobalEvent(
+    "mouseup",
+    createNativeMouseEvent({
+      type: "mouseup",
+      clientX: event.x,
+      clientY: event.y,
+      button: event.button - 1,
+      buttons: mouseButtons,
+    }),
+  );
+});
+
+native.window.on("mouseMove", (event) => {
+  native.input.dispatchGlobalEvent(
+    "mousemove",
+    createNativeMouseEvent({
+      type: "mousemove",
+      clientX: event.x,
+      clientY: event.y,
+      button: -1,
+      buttons: mouseButtons,
+    }),
+  );
+});
+
 let ctrlDown = false;
 native.window.on("keyDown", (event) => {
+  native.input.dispatchGlobalEvent(
+    "keydown",
+    createNativeKeyboardEvent({
+      type: "keydown",
+      key: event.key ?? "",
+      code: String(event.scancode),
+      repeat: Boolean(event.repeat),
+      ctrlKey: Boolean(event.ctrl),
+      shiftKey: Boolean(event.shift),
+      altKey: Boolean(event.alt),
+      metaKey: Boolean(event.super),
+    }),
+  );
+
   if (event.key === "Control") {
     ctrlDown = true;
     return;
@@ -222,6 +280,19 @@ native.window.on("keyDown", (event) => {
 });
 
 native.window.on("keyUp", (event) => {
+  native.input.dispatchGlobalEvent(
+    "keyup",
+    createNativeKeyboardEvent({
+      type: "keyup",
+      key: event.key ?? "",
+      code: String(event.scancode),
+      ctrlKey: Boolean(event.ctrl),
+      shiftKey: Boolean(event.shift),
+      altKey: Boolean(event.alt),
+      metaKey: Boolean(event.super),
+    }),
+  );
+
   if (event.key === "Control") {
     ctrlDown = false;
   }

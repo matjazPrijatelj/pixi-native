@@ -21,3 +21,8 @@ export interface NodeWindowRenderer {
   resize(): void;
   destroy(): void;
 }
+
+export interface NodeNativeInput {
+  dispatchCanvasEvent(type: string, event: Event): void;
+  dispatchGlobalEvent(type: string, event: Event): void;
+}
