@@ -28,6 +28,7 @@ export interface NodeRendererContext {
   readonly gpu: NodeGPUInstance;
   readonly adapter: GPUAdapter;
   readonly device: GPUDevice;
+  readonly adapterLuid: { lowPart: number; highPart: number } | null;
   readonly window: Sdl.Video.Window;
   readonly renderer: NodeWindowRenderer;
   readonly canvas: NodeGPUCanvas;
@@ -53,6 +54,9 @@ export async function createPixiRenderer(): Promise<{
     throw new Error("native GPU addon could not provide a WebGPU adapter");
 
   const device = await adapter.requestDevice();
+  const adapterLuid = process.platform === "win32"
+    ? gpu.getGPUDeviceAdapterLuid(device)
+    : null;
 
   const queue = device.queue as any;
   const rgbaUploadBuffers = new Map<number, Uint8Array>();
@@ -247,6 +251,7 @@ export async function createPixiRenderer(): Promise<{
     devicePixelRatio: 1,
     refreshRateHz,
     adapter: adapter.info?.device ?? adapter.info?.description ?? "unknown",
+    adapterLuid,
   });
 
   let destroyed = false;
@@ -272,6 +277,7 @@ export async function createPixiRenderer(): Promise<{
       gpu: instance,
       adapter,
       device,
+      adapterLuid,
       window,
       renderer,
       canvas,

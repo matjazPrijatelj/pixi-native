@@ -10,6 +10,7 @@ export interface DecoderOptions {
     sourcePaced?: boolean;
     inputArgs?: string[];
     outputArgs?: string[];
+    adapterLuid?: { lowPart: number; highPart: number };
 }
 
 export interface VideoFrame {

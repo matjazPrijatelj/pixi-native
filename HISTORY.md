@@ -2,6 +2,8 @@
 
 ## 2026-09-02
 
+- Added an explicit adapter-LUID field to the NativeVideo decoder boundary, preserving the identity needed to create the future D3D11 VideoProcessor device on Dawn's adapter.
+- Exposed the Dawn adapter LUID in `NodeRendererContext` and startup diagnostics on Windows, making the exact Dawn adapter identity available to the upcoming D3D11 VideoProcessor bridge.
 - Closed `RenderGPUDeviceToWindow` before the adapter-LUID callback declaration; the missing brace had nested the callback and caused `GetGPUDeviceAdapterLuid` to be undeclared at module registration.
 - Registered the adapter-LUID callback with the explicit `Napi::Function::New(env, callback)` overload required by the current node-addon-api headers.
 - Normalized explicit Windows compiler, linker, resource-compiler, and manifest-tool paths to CMake forward-slash syntax, avoiding `Invalid character escape '\\P'` during configure.

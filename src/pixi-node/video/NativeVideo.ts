@@ -73,6 +73,7 @@ interface NativeVideoModule {
             sourcePaced?: boolean;
             inputArgs?: string[];
             outputArgs?: string[];
+            adapterLuid?: NativeVideoAdapterLuid;
         },
     ) => NativeDecoderBinding;
 }
@@ -91,6 +92,13 @@ export interface NativeVideoOptions {
     readonly mediaType?: "file" | "live";
     readonly ffmpeg?: NativeVideoFfmpegOptions;
     readonly reconnect?: false | NativeVideoReconnectOptions;
+    /** DXGI identity of the Dawn adapter used for future D3D11 interop. */
+    readonly adapterLuid?: NativeVideoAdapterLuid;
+}
+
+export interface NativeVideoAdapterLuid {
+    readonly lowPart: number;
+    readonly highPart: number;
 }
 
 export interface NativeVideoFfmpegOptions {
@@ -358,6 +366,7 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
             ffmpegPath: resolveFfmpegPath({
                 explicitPath: options.ffmpegPath,
             }),
+            adapterLuid: options.adapterLuid,
         });
     }
 

@@ -4,6 +4,7 @@ export interface NodeGPUInstance {
 
 export interface NodeGPUApi {
   create(flags: string[]): NodeGPUInstance;
+  getGPUDeviceAdapterLuid(device: GPUDevice): { lowPart: number; highPart: number };
   renderGPUDeviceToWindow(options: {
     device: GPUDevice;
     window: unknown;

@@ -36,6 +36,12 @@ const HARDWARE_DECODE_ATTEMPTS: usize = 5;
 const HARDWARE_RETRY_DELAY: Duration = Duration::from_millis(500);
 
 #[napi(object)]
+pub struct AdapterLuid {
+    pub low_part: i64,
+    pub high_part: i64,
+}
+
+#[napi(object)]
 pub struct DecoderOptions {
     pub width: i64,
     pub height: i64,
@@ -48,6 +54,7 @@ pub struct DecoderOptions {
     pub source_paced: Option<bool>,
     pub input_args: Option<Vec<String>>,
     pub output_args: Option<Vec<String>>,
+    pub adapter_luid: Option<AdapterLuid>,
 }
 
 #[napi(object)]
