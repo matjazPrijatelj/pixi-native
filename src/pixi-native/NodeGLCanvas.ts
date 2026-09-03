@@ -3,8 +3,8 @@ import { NodeCanvas } from "./NodeCanvas.ts";
 /** HTMLCanvasElement-shaped surface backed by a native WebGL2 context. */
 export class NodeGLCanvas {
   public readonly style: Record<string, string> = {};
-  public width: number;
-  public height: number;
+  private _width: number;
+  private _height: number;
 
   private readonly context: unknown;
   private readonly canvas2d: NodeCanvas;
@@ -13,8 +13,22 @@ export class NodeGLCanvas {
   public constructor(context: unknown, width = 1280, height = 720) {
     this.context = context;
     this.canvas2d = new NodeCanvas(width, height);
-    this.width = width;
-    this.height = height;
+    this._width = width;
+    this._height = height;
+  }
+
+  public get width(): number { return this._width; }
+
+  public set width(value: number) {
+    this._width = Math.max(1, Math.floor(value));
+    this.canvas2d.width = this._width;
+  }
+
+  public get height(): number { return this._height; }
+
+  public set height(value: number) {
+    this._height = Math.max(1, Math.floor(value));
+    this.canvas2d.height = this._height;
   }
 
   public get clientWidth(): number { return this.width; }
@@ -61,10 +75,8 @@ export class NodeGLCanvas {
   }
 
   public resize(width: number, height: number): void {
-    this.width = Math.max(1, Math.floor(width));
-    this.height = Math.max(1, Math.floor(height));
-    this.canvas2d.width = this.width;
-    this.canvas2d.height = this.height;
+    this.width = width;
+    this.height = height;
     const extension = (this.context as { getExtension?: (name: string) => unknown })
       .getExtension?.("STACKGL_resize_drawingbuffer") as { resize(width: number, height: number): void } | null | undefined;
     extension?.resize(this.width, this.height);

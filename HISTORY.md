@@ -184,3 +184,5 @@
 - Removed the experimental video path from the first milestone.
 - Added Node canvas adapter tests and native adapter tests.
 - Added optional PixiJS WebGL rendering through `@kmamal/gl` and SDL OpenGL windows; WebGPU remains the default and native video remains WebGPU-only. The GL package is optional because its Node 24 native build requires Python/node-gyp.
+- Fixed WebGL dynamic BitmapText atlases by keeping the internal Canvas2D
+  surface dimensions synchronized when Pixi resizes a NodeGLCanvas resource.

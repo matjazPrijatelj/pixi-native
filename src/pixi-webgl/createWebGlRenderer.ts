@@ -59,7 +59,6 @@ export async function createWebGlRenderer(
       resizable,
       vsync,
       isGles3,
-      antialias:false,
       isWebGL2: true,
       autoEsc: true,
     });
