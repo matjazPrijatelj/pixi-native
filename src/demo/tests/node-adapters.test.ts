@@ -10,6 +10,7 @@ import {
 import { NodeGPUCanvas } from "../../pixi-native/NodeGPUCanvas.ts";
 import { NodeCanvas } from "../../pixi-native/NodeCanvas.ts";
 import { NodeGLCanvas } from "../../pixi-native/NodeGLCanvas.ts";
+import { copyRgbaRowsFlippedY } from "../../pixi-native/rgbaUpload.ts";
 
 test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
     let resized: [number, number] | undefined;
@@ -28,6 +29,7 @@ test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
     assert.deepEqual(resized, [640, 360]);
     assert.equal(canvas.width, 640);
     assert.equal(canvas.height, 360);
+    assert.equal(canvas.getPremultipliedRgbaPixels().byteLength, 640 * 360 * 4);
 });
 
 test("NodeDOMAdapter creates GL canvases for WebGL capability detection", () => {
@@ -146,6 +148,21 @@ test("NodeCanvas exposes premultiplied RGBA pixels", () => {
         Array.from(canvas.getPremultipliedRgbaPixels()),
         [100, 50, 25, 128],
     );
+});
+
+test("RGBA upload adapter flips native image rows", () => {
+    const target = new Uint8Array(16);
+    const bottomUp = new Uint8Array([
+        0, 0, 255, 255, 0, 255, 0, 255,
+        255, 0, 0, 255, 255, 255, 255, 255,
+    ]);
+
+    copyRgbaRowsFlippedY(target, bottomUp, 2, 2);
+
+    assert.deepEqual(Array.from(target), [
+        255, 0, 0, 255, 255, 255, 255, 255,
+        0, 0, 255, 255, 0, 255, 0, 255,
+    ]);
 });
 
 test("NodeDOMAdapter loads a local image into a Canvas2D context", async () => {

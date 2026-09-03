@@ -41,6 +41,7 @@ const {
 const { FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
 const { Howler } = await import("../pixi-native/audio/index.ts");
+const { copyRgbaRowsFlippedY } = await import("../pixi-native/rgbaUpload.ts");
 const { getSceneIndexForKey, getSpriteCountDeltaForKey, getVideoIndexForKey } =
   await import("./sceneNavigation.ts");
 
@@ -72,9 +73,6 @@ type PixiTexture = InstanceType<typeof Texture>;
 const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
   const loaded = await Assets.load(path);
   const image = (loaded as any).source?.resource;
-  if (native.backend === "webgl" && image?.data) {
-    return loaded as PixiTexture;
-  }
   const imageCanvas = new NodeCanvas(loaded.width, loaded.height);
   const context = imageCanvas.getContext("2d") as any;
 
@@ -82,7 +80,18 @@ const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
     throw new Error(`Native image cannot be rasterized: ${path}`);
   }
 
-  context.drawImage(image, 0, 0, loaded.width, loaded.height);
+  if (native.backend === "webgl" && image?.data) {
+    const imageData = context.createImageData(loaded.width, loaded.height);
+    copyRgbaRowsFlippedY(
+      imageData.data,
+      image.data,
+      loaded.width,
+      loaded.height,
+    );
+    context.putImageData(imageData, 0, 0);
+  } else {
+    context.drawImage(image, 0, 0, loaded.width, loaded.height);
+  }
   return Texture.from({
     resource: imageCanvas as unknown as HTMLCanvasElement,
     format: "rgba8unorm",
@@ -169,8 +178,17 @@ scenes.push(() =>
 const particleSceneIndex = scenes.length;
 scenes.push(() => createParticleTest());
 
-let index = 0;
+let index = 1;
 let scene = scenes[index]();
+
+const prepareScene = (nextScene: typeof scene): typeof scene => {
+  // Keep scene-owned batches isolated so destroying one scene cannot reuse its
+  // WebGL instruction set or pooled geometry for the next scene.
+  nextScene.enableRenderGroup();
+  return nextScene;
+};
+
+scene = prepareScene(scene);
 app.stage.sortableChildren = true;
 scene.zIndex = 0;
 app.stage.addChild(scene);
@@ -190,7 +208,7 @@ const selectScene = (nextIndex: number): void => {
   disposeDemoScene(scene);
   if (index === particleSceneIndex) particleEmitter.setEnabled(false);
   index = nextIndex;
-  scene = scenes[index]();
+  scene = prepareScene(scenes[index]());
   app.stage.addChild(scene);
   if (index === particleSceneIndex) particleEmitter.setEnabled(true);
 };
@@ -199,7 +217,7 @@ const selectVideo = (nextVideoIndex: number): void => {
   if (index !== videoSceneIndex || nextVideoIndex === videoIndex) return;
   disposeDemoScene(scene);
   videoIndex = nextVideoIndex;
-  scene = scenes[index]();
+  scene = prepareScene(scenes[index]());
   app.stage.addChild(scene);
 };
 

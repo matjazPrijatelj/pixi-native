@@ -186,3 +186,9 @@
 - Added optional PixiJS WebGL rendering through `@kmamal/gl` and SDL OpenGL windows; WebGPU remains the default and native video remains WebGPU-only. The GL package is optional because its Node 24 native build requires Python/node-gyp.
 - Fixed WebGL dynamic BitmapText atlases by keeping the internal Canvas2D
   surface dimensions synchronized when Pixi resizes a NodeGLCanvas resource.
+- Fixed WebGL Sprite assets by flipping native image rows before uploading them
+  through the shared RGBA Canvas2D path.
+- Isolated each demo scene in its own render group so WebGL batches and
+  instruction sets remain valid after scene changes.
+- Normalized native WebGL image uploads for external FNT BitmapText atlases,
+  preventing animated bitmap text from being vertically mirrored.

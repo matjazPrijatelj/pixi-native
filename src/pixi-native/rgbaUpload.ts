@@ -4,6 +4,35 @@ export type RgbaUploadFormat =
     | "bgra8unorm"
     | "bgra8unorm-srgb";
 
+/** Copies top-down RGBA rows from a bottom-up native image buffer. */
+export function copyRgbaRowsFlippedY(
+    target: Uint8Array | Uint8ClampedArray,
+    source: Uint8Array | Uint8ClampedArray,
+    width: number,
+    height: number,
+): void {
+    const rowBytes = width * 4;
+    const expectedBytes = rowBytes * height;
+    if (
+        width < 1 ||
+        height < 1 ||
+        source.byteLength !== expectedBytes ||
+        target.byteLength !== expectedBytes
+    ) {
+        throw new Error(
+            `RGBA image has invalid dimensions ${width}x${height} (${source.byteLength} bytes)`,
+        );
+    }
+
+    for (let y = 0; y < height; y++) {
+        const sourceOffset = (height - y - 1) * rowBytes;
+        target.set(
+            source.subarray(sourceOffset, sourceOffset + rowBytes),
+            y * rowBytes,
+        );
+    }
+}
+
 /** Converts RGBA pixels to the destination layout and optionally premultiplies alpha. */
 export function prepareRgbaPixelsForUpload(
     source: Uint8Array | Uint8ClampedArray,

@@ -25,6 +25,7 @@ import type {
 } from "../pixi-native/nativeTypes.ts";
 import { resolveGpuBackend } from "../pixi-native/platform.ts";
 import {
+  copyRgbaRowsFlippedY,
   getReusableUploadBuffer,
   prepareRgbaPixelsForUpload,
   type RgbaUploadFormat,
@@ -89,7 +90,32 @@ export async function createWebGlRenderer(
         !canvas.width ||
         !canvas.height
       ) {
-        return value;
+        const image = value as {
+          data?: Uint8Array | Uint8ClampedArray;
+        };
+        if (!image.data || !canvas.width || !canvas.height) {
+          return value;
+        }
+
+        const imageCanvas = new NodeCanvas(canvas.width, canvas.height);
+        const context = imageCanvas.getContext("2d") as {
+          createImageData(width: number, height: number): ImageData;
+          putImageData(imageData: ImageData, x: number, y: number): void;
+        };
+        const imageData = context.createImageData(canvas.width, canvas.height);
+        copyRgbaRowsFlippedY(
+          imageData.data,
+          image.data,
+          canvas.width,
+          canvas.height,
+        );
+        context.putImageData(imageData, 0, 0);
+        return Image.fromPixels(
+          canvas.width,
+          canvas.height,
+          32,
+          Buffer.from(imageCanvas.getPremultipliedRgbaPixels()),
+        );
       }
 
       return Image.fromPixels(
