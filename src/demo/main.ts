@@ -186,7 +186,10 @@ let scene = scenes[index]();
 const prepareScene = (nextScene: typeof scene): typeof scene => {
   // Keep scene-owned batches isolated so destroying one scene cannot reuse its
   // WebGL instruction set or pooled geometry for the next scene.
-  nextScene.enableRenderGroup();
+  const sceneOptions = nextScene as typeof nextScene & {
+    useRenderGroup?: boolean;
+  };
+  if (sceneOptions.useRenderGroup !== false) nextScene.enableRenderGroup();
   return nextScene;
 };
 

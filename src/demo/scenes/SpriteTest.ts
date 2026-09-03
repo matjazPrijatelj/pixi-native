@@ -50,6 +50,7 @@ export function createSpriteTest(
   const random = options.random ?? Math.random;
   let bounds = normalizeBounds(initialBounds);
   const scene = new Container() as SpriteTestScene;
+  scene.useRenderGroup = false;
   const dynamicSprites: AnimatedSprite[] = [];
   const staticTimelines: gsap.core.Timeline[] = [];
 

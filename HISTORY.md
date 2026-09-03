@@ -1,5 +1,16 @@
 # Development history
 
+- Kept the dynamically growing Sprite test on Pixi's direct display list so
+  each +10 batch becomes visible immediately instead of waiting for a later
+  render-group rebuild.
+
+- Fixed native WebGL `bufferSubData` uploads to preserve Pixi source offsets
+  and lengths, and to pass compact typed-array copies, preventing dynamic
+  Sprite batch geometry corruption.
+
+- Routed WebGL dynamic batch updates through full `bufferData` uploads because
+  the native partial-upload path corrupts shared Sprite and BitmapText buffers.
+
 - Added WebGL2 native video rendering with direct NV12 Y/UV uploads and a
   BT.709 GLSL conversion shader, while retaining the existing WebGPU path.
 

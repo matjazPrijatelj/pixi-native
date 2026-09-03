@@ -2,6 +2,8 @@ import { Container, type DestroyOptions } from "pixi.js";
 
 export interface DisposableDemoScene extends Container {
     dispose?(): void;
+    /** Scenes with live child-list changes must stay on Pixi's direct path. */
+    useRenderGroup?: boolean;
 }
 
 const SCENE_DESTROY_OPTIONS: DestroyOptions = {

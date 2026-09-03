@@ -11,6 +11,20 @@ import { NodeGPUCanvas } from "../../pixi-native/NodeGPUCanvas.ts";
 import { NodeCanvas } from "../../pixi-native/NodeCanvas.ts";
 import { NodeGLCanvas } from "../../pixi-native/NodeGLCanvas.ts";
 import { copyRgbaRowsFlippedY } from "../../pixi-native/rgbaUpload.ts";
+import { sliceWebGlBufferData } from "../../pixi-native/webglBufferUpload.ts";
+
+test("WebGL buffer upload copies are compact and independent", () => {
+    const data = new Float32Array([0, 1, 2, 3, 4]);
+    const sliced = sliceWebGlBufferData(data, 1, 3);
+
+    assert.deepEqual([...sliced], [1, 2, 3]);
+    assert.equal(sliced.constructor, Float32Array);
+    assert.equal(sliced.byteOffset, 0);
+    assert.deepEqual([...data], [0, 1, 2, 3, 4]);
+
+    data[1] = 99;
+    assert.deepEqual([...sliced], [1, 2, 3]);
+});
 
 test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
     let resized: [number, number] | undefined;

@@ -87,9 +87,7 @@ test("WebGL NV12 upload uses separate texture units and restores unpack alignmen
             texSubImage2D: (...args: unknown[]) => calls.push(["texSubImage2D", ...args]),
         },
         texture: {
-            initSource: () => {
-                throw new Error("initSource must not be called for frame uploads");
-            },
+            bindSource: (source: never, location?: number) => calls.push(["bindSource", source === ySource ? "y" : "uv", location ?? 0]),
             getGlSource: (source: never) => source === ySource ? yTexture : uvTexture,
         },
     };
@@ -106,10 +104,14 @@ test("WebGL NV12 upload uses separate texture units and restores unpack alignmen
 
     uploadNv12FrameWebGl(renderer, ySource, uvSource, frame);
 
-    assert.deepEqual(calls.filter(([name]) => name === "activeTexture"), [
-        ["activeTexture", 33984],
-        ["activeTexture", 33985],
+    assert.deepEqual(calls.filter(([name]) => name === "bindSource"), [
+        ["bindSource", "y", 0],
+        ["bindSource", "uv", 1],
     ]);
-    assert.deepEqual(calls.at(-1), ["pixelStorei", 3317, 4]);
+    assert.deepEqual(calls.filter(([name]) => name === "pixelStorei"), [
+        ["pixelStorei", 3317, 1],
+        ["pixelStorei", 3317, 4],
+    ]);
+    assert.deepEqual(calls.at(-1), ["activeTexture", 33984]);
     assert.equal(calls.filter(([name]) => name === "texSubImage2D").length, 2);
 });

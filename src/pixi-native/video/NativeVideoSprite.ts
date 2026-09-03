@@ -42,7 +42,7 @@ interface WebGlVideoRenderer {
         readonly UNPACK_ALIGNMENT: number;
     };
     readonly texture: {
-        initSource(source: TextureSource): void;
+        bindSource(source: TextureSource, location?: number): void;
         getGlSource(source: TextureSource): { texture: unknown; target: number };
     };
 }
@@ -258,8 +258,7 @@ export function uploadNv12FrameWebGl(
 
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     try {
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(yTexture.target, yTexture.texture);
+        renderer.texture.bindSource(ySource, 0);
         gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
@@ -271,8 +270,7 @@ export function uploadNv12FrameWebGl(
             gl.UNSIGNED_BYTE,
             frame.y,
         );
-        gl.activeTexture(gl.TEXTURE0 + 1);
-        gl.bindTexture(uvTexture.target, uvTexture.texture);
+        renderer.texture.bindSource(uvSource, 1);
         gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
@@ -286,5 +284,6 @@ export function uploadNv12FrameWebGl(
         );
     } finally {
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        gl.activeTexture(gl.TEXTURE0);
     }
 }

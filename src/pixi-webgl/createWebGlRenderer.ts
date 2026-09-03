@@ -31,6 +31,7 @@ import {
   type RgbaUploadFormat,
 } from "../pixi-native/rgbaUpload.ts";
 import { setNativeVideoModalState } from "../pixi-native/video/NativeVideo.ts";
+import { sliceWebGlBufferData } from "../pixi-native/webglBufferUpload.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -72,6 +73,12 @@ export async function createWebGlRenderer(
 
     const nativeTexSubImage2D = webgl.texSubImage2D.bind(webgl) as (
       ...args: unknown[]
+    ) => void;
+
+    const nativeBufferData = webgl.bufferData.bind(webgl) as (
+      target: number,
+      data: ArrayBufferView,
+      usage: number,
     ) => void;
 
     const toNativeImage = (value: unknown): unknown => {
@@ -127,8 +134,40 @@ export async function createWebGlRenderer(
     };
 
     const mutableWebgl = webgl as unknown as {
+      bufferData: (
+        target: number,
+        data: ArrayBufferView,
+        usage: number,
+      ) => void;
+      bufferSubData: (
+        target: number,
+        offset: number,
+        data: ArrayBufferView,
+        srcOffset?: number,
+        length?: number,
+      ) => void;
       texImage2D: (...args: unknown[]) => void;
       texSubImage2D: (...args: unknown[]) => void;
+    };
+
+    mutableWebgl.bufferSubData = (
+      target: number,
+      _offset: number,
+      data: ArrayBufferView,
+      _srcOffset?: number,
+      _length?: number,
+    ): void => {
+      const view = data as ArrayBufferView & {
+        length?: number;
+        slice?: (start: number, end?: number) => ArrayBufferView;
+      };
+      // Pixi passes the complete logical buffer with a partial-update range.
+      // Re-uploading that compact buffer avoids the native partial-upload path,
+      // which currently corrupts shared Sprite and BitmapText geometry.
+      const compactData = view.slice && view.length !== undefined
+        ? sliceWebGlBufferData(view as Parameters<typeof sliceWebGlBufferData>[0])
+        : data;
+      nativeBufferData(target, compactData, webgl.DYNAMIC_DRAW);
     };
 
     mutableWebgl.texImage2D = (...args: unknown[]): void => {
