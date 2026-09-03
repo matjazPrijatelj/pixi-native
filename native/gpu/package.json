@@ -1,5 +1,5 @@
 {
-    "name": "@pixi-node/native-gpu",
+    "name": "@pixi-native/native-gpu",
     "version": "0.1.0",
     "private": true,
     "main": "./src/index.js",

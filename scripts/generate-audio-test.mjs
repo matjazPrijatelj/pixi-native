@@ -10,7 +10,7 @@ const CHANNELS = 2;
 const DURATION_SECONDS = 6;
 const FRAME_COUNT = SAMPLE_RATE * DURATION_SECONDS;
 const DATA_BYTES = FRAME_COUNT * CHANNELS * 2;
-const outputDirectory = fileURLToPath(new URL("../assets/audio/", import.meta.url));
+const outputDirectory = fileURLToPath(new URL("../src/demo/assets/audio/", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 
 const DRUMS = [
@@ -124,7 +124,7 @@ for (let frame = 0; frame < 4; frame++) {
     rainContext.closePath();
     rainContext.fill();
 }
-await writeFile(join(repositoryRoot, "assets", "rain-drop.png"), rainCanvas.toBuffer("image/png"));
+await writeFile(join(repositoryRoot, "src", "demo", "assets", "rain-drop.png"), rainCanvas.toBuffer("image/png"));
 
 const drumSprite = {};
 let drumDurationSeconds = DRUM_PADDING_SECONDS;

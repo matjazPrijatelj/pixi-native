@@ -2,13 +2,17 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 
 const RESTART_EXIT_CODE = 75;
+const backend = process.argv[2];
+if (backend !== "webgpu" && backend !== "webgl") {
+  throw new Error("Choose `webgpu` or `webgl` as the demo backend argument");
+}
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 const startApp = (): void => {
   const child = spawn(
     process.execPath,
-    ["--enable-source-maps", "src/main.ts"],
+    ["--enable-source-maps", "src/demo/main.ts", backend],
     {
       cwd: process.cwd(),
       stdio: "inherit",

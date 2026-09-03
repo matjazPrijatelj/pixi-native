@@ -1,7 +1,7 @@
 {
-  "name": "pixi-node-wgpu",
+  "name": "pixi-native",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "scripts": {
     "native:build": "node native/gpu/scripts/build.mjs",
@@ -10,29 +10,37 @@
     "native:video:build": "node native/video/scripts/build.mjs",
     "assets:bitmap-font": "node scripts/generate-bitmap-font-test.mjs",
     "assets:audio-test": "node scripts/generate-audio-test.mjs",
-    "dev": "node --enable-source-maps src/dev-runner.ts",
+    "dev": "pnpm dev:webgpu",
+    "dev:webgpu": "node --enable-source-maps src/dev-runner.ts webgpu",
+    "dev:webgl": "node --enable-source-maps src/dev-runner.ts webgl",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.ts"
+    "test": "node --test src/demo/tests/*.test.ts"
   },
   "dependencies": {
     "@kmamal/sdl": "0.11.13",
     "@napi-rs/canvas": "1.0.8",
-    "gsap": "^3.15.0",
-    "pixi.js": "8.20.0"
-  },
-  "optionalDependencies": {
-    "@node-3d/core": "6.3.0",
-    "@node-3d/glfw": "7.3.1",
-    "@node-3d/image": "6.0.1",
-    "@node-3d/webgl": "6.0.1"
+    "@node-3d/core": "6.3.0"
   },
   "devDependencies": {
     "@types/node": "22.15.21",
-    "typescript": "^5.7.2"
+    "gsap": "^3.15.0",
+    "typescript": "^5.7.2",
+    "pixi.js": "8.20.0"
   },
   "engines": {
     "node": ">=24.0.0"
   },
-  "packageManager": "pnpm@9.15.9"
+  "packageManager": "pnpm@9.15.9",
+  "files": ["src", "native", "README.md", "HISTORY.md"],
+  "exports": {
+    ".": "./src/pixi-native/index.ts",
+    "./webgpu": "./src/pixi-webgpu/index.ts",
+    "./webgl": "./src/pixi-webgl/index.ts",
+    "./audio": "./src/pixi-native/audio/index.ts",
+    "./video": "./src/pixi-native/video/index.ts"
+  },
+  "peerDependencies": {
+    "pixi.js": ">=8.20.0 <9"
+  }
 }

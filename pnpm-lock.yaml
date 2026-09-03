@@ -14,32 +14,25 @@ importers:
       '@napi-rs/canvas':
         specifier: 1.0.8
         version: 1.0.8
+      '@node-3d/core':
+        specifier: 6.3.0
+        version: 6.3.0(three@0.185.1)
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.21
+        version: 22.15.21
       gsap:
         specifier: ^3.15.0
         version: 3.15.0
       pixi.js:
         specifier: 8.20.0
         version: 8.20.0
-    optionalDependencies:
-      '@node-3d/core':
-        specifier: 6.3.0
-        version: 6.3.0(three@0.185.1)
-      '@node-3d/glfw':
-        specifier: 7.3.1
-        version: 7.3.1
-      '@node-3d/image':
-        specifier: 6.0.1
-        version: 6.0.1
-      '@node-3d/webgl':
-        specifier: 6.0.1
-        version: 6.0.1
-    devDependencies:
-      '@types/node':
-        specifier: 22.15.21
-        version: 22.15.21
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+    peerDependencies:
+      pixi.js:
+        specifier: '>=8.20.0 <9'
 
 packages:
 

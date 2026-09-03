@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { HowlSprite } from "../pixi-node/audio/index.ts";
+import type { HowlSprite } from "../pixi-native/audio/index.ts";
 
 export interface DrumHitRegion {
     readonly x: number;
@@ -23,13 +23,13 @@ export interface DrumAtlasDescriptor {
 }
 
 export const DRUM_DESCRIPTOR_PATH = fileURLToPath(
-    new URL("../../assets/audio/drum-kit-atlas.json", import.meta.url),
+    new URL("./assets/audio/drum-kit-atlas.json", import.meta.url),
 );
 export const DRUM_ATLAS: DrumAtlasDescriptor = JSON.parse(
     readFileSync(DRUM_DESCRIPTOR_PATH, "utf8"),
 ) as DrumAtlasDescriptor;
 export const DRUM_SOURCE_PATH = fileURLToPath(
-    new URL(`../../assets/audio/${DRUM_ATLAS.src[0]}`, import.meta.url),
+    new URL(`./assets/audio/${DRUM_ATLAS.src[0]}`, import.meta.url),
 );
 export const DRUM_PADS: readonly DrumPadDefinition[] = DRUM_ATLAS.pads;
 

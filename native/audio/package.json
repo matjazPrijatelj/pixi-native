@@ -1,8 +1,7 @@
 {
-    "name": "@pixi-node/native-audio",
+    "name": "@pixi-native/native-audio",
     "version": "0.1.0",
     "private": true,
     "main": "./src/index.js",
     "types": "./src/index.d.ts"
 }
-

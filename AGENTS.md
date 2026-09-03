@@ -2,7 +2,7 @@
 
 ## Project structure
 
-This repository is a TypeScript proof of concept for rendering PixiJS 8 directly to a native SDL/Dawn WebGPU surface from Node.js. Keep native integration under `src/pixi-node/`, demo scenes under `src/demo/`, startup in `src/main.ts`,.
+This repository is a TypeScript native runtime for rendering PixiJS 8 directly to a native SDL/Dawn WebGPU or WebGL surface from Node.js. Keep shared native integration under `src/pixi-native/`, renderer entrypoints under `src/pixi-webgpu/` and `src/pixi-webgl/`, demo startup/scenes under `src/demo/`, demo tests under `src/demo/tests/`, and the development runner in `src/dev-runner.ts`.
 
 ## Commands
 

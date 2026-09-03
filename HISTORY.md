@@ -1,5 +1,29 @@
 # Development history
 
+- Split renderer startup into explicit `src/pixi-webgpu` and `src/pixi-webgl`
+  entrypoints. Added `pnpm dev:webgpu` and `pnpm dev:webgl`, removed renderer
+  selection from `.env`, and exposed the `pixi-native`, `/webgpu`, `/webgl`,
+  `/audio`, and `/video` package exports. PixiJS is now a peer dependency with
+  a local development version so consumers can update Pixi without bundling a
+  second copy.
+- Added shared renderer options for title, initial size, resizability, and
+  vsync so the public factories are reusable outside the demo.
+- Made the development demo explicitly interactive through separate
+  `pnpm dev:webgpu` and `pnpm dev:webgl` commands, with backend validation and
+  the existing keyboard scene navigation retained.
+- Renamed shared runtime code to `src/pixi-native`, demo scene sources to
+  `src/demo/scenes`, and demo tests to `src/demo/tests`; removed the empty
+  legacy `src/pixi-node` directory and updated native package metadata.
+- Split renderer implementations into dedicated WebGPU and WebGL create
+  modules; the shared renderer file now only dispatches to the selected backend.
+- Corrected dependency ownership: `@node-3d/core` is now a required runtime
+  dependency for the public WebGL renderer, its transitive native packages are
+  no longer duplicated at the root, and demo-only `gsap` is a dev dependency.
+- Moved the demo entrypoint to `src/demo/main.ts`, updated the development
+  runner and demo asset paths, and removed the unused `src/debug.ts` helper.
+- Moved all demo assets to `src/demo/assets` and updated scene, test, generator,
+  and documentation paths.
+
 - Replaced the broken `@kmamal/gl` WebGL path with `@node-3d/glfw@7.3.1` and
   `@node-3d/webgl@6.0.1`. GLFW now owns the OpenGL window/context and swap,
   while the WebGL addon supplies WebGL2 VAO, instancing, and UBO APIs. Added a

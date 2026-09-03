@@ -1,5 +1,5 @@
 {
-    "name": "@pixi-node/native-video",
+    "name": "@pixi-native/native-video",
     "version": "0.1.0",
     "private": true,
     "main": "./src/index.js",

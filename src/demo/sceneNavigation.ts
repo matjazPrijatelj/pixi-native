@@ -14,7 +14,7 @@ export function getSceneIndexForKey(
   key: string | null,
   currentIndex: number,
   sceneCount: number,
-  repeat = 0,
+  repeat: number | boolean = 0,
 ): number | null {
   if (repeat || sceneCount <= 0) return null;
   const numberedIndex = key === null ? undefined : NUMBER_KEYS[key];
@@ -31,7 +31,7 @@ export function getVideoIndexForKey(
   key: string | null,
   currentIndex: number,
   videoCount: number,
-  repeat = 0,
+  repeat: number | boolean = 0,
 ): number | null {
   if (repeat || videoCount <= 0) return null;
   if (key === "up") return (currentIndex - 1 + videoCount) % videoCount;
@@ -42,7 +42,7 @@ export function getVideoIndexForKey(
 /** Returns the Sprite-test population delta for a non-repeating up/down press. */
 export function getSpriteCountDeltaForKey(
   key: string | null,
-  repeat = 0,
+  repeat: number | boolean = 0,
 ): number | null {
   if (repeat) return null;
   if (key === "up") return 10;

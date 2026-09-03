@@ -95,7 +95,7 @@ const descriptor = [
 ].join("\n");
 
 const outputDirectory = fileURLToPath(
-    new URL("../assets/bitmap-font/", import.meta.url),
+    new URL("../src/demo/assets/bitmap-font/", import.meta.url),
 );
 await mkdir(outputDirectory, { recursive: true });
 await Promise.all([
@@ -104,7 +104,7 @@ await Promise.all([
 ]);
 
 console.log({
-    generated: "assets/bitmap-font/native-pixel.{fnt,png}",
+    generated: "src/demo/assets/bitmap-font/native-pixel.{fnt,png}",
     characters: chars.length,
     size: [atlas.width, atlas.height],
 });
