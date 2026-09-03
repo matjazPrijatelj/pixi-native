@@ -1,5 +1,8 @@
 # Development history
 
+- Enabled the WebGL OpenGL ES 3 path without injecting a duplicate `GL_ES`
+  shader macro; the native ES context now owns that definition.
+
 - Split renderer startup into explicit `src/pixi-webgpu` and `src/pixi-webgl`
   entrypoints. Added `pnpm dev:webgpu` and `pnpm dev:webgl`, removed renderer
   selection from `.env`, and exposed the `pixi-native`, `/webgpu`, `/webgl`,
