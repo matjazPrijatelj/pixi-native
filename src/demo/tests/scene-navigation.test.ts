@@ -4,7 +4,15 @@ import {
     getSceneIndexForKey,
     getSpriteCountDeltaForKey,
     getVideoIndexForKey,
+    isReloadShortcut,
 } from "../sceneNavigation.ts";
+
+test("Ctrl+R is a case-insensitive non-repeating reload shortcut", () => {
+    assert.equal(isReloadShortcut("r", true, false), true);
+    assert.equal(isReloadShortcut("R", false, true), true);
+    assert.equal(isReloadShortcut("r", false, false), false);
+    assert.equal(isReloadShortcut("r", true, true, true), false);
+});
 
 test("number keys select the matching scene", () => {
     assert.equal(getSceneIndexForKey("1", 0, 6), 0);

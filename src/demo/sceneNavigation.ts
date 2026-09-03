@@ -9,6 +9,16 @@ const NUMBER_KEYS: Readonly<Record<string, number>> = {
   "8": 7,
 };
 
+/** Returns true only for a single Ctrl+R press. */
+export function isReloadShortcut(
+  key: string | null,
+  ctrlKey: boolean,
+  ctrlDown: boolean,
+  repeat: number | boolean = 0,
+): boolean {
+  return !repeat && (ctrlKey || ctrlDown) && key?.toLowerCase() === "r";
+}
+
 function normalizeDirectionalKey(key: string | null): string | null {
   switch (key) {
     case "ArrowUp": return "up";

@@ -31,8 +31,8 @@ import type { NodeRendererContext } from "../pixi-native/createPixiRenderer.ts";
 
 export async function createWebGpuRenderer(options: NodeRendererOptions = {}): Promise<{ app: Application; native: NodeRendererContext }> {
   const title = options.title ?? "PixiJS 8 Native Node WebGPU";
-  const width = options.width ?? 1280;
-  const height = options.height ?? 720;
+  const width = options.width ?? 1920;
+  const height = options.height ?? 1080;
   const resizable = options.resizable ?? true;
   const window = sdl.video.createWindow({
     title, width, height, resizable, webgpu: true,

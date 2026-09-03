@@ -44,8 +44,8 @@ export async function createWebGlRenderer(
   const selectedBackend = "webgl" as const;
 
   const title = options.title ?? "PixiJS 8 Native Node WebGL";
-  const width = options.width ?? 1280;
-  const height = options.height ?? 720;
+  const width = options.width ?? 1920;
+  const height = options.height ?? 1080;
   const resizable = options.resizable ?? true;
   const vsync = options.vsync ?? true;
   const isGles3 = true;

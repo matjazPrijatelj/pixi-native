@@ -42,7 +42,12 @@ const { FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
 const { Howler } = await import("../pixi-native/audio/index.ts");
 const { copyRgbaRowsFlippedY } = await import("../pixi-native/rgbaUpload.ts");
-const { getSceneIndexForKey, getSpriteCountDeltaForKey, getVideoIndexForKey } =
+const {
+  getSceneIndexForKey,
+  getSpriteCountDeltaForKey,
+  getVideoIndexForKey,
+  isReloadShortcut,
+} =
   await import("./sceneNavigation.ts");
 
 const { app, native } = await createRenderer();
@@ -305,9 +310,9 @@ native.window.on("keyDown", (event) => {
     return;
   }
 
-  if (event?.key === "r") {
+  if (isReloadShortcut(event.key, Boolean(event.ctrl), ctrlDown, event.repeat)) {
     console.warn("Restarting...");
-    restartApp();
+    void restartApp();
     return;
   }
 

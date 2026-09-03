@@ -1,5 +1,8 @@
 # Development history
 
+- Fixed WebGL demo reload so only a non-repeating `Ctrl+R` press restarts the
+  runner, including native `R` key casing and modifier state.
+
 - Kept the dynamically growing Sprite test on Pixi's direct display list so
   each +10 batch becomes visible immediately instead of waiting for a later
   render-group rebuild.
