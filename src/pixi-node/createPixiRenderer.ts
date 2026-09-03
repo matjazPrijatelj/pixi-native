@@ -211,6 +211,24 @@ export async function createPixiRenderer(): Promise<{
     throw new Error(`WebGPU is required; Pixi selected ${app.renderer.name}`);
   }
 
+  const ensureRootStencilAttachment = (): void => {
+    // Graphics masks use Pixi's stencil pipeline. The canvas root target does
+    // not allocate a stencil attachment unless it is requested explicitly.
+    const rootRenderTarget = app.renderer.view.renderTarget;
+    rootRenderTarget.ensureDepthStencilTexture();
+    const depthStencilTexture = rootRenderTarget.depthStencilTexture;
+    if (
+      !rootRenderTarget.stencil ||
+      depthStencilTexture?.format !== "depth24plus-stencil8"
+    ) {
+      throw new Error(
+        `[Pixi WebGPU] root stencil attachment unavailable (stencil=${rootRenderTarget.stencil}, format=${depthStencilTexture?.format ?? "none"})`,
+      );
+    }
+  };
+
+  ensureRootStencilAttachment();
+
   // Pixi 8.20 enumerates custom shader groups with `for...in`, so the group
   // index reaches the strict native Dawn binding as a string. Browser WebGPU
   // coerces it, while the Node binding correctly requires a number.
@@ -233,6 +251,7 @@ export async function createPixiRenderer(): Promise<{
   window.on("resize", () => {
     canvas.resize(window.pixelWidth, window.pixelHeight);
     app.renderer.resize(window.pixelWidth, window.pixelHeight);
+    ensureRootStencilAttachment();
   });
 
   console.log({

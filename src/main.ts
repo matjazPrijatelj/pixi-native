@@ -342,8 +342,6 @@ native.window.on("keyUp", (event) => {
 
 app.ticker.add((ticker) => {
   animateDemoScene(scene, ticker.deltaMS);
-  (scene as typeof scene & { renderMask?: (renderer: typeof app.renderer) => void })
-    .renderMask?.(app.renderer);
   particleEmitter.update(ticker.deltaMS);
   fpsOverlay.tick(ticker.deltaMS);
   app.renderer.render(app.stage);

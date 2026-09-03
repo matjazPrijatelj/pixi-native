@@ -1,4 +1,4 @@
-import { Container, Graphics, RenderTexture, Sprite, Text, type Renderer } from "pixi.js";
+import { Container, Graphics, Text } from "pixi.js";
 import {
   NativeVideo,
   NativeVideoSprite,
@@ -17,7 +17,6 @@ export interface VideoTestScene extends DisposableDemoScene {
   handleKey(key: string | null, repeat?: number): boolean;
   resize(width: number, height: number): void;
   update(deltaMS?: number): void;
-  renderMask(renderer: Renderer): void;
 }
 
 export function createVideoTest(
@@ -46,18 +45,16 @@ export function createVideoTest(
     loop: true,
   });
   const sprite = new NativeVideoSprite(video);
+  const videoGroup = new Container();
   const uploadFpsMeter = new VideoFpsMeter();
   let measuredUploadFps: number | null = null;
   let previousPresentedFrames = 0;
 
-  const status = createMetricBitmapText("NV12 video loading...", 18);
+  const status = createMetricBitmapText("NV12 video loading...", 14);
   status.position.set(24, 60);
   const maskGraphics = new Graphics();
-  const maskTexture = RenderTexture.create({
-    width: Math.max(1, viewport.width),
-    height: Math.max(1, viewport.height),
-  });
-  const maskSprite = new Sprite(maskTexture);
+  maskGraphics.includeInBuild = false;
+  maskGraphics.measurable = false;
   let maskEnabled = false;
   let maskTime = 0;
   let videoRect = fitVideoRect(
@@ -69,15 +66,21 @@ export function createVideoTest(
   );
 
   const redrawMask = (): void => {
-    const centerX = videoRect.x + videoRect.width * (0.5 + Math.sin(maskTime) * 0.28);
-    const centerY = videoRect.y + videoRect.height * (0.5 + Math.cos(maskTime * 1.27) * 0.2);
+    const centerX =
+      videoRect.x + videoRect.width * (0.5 + Math.sin(maskTime) * 0.28);
+    const centerY =
+      videoRect.y + videoRect.height * (0.5 + Math.cos(maskTime * 1.27) * 0.2);
     const radiusX = videoRect.width * (0.28 + Math.sin(maskTime * 1.6) * 0.06);
-    const radiusY = videoRect.height * (0.34 + Math.cos(maskTime * 1.15) * 0.06);
-    maskGraphics.clear().ellipse(centerX, centerY, radiusX, radiusY).fill(0xffffff);
+    const radiusY =
+      videoRect.height * (0.34 + Math.cos(maskTime * 1.15) * 0.06);
+    maskGraphics
+      .clear()
+      .ellipse(centerX, centerY, radiusX, radiusY)
+      .fill(0xffffff);
   };
 
   const updateMaskState = (): void => {
-    sprite.mask = maskEnabled ? maskSprite : null;
+    videoGroup.mask = maskEnabled ? maskGraphics : null;
     title.text =
       `VIDEO TEST  [5]  ${fileName}  [UP/DOWN: change video]` +
       `  [M: mask ${maskEnabled ? "on" : "off"}]`;
@@ -89,18 +92,17 @@ export function createVideoTest(
     sprite.position.set(videoRect.x, videoRect.y);
     sprite.width = videoRect.width;
     sprite.height = videoRect.height;
-    maskTexture.resize(Math.max(1, width), Math.max(1, height));
     redrawMask();
   };
 
-  scene.addChild(sprite, maskSprite, status);
+  videoGroup.addChild(sprite);
+  // Keep the mask in the same scene graph so Pixi updates its transform and
+  // display state before the stencil pipe collects it. includeInBuild=false
+  // keeps it out of the normal color pass; the stencil pipe enables it only
+  // while drawing the mask geometry.
+  scene.addChild(videoGroup, maskGraphics, status);
   videoScene.resize(viewport.width, viewport.height);
   updateMaskState();
-
-  videoScene.renderMask = (renderer): void => {
-    if (!maskEnabled) return;
-    renderer.render(maskGraphics, { renderTexture: maskTexture });
-  };
 
   videoScene.handleKey = (key, repeat = 0): boolean => {
     if (repeat || String(key ?? "").toLowerCase() !== "m") return false;
@@ -142,15 +144,15 @@ export function createVideoTest(
         ? "audio muted"
         : `audio ${(video.volume * 100).toFixed(0)}%`;
     status.text =
-      `NV12 BT.709 limited / ${video.backend} / ${fps.toFixed(2)} fps` +
+      `${video.backend} / ${fps.toFixed(2)} fps` +
       ` | UP: ${uploadFps}` +
-      ` | decoded/presented/dropped: ${stats.decodedFrames}/` +
+      ` | decoded/shown/dropped: ${stats.decodedFrames}/` +
       `${stats.presentedFrames}/${stats.droppedFrames}` +
       ` | queue/skipped: ${stats.queuedFrames}/${stats.skippedFrames}` +
       ` | A/V: ${stats.syncOffsetMs.toFixed(1)} ms` +
       ` | audio queue/underruns: ${audioDiagnostics.queuedMs.toFixed(0)} ms/` +
       `${audioDiagnostics.underruns}` +
-      ` | ${(stats.bytesPerFrame / 1_000_000).toFixed(3)} MB/frame` +
+      ` | ${(stats.bytesPerFrame / 1_000_000).toFixed(2)} MB/frame` +
       ` | ${audioState} | ${state}`;
   };
 
@@ -166,9 +168,8 @@ export function createVideoTest(
     if (disposed) return;
     disposed = true;
     videoScene.update = (): void => undefined;
-    videoScene.renderMask = (): void => undefined;
-    sprite.mask = null;
-    maskTexture.destroy(true);
+    videoGroup.mask = null;
+    maskGraphics.destroy();
     video.destroy();
   };
   return videoScene;

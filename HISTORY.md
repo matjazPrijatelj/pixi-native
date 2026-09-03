@@ -1,5 +1,12 @@
 # Development history
 
+- Added an explicit root WebGPU stencil-attachment check after renderer setup
+  and resize, including the expected `depth24plus-stencil8` format.
+
+- Put the animated video `Graphics` stencil mask in the scene graph while
+  keeping `includeInBuild` disabled for the normal color pass, so Pixi can
+  update its transform and collect it reliably for masking.
+
 - Added an opt-in animated Graphics mask to the video test, toggled with `M`.
 
 - Added a global bounded PixiJS ParticleContainer test on scene 9, with Tab toggling and scene-aware enable/disable lifecycle.
