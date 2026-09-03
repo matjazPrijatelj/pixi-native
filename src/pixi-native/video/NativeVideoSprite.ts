@@ -5,8 +5,11 @@ import {
     Shader,
     Texture,
     compileHighShaderGpuProgram,
+    compileHighShaderGlProgram,
     localUniformBit,
+    localUniformBitGl,
     roundPixelsBit,
+    roundPixelsBitGl,
     type Renderer,
     type TextureSource,
 } from "pixi.js";
@@ -21,6 +24,26 @@ interface WebGpuVideoRenderer {
     readonly gpu: { readonly device: GPUDevice };
     readonly texture: {
         getGpuSource(source: TextureSource): GPUTexture;
+    };
+}
+
+interface WebGlVideoRenderer {
+    readonly name: string;
+    readonly gl: {
+        readonly TEXTURE0: number;
+        readonly TEXTURE_2D: number;
+        readonly RED: number;
+        readonly RG: number;
+        readonly UNSIGNED_BYTE: number;
+        activeTexture(texture: number): void;
+        bindTexture(target: number, texture: unknown): void;
+        pixelStorei(parameter: number, value: number): void;
+        texSubImage2D(...args: unknown[]): void;
+        readonly UNPACK_ALIGNMENT: number;
+    };
+    readonly texture: {
+        initSource(source: TextureSource): void;
+        getGlSource(source: TextureSource): { texture: unknown; target: number };
     };
 }
 
@@ -52,6 +75,36 @@ const NV12_GPU_PROGRAM = compileHighShaderGpuProgram({
     name: "native-video-nv12",
     bits: [localUniformBit, NV12_TEXTURE_BIT, roundPixelsBit],
 });
+
+const NV12_GL_TEXTURE_BIT: HighShaderBit = {
+    name: "native-video-nv12-textures-gl",
+    fragment: {
+        header: /* glsl */ `
+            uniform sampler2D yTexture;
+            uniform sampler2D uvTexture;
+        `,
+        main: /* glsl */ `
+            float rawY = texture(yTexture, vUV).r;
+            vec2 rawChroma = texture(uvTexture, vUV).rg;
+            float y = (rawY - (16.0 / 255.0)) * (255.0 / 219.0);
+            float u = (rawChroma.r - (128.0 / 255.0)) * (255.0 / 224.0);
+            float v = (rawChroma.g - (128.0 / 255.0)) * (255.0 / 224.0);
+            vec3 rgb = clamp(vec3(
+                y + 1.5748 * v,
+                y - 0.1873 * u - 0.4681 * v,
+                y + 1.8556 * u
+            ), vec3(0.0), vec3(1.0));
+            outColor = vec4(rgb, 1.0);
+        `,
+    },
+};
+
+function createNv12GlProgram(): ReturnType<typeof compileHighShaderGlProgram> {
+    return compileHighShaderGlProgram({
+        name: "native-video-nv12-gl",
+        bits: [localUniformBitGl, NV12_GL_TEXTURE_BIT, roundPixelsBitGl],
+    });
+}
 
 export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     public readonly video: NativeVideo;
@@ -110,6 +163,7 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
             indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
         });
         const shader = new Shader({
+            glProgram: globalThis.document ? createNv12GlProgram() : undefined,
             gpuProgram: NV12_GPU_PROGRAM,
             resources: {
                 yTexture: ySource,
@@ -142,22 +196,29 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
         const frame = this.video.takeLatestFrame();
         if (!frame) return;
 
-        const webGpuRenderer = renderer as unknown as WebGpuVideoRenderer;
-        if (webGpuRenderer.name !== "webgpu") {
-            throw new Error("NativeVideoSprite requires the WebGPU renderer");
+        if (renderer.name === "webgpu") {
+            const webGpuRenderer = renderer as unknown as WebGpuVideoRenderer;
+            uploadNv12FrameWebGpu(
+                webGpuRenderer,
+                this.ySource,
+                this.uvSource,
+                frame,
+            );
+        } else if (renderer.name === "webgl") {
+            uploadNv12FrameWebGl(
+                renderer as unknown as WebGlVideoRenderer,
+                this.ySource,
+                this.uvSource,
+                frame,
+            );
+        } else {
+            throw new Error("NativeVideoSprite requires WebGPU or WebGL");
         }
-
-        uploadNv12Frame(
-            webGpuRenderer,
-            this.ySource,
-            this.uvSource,
-            frame,
-        );
         this.video.markFramePresented();
     }
 }
 
-export function uploadNv12Frame(
+export function uploadNv12FrameWebGpu(
     renderer: WebGpuVideoRenderer,
     ySource: TextureSource,
     uvSource: TextureSource,
@@ -183,4 +244,47 @@ export function uploadNv12Frame(
             depthOrArrayLayers: 1,
         },
     );
+}
+
+export function uploadNv12FrameWebGl(
+    renderer: WebGlVideoRenderer,
+    ySource: TextureSource,
+    uvSource: TextureSource,
+    frame: NativeVideoFrame,
+): void {
+    const yTexture = renderer.texture.getGlSource(ySource);
+    const uvTexture = renderer.texture.getGlSource(uvSource);
+    const gl = renderer.gl;
+
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    try {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(yTexture.target, yTexture.texture);
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            frame.width,
+            frame.height,
+            gl.RED,
+            gl.UNSIGNED_BYTE,
+            frame.y,
+        );
+        gl.activeTexture(gl.TEXTURE0 + 1);
+        gl.bindTexture(uvTexture.target, uvTexture.texture);
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            frame.width / 2,
+            frame.height / 2,
+            gl.RG,
+            gl.UNSIGNED_BYTE,
+            frame.uv,
+        );
+    } finally {
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    }
 }

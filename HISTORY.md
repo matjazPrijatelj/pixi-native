@@ -1,5 +1,8 @@
 # Development history
 
+- Added WebGL2 native video rendering with direct NV12 Y/UV uploads and a
+  BT.709 GLSL conversion shader, while retaining the existing WebGPU path.
+
 - Enabled the WebGL OpenGL ES 3 path without injecting a duplicate `GL_ES`
   shader macro; the native ES context now owns that definition.
 

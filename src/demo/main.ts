@@ -46,7 +46,9 @@ const { getSceneIndexForKey, getSpriteCountDeltaForKey, getVideoIndexForKey } =
   await import("./sceneNavigation.ts");
 
 const { app, native } = await createRenderer();
-const supportsVideo = native.backend === "webgpu" && supportsNativeVideo(process.platform);
+const supportsVideo =
+  (native.backend === "webgpu" || native.backend === "webgl") &&
+  supportsNativeVideo(process.platform);
 
 const texturePaths = ["test-texture.png", "batman.png", "mario.png"].map(
   (file) => fileURLToPath(new URL(`./assets/${file}`, import.meta.url)),

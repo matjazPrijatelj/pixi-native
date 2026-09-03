@@ -131,7 +131,7 @@ Build the video bridge once before running the demo:
 pnpm native:video:build
 ```
 
-The bridge starts FFmpeg from Rust and requests packed 8-bit NV12 normalized to BT.709 limited range. Each native-owned frame becomes one external N-API buffer; Y and interleaved UV are zero-copy views uploaded to `r8unorm` and `rg8unorm` textures. A WebGPU-only Pixi `Mesh` shader converts NV12 to RGB. At 1280×720 this transfers 1,382,400 bytes per frame instead of 3,686,400 RGBA bytes. The process pipe and WebGPU staging upload remain, so this is not decoder-to-GPU zero-copy.
+The bridge starts FFmpeg from Rust and requests packed 8-bit NV12 normalized to BT.709 limited range. Each native-owned frame becomes one external N-API buffer; Y and interleaved UV are zero-copy views uploaded to `r8unorm` and `rg8unorm` textures. Pixi WebGPU and WebGL2 shaders convert NV12 to RGB. At 1280×720 this transfers 1,382,400 bytes per frame instead of 3,686,400 RGBA bytes. The process pipe and GPU upload remain, so this is not decoder-to-GPU zero-copy.
 
 FFmpeg executable lookup uses this order:
 
@@ -158,4 +158,4 @@ Scenes are selected with `1`–`8`: Graphics, Sprite, Text, BitmapText, Video, A
 
 ## Current limitations
 
-The checked-in GPU addon targets Linux x64 and Vulkan. Windows x64 builds its own ignored D3D12 addon from the pinned source. Native video currently supports Windows x64 and Linux x64 and requires the WebGPU backend. Video output is normalized SDR BT.709 limited NV12; source color metadata, HDR, direct D3D11/VA-API surface import, Howler spatial audio, and native compressed-audio decoding are not implemented. Audio decoding and pitch-preserving video rate changes currently require FFmpeg. Live video is non-seekable, has infinite duration, and intentionally supports only playback rate 1. The native window, renderer, ticker, Sprite, Graphics, Text, BitmapText, video, and audio paths are isolated from the desktop host runtime; there is no WebView fallback.
+The checked-in GPU addon targets Linux x64 and Vulkan. Windows x64 builds its own ignored D3D12 addon from the pinned source. Native video currently supports Windows x64 and Linux x64 through WebGPU and WebGL2. Video output is normalized SDR BT.709 limited NV12; source color metadata, HDR, direct D3D11/VA-API surface import, Howler spatial audio, and native compressed-audio decoding are not implemented. Audio decoding and pitch-preserving video rate changes currently require FFmpeg. Live video is non-seekable, has infinite duration, and intentionally supports only playback rate 1. The native window, renderer, ticker, Sprite, Graphics, Text, BitmapText, video, and audio paths are isolated from the desktop host runtime; there is no WebView fallback.
