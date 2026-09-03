@@ -40,6 +40,7 @@ const { getSceneIndexForKey, getSpriteCountDeltaForKey, getVideoIndexForKey } =
   await import("./demo/sceneNavigation.ts");
 
 const { app, native } = await createPixiRenderer();
+const supportsVideo = native.backend === "webgpu" && supportsNativeVideo(process.platform);
 
 const texturePaths = ["test-texture.png", "batman.png", "mario.png"].map(
   (file) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
@@ -54,6 +55,11 @@ const rainDropTexturePath = fileURLToPath(
   new URL("../assets/rain-drop-30.png", import.meta.url),
 );
 
+await Assets.init({
+  skipDetections: true,
+  texturePreference: { format: ["png"] },
+});
+
 installDynamicBitmapTextFont();
 await Assets.load(bitmapFontPath);
 type PixiTexture = InstanceType<typeof Texture>;
@@ -61,6 +67,9 @@ type PixiTexture = InstanceType<typeof Texture>;
 const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
   const loaded = await Assets.load(path);
   const image = (loaded as any).source?.resource;
+  if (native.backend === "webgl" && image?.data) {
+    return loaded as PixiTexture;
+  }
   const imageCanvas = new NodeCanvas(loaded.width, loaded.height);
   const context = imageCanvas.getContext("2d") as any;
 
@@ -114,7 +123,7 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createBitmapTextTest(),
 ];
 
-const videoSceneIndex = supportsNativeVideo(process.platform)
+const videoSceneIndex = supportsVideo
   ? scenes.length
   : null;
 
@@ -136,7 +145,7 @@ scenes.push(() =>
   }),
 );
 
-if (supportsNativeVideo(process.platform)) {
+if (supportsVideo) {
   scenes.push(() =>
     createRtpVideoTest({
       width: native.canvas.width,
@@ -341,6 +350,7 @@ native.window.on("keyUp", (event) => {
 });
 
 app.ticker.add((ticker) => {
+  native.window.pollEvents?.();
   animateDemoScene(scene, ticker.deltaMS);
   particleEmitter.update(ticker.deltaMS);
   fpsOverlay.tick(ticker.deltaMS);
@@ -388,7 +398,7 @@ const shutdown = async (): Promise<void> => {
   app.ticker.stop();
   stopActiveScene();
   particleEmitter.destroy();
-  const queue = native.device.queue as GPUQueue & {
+  const queue = native.device?.queue as GPUQueue & {
     onSubmittedWorkDone?: () => Promise<void>;
   };
   await queue.onSubmittedWorkDone?.();
@@ -418,7 +428,7 @@ const restartApp = async (): Promise<void> => {
   particleEmitter.destroy();
 
   try {
-    const queue = native.device.queue as GPUQueue & {
+    const queue = native.device?.queue as GPUQueue & {
       onSubmittedWorkDone?: () => Promise<void>;
     };
 

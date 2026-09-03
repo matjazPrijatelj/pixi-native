@@ -3,12 +3,16 @@ import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
 import { NodeDOMAdapter, normalizeRefreshRate } from "./NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
+import { NodeGLCanvas } from "./NodeGLCanvas.ts";
+import { NodeGLWindow } from "./NodeGLWindow.ts";
 import { NodeCanvas } from "./NodeCanvas.ts";
 import type {
   NodeGPUApi,
   NodeGPUInstance,
   NodeWindowRenderer,
   NodeNativeInput,
+  NodeRenderSurface,
+  NodeWindowHandle,
 } from "./nativeTypes.ts";
 import { resolveGpuBackend } from "./platform.ts";
 import {
@@ -17,27 +21,19 @@ import {
   type RgbaUploadFormat,
 } from "./rgbaUpload.ts";
 import * as sdl from "@kmamal/sdl";
-import type { Sdl } from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
 import { setNativeVideoModalState } from "./video/NativeVideo.ts";
 
 const require = createRequire(import.meta.url);
-const gpu = require("../../native/gpu") as NodeGPUApi;
-const nativeWindow = require("../../native/window") as {
-  create(
-    nativeData: Uint8Array,
-    onFrame: () => void,
-    onState: (active: boolean) => void,
-  ): { detach(): void };
-};
 
 export interface NodeRendererContext {
-  readonly gpu: NodeGPUInstance;
-  readonly adapter: GPUAdapter;
-  readonly device: GPUDevice;
-  readonly window: Sdl.Video.Window;
-  readonly renderer: NodeWindowRenderer;
-  readonly canvas: NodeGPUCanvas;
+  readonly gpu: NodeGPUInstance | null;
+  readonly adapter: GPUAdapter | null;
+  readonly device: GPUDevice | null;
+  readonly window: NodeWindowHandle;
+  readonly renderer: NodeRenderSurface;
+  readonly canvas: NodeGPUCanvas | NodeGLCanvas;
+  readonly backend: "webgpu" | "webgl";
   readonly input: NodeNativeInput;
   readonly destroy: () => void;
 }
@@ -46,14 +42,166 @@ export async function createPixiRenderer(): Promise<{
   app: Application;
   native: NodeRendererContext;
 }> {
+  const requestedBackend = process.env.PIXI_RENDERER?.trim().toLowerCase();
+  const selectedBackend: "webgpu" | "webgl" =
+    requestedBackend === "webgl" ? "webgl" : "webgpu";
+  if (selectedBackend === "webgl") {
+    try {
+      const { init, gl: webgl, Image } = await import("@node-3d/core");
+      const { glfw } = await import("@node-3d/glfw");
+      const { doc } = init({
+        title: "PixiJS 8 Native Node WebGL",
+        width: 1280,
+        height: 720,
+        resizable: true,
+        vsync: true,
+        isGles3: false,
+        isWebGL2: true,
+        autoEsc: false,
+      });
+      const window = new NodeGLWindow(doc as never, glfw.pollEvents);
+      const nativeTexImage2D = webgl.texImage2D.bind(webgl) as (...args: unknown[]) => void;
+      const nativeTexSubImage2D = webgl.texSubImage2D.bind(webgl) as (...args: unknown[]) => void;
+      const toNativeImage = (value: unknown): unknown => {
+        if (!value || typeof value !== "object") return value;
+        const canvas = value as {
+          width?: number;
+          height?: number;
+          getPremultipliedRgbaPixels?: () => Uint8Array;
+        };
+        if (!canvas.getPremultipliedRgbaPixels || !canvas.width || !canvas.height) {
+          return value;
+        }
+        return Image.fromPixels(
+          canvas.width,
+          canvas.height,
+          32,
+          Buffer.from(canvas.getPremultipliedRgbaPixels()),
+        );
+      };
+      const mutableWebgl = webgl as unknown as {
+        texImage2D: (...args: unknown[]) => void;
+        texSubImage2D: (...args: unknown[]) => void;
+      };
+      mutableWebgl.texImage2D = (...args: unknown[]): void => {
+        if (args.length === 9) args[8] = toNativeImage(args[8]);
+        if (args.length === 6) args[5] = toNativeImage(args[5]);
+        nativeTexImage2D(...args);
+      };
+      mutableWebgl.texSubImage2D = (...args: unknown[]): void => {
+        if (args.length === 9) args[8] = toNativeImage(args[8]);
+        if (args.length === 7) args[6] = toNativeImage(args[6]);
+        nativeTexSubImage2D(...args);
+      };
+      const normalizedShaderSource = webgl.shaderSource.bind(webgl) as
+        (shader: unknown, source: string) => void;
+      const shaderWebgl = webgl as unknown as {
+        shaderSource: (shader: unknown, source: string) => void;
+      };
+      shaderWebgl.shaderSource = (shader: unknown, source: string): void => {
+        const glEsSource = source.startsWith("#version")
+          ? source.replace(/^#version[^\n]*\n/u, (header) => `${header}#define GL_ES\n`)
+          : `#define GL_ES\n${source}`;
+        normalizedShaderSource(shader, glEsSource);
+      };
+      const createElement = doc.createElement.bind(doc);
+      doc.createElement = ((name: string) => {
+        const tagName = name.toLowerCase();
+        if (tagName === "canvas") return new NodeCanvas();
+        if (tagName === "div" || tagName === "a" || tagName === "button") {
+          const element: Record<string, unknown> = {
+            style: {},
+            children: [],
+            parentNode: null,
+            appendChild(child: Record<string, unknown>) {
+              child.parentNode = element;
+              (element.children as Record<string, unknown>[]).push(child);
+              return child;
+            },
+            remove() {
+              const parent = element.parentNode as Record<string, unknown> | null;
+              const children = parent?.children as Record<string, unknown>[] | undefined;
+              if (children) parent!.children = children.filter((child) => child !== element);
+              element.parentNode = null;
+            },
+            addEventListener() {},
+            removeEventListener() {},
+          };
+          return element;
+        }
+        return createElement(name);
+      }) as never;
+      const canvas = new NodeGLCanvas(webgl, window.pixelWidth, window.pixelHeight);
+      const renderer: NodeRenderSurface = {
+        resize: (width, height) => canvas.resize(width, height),
+        swap: () => window.drawWindow(() => undefined),
+        destroy: () => undefined,
+      };
+      const domAdapter = new NodeDOMAdapter(
+        null,
+        window.display.frequency,
+        undefined,
+        webgl,
+        Image as unknown as new () => { src: string },
+        webgl.WebGLRenderingContext,
+      );
+      domAdapter.install();
+      const app = new Application();
+      await app.init({
+        preference: ["webgl"],
+        canvas: doc as never,
+        width: canvas.width,
+        height: canvas.height,
+        background: 0x101544,
+        resolution: 1,
+        antialias: true,
+        autoStart: false,
+      } as never);
+      if (app.renderer.name !== "webgl") {
+        app.destroy(true);
+        renderer.destroy();
+        window.destroy();
+        throw new Error(`WebGL is required; Pixi selected ${app.renderer.name}`);
+      }
+      window.on("resize", () => {
+        canvas.resize(window.pixelWidth, window.pixelHeight);
+        app.renderer.resize(window.pixelWidth, window.pixelHeight);
+      });
+      console.log({ pixi: VERSION, renderer: app.renderer.name, backend: selectedBackend,
+        size: [canvas.width, canvas.height] });
+      let destroyed = false;
+      const destroy = (): void => {
+        if (destroyed) return;
+        destroyed = true;
+        renderer.destroy();
+        window.destroy();
+      };
+      return { app, native: { gpu: null, adapter: null, device: null, window, renderer, canvas,
+        backend: selectedBackend, input: {
+          dispatchCanvasEvent: (type, event) => canvas.dispatchNativeEvent(type, event),
+          dispatchGlobalEvent: (type, event) => domAdapter.dispatchGlobalEvent(type, event),
+        }, destroy } };
+    } catch (error) {
+      throw new Error(
+        "WebGL backend is unavailable. Install the optional @node-3d/core package.",
+        { cause: error },
+      );
+    }
+  }
+
   const window = sdl.video.createWindow({
-    title: "PixiJS 8 Native Node WebGPU",
-    width: 1280,
-    height: 720,
-    resizable: true,
-    webgpu: true,
+    title: "PixiJS 8 Native Node WebGPU", width: 1280, height: 720,
+    resizable: true, webgpu: true,
   });
 
+  const gpu = require("../../native/gpu") as NodeGPUApi;
+  const nativeWindow = require("../../native/window") as {
+    create(
+      nativeData: Uint8Array,
+      onFrame: () => void,
+      onState: (active: boolean) => void,
+    ): { detach(): void };
+  };
   const backend = resolveGpuBackend();
   const instance = gpu.create([`backend=${backend}`, "verbose=1"]);
   const adapter = await instance.requestAdapter();
@@ -184,11 +332,15 @@ export async function createPixiRenderer(): Promise<{
     waitForPresent,
   );
   domAdapter.install();
-  const modalController = nativeWindow.create((window as any)._native.gpu, () => {
-    domAdapter.dispatchModalFrame(performance.now());
-  }, (active) => {
-    setNativeVideoModalState(active);
-  });
+  const modalController = nativeWindow.create(
+    (window as any)._native.gpu,
+    () => {
+      domAdapter.dispatchModalFrame(performance.now());
+    },
+    (active) => {
+      setNativeVideoModalState(active);
+    },
+  );
 
   const app = new Application();
   await app.init({
@@ -290,9 +442,12 @@ export async function createPixiRenderer(): Promise<{
       window,
       renderer,
       canvas,
+      backend: "webgpu",
       input: {
-        dispatchCanvasEvent: (type, event) => canvas.dispatchNativeEvent(type, event),
-        dispatchGlobalEvent: (type, event) => domAdapter.dispatchGlobalEvent(type, event),
+        dispatchCanvasEvent: (type, event) =>
+          canvas.dispatchNativeEvent(type, event),
+        dispatchGlobalEvent: (type, event) =>
+          domAdapter.dispatchGlobalEvent(type, event),
       },
       destroy,
     },

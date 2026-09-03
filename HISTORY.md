@@ -1,5 +1,38 @@
 # Development history
 
+- Replaced the broken `@kmamal/gl` WebGL path with `@node-3d/glfw@7.3.1` and
+  `@node-3d/webgl@6.0.1`. GLFW now owns the OpenGL window/context and swap,
+  while the WebGL addon supplies WebGL2 VAO, instancing, and UBO APIs. Added a
+  small event/resize adapter and desktop-GL shader compatibility define.
+  Verified `pnpm install`, `pnpm typecheck`, and `PIXI_RENDERER=webgl pnpm dev`
+  reaches the running Pixi WebGL renderer. Added native-image conversion for
+  NodeCanvas uploads so Sprite, Text, and BitmapText atlases use the same
+  WebGL texture path. Added `@node-3d/image` for WebGL asset loading, fixed
+  the `texSubImage2D` argument position that could corrupt native calls, and
+  made `document.createElement('canvas')` return the active native canvas.
+  Added pixel extraction to that GL canvas so dynamically generated BitmapFont
+  atlases cannot cross the native boundary as an unsupported JS object.
+  Switched Canvas2D atlas uploads to `@node-3d/image.Image.fromPixels()` and
+  adopted the core desktop-GL shader normalizer; WebGL startup now survives
+  the first BitmapText render without NVIDIA driver access violations.
+- Corrected Pixi's WebGL version detection by exposing the real native
+  `WebGLRenderingContext` constructor. The WebGL2 context is no longer
+  misclassified as WebGL1, which was corrupting Sprite and text batch paths.
+  `pnpm typecheck` passes and `PIXI_RENDERER=webgl pnpm dev` now remains alive
+  past startup and the first rendered frame without the previous crash.
+
+- Diagnosed the `@kmamal/gl` install failure on Node.js 24: release `9.1.0`
+  has no Node ABI 134/137 prebuilt for this environment, so its installer
+  falls back to `node-gyp` and requires a runnable Python executable. Kept GL
+  optional so missing Python does not block the default WebGPU installation;
+  configure `PYTHON`/`npm_config_python` before rebuilding GL from source.
+- Documented `PIXI_RENDERER=webgpu|webgl` in `.env.example` and the local `.env`,
+  with WebGPU as the default.
+- Fixed Pixi WebGL capability detection to use the real `@kmamal/gl` context
+  instead of the Canvas2D/WebGPU compatibility stub.
+- Enabled the stencil buffer on the `@kmamal/gl` context required by Pixi's
+  WebGL capability check and masking pipeline.
+
 - Added an explicit root WebGPU stencil-attachment check after renderer setup
   and resize, including the expected `depth24plus-stencil8` format.
 
@@ -123,3 +156,4 @@
 - Added Skia Canvas2D integration for normal Pixi Text.
 - Removed the experimental video path from the first milestone.
 - Added Node canvas adapter tests and native adapter tests.
+- Added optional PixiJS WebGL rendering through `@kmamal/gl` and SDL OpenGL windows; WebGPU remains the default and native video remains WebGPU-only. The GL package is optional because its Node 24 native build requires Python/node-gyp.

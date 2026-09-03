@@ -5,7 +5,14 @@ import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NodeGPUInstance } from "./nativeTypes.ts";
 import { NodeCanvas } from "./NodeCanvas.ts";
+import { NodeGLCanvas } from "./NodeGLCanvas.ts";
 import { FrameScheduler, VSyncFrameScheduler } from "./FrameScheduler.ts";
+
+type NativeImageConstructor = new () => {
+    src: string;
+};
+
+type NativeWebGLRenderingContextConstructor = { prototype: object };
 
 export interface NativeMouseEventData {
     readonly type: string;
@@ -67,24 +74,36 @@ export function createNativeKeyboardEvent(data: NativeKeyboardEventData): Event 
 export class NodeDOMAdapter {
     public readonly isOffscreenCanvasSupported = false;
 
-    private readonly gpu: NodeGPUInstance;
+    private readonly gpu: NodeGPUInstance | null;
+    private readonly webglContext: unknown;
     private readonly refreshRateHz: number;
     private readonly waitForPresent?: () => Promise<boolean>;
+    private readonly imageConstructor: NativeImageConstructor;
+    private readonly webglRenderingContextConstructor?: NativeWebGLRenderingContextConstructor;
     private frameScheduler?: FrameScheduler | VSyncFrameScheduler;
     private readonly globalListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
     public constructor(
-        gpu: NodeGPUInstance,
+        gpu: NodeGPUInstance | null,
         refreshRateHz = 60,
         waitForPresent?: () => Promise<boolean>,
+        webglContext?: unknown,
+        imageConstructor: NativeImageConstructor = Image as unknown as NativeImageConstructor,
+        webglRenderingContextConstructor?: NativeWebGLRenderingContextConstructor,
     ) {
         this.gpu = gpu;
         this.refreshRateHz = normalizeRefreshRate(refreshRateHz);
         this.waitForPresent = waitForPresent;
+        this.webglContext = webglContext;
+        this.imageConstructor = imageConstructor;
+        this.webglRenderingContextConstructor = webglRenderingContextConstructor;
     }
 
     public createCanvas(width = 1, height = 1): HTMLCanvasElement {
-        return new NodeCanvas(width, height) as unknown as HTMLCanvasElement;
+        const canvas = this.webglContext
+            ? new NodeGLCanvas(this.webglContext, width, height)
+            : new NodeCanvas(width, height);
+        return canvas as unknown as HTMLCanvasElement;
     }
 
     public getCanvasRenderingContext2D(): { prototype: object } {
@@ -104,7 +123,10 @@ export class NodeDOMAdapter {
     }
 
     public createImage(): HTMLImageElement {
-        const image = new Image();
+        const image = new this.imageConstructor();
+        if (this.imageConstructor !== (Image as unknown as NativeImageConstructor)) {
+            return image as unknown as HTMLImageElement;
+        }
         const imagePrototype = Object.getPrototypeOf(image) as object;
         const sourceDescriptor = Object.getOwnPropertyDescriptor(imagePrototype, "src");
 
@@ -125,7 +147,19 @@ export class NodeDOMAdapter {
         });
         return image as unknown as HTMLImageElement;
     }
-    public getWebGLRenderingContext(): never { throw new Error("WebGL is intentionally unsupported in this PoC"); }
+    public getWebGLRenderingContext(): { prototype: object } {
+        if (!this.webglContext) throw new Error("Native WebGL context is unavailable");
+        // Pixi uses `instanceof WebGLRenderingContext` to distinguish WebGL 1
+        // from WebGL 2. Returning the actual native WebGL 1 constructor is
+        // important: the WebGL 2 context must not satisfy this check.
+        return this.webglRenderingContextConstructor ??
+            ((this.webglContext as {
+                WebGLRenderingContext?: NativeWebGLRenderingContextConstructor;
+            }).WebGLRenderingContext ??
+                (() => {
+                    throw new Error("Native WebGLRenderingContext constructor is unavailable");
+                })());
+    }
     public getBaseUrl(): string { return "file:///"; }
     public getFontFaceSet(): null { return null; }
     public async fetch(url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
@@ -186,11 +220,15 @@ export class NodeDOMAdapter {
     }
 
     public install(): void {
-        const canvas2d = this.createCanvas().getContext("2d");
+        const canvas2d = new NodeCanvas().getContext("2d");
         if (!canvas2d) throw new Error("Native Canvas2D backend is unavailable");
         DOMAdapter.set(this as never);
         const globalObject = globalThis as any;
-        if (!globalObject.HTMLCanvasElement) globalObject.HTMLCanvasElement = NodeCanvas;
+        // Pixi's CanvasSource uses this constructor for its instanceof check.
+        // @napi-rs/canvas may expose a different global constructor, while the
+        // project-owned NodeCanvas is the object actually returned by createCanvas.
+        globalObject.HTMLCanvasElement = NodeCanvas;
+        globalObject.HTMLImageElement = this.imageConstructor;
         const globals: Record<string, Record<string, number>> = {
             GPUTextureUsage: { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, STORAGE_BINDING: 8, RENDER_ATTACHMENT: 16 },
             GPUBufferUsage: { MAP_READ: 1, MAP_WRITE: 2, COPY_SRC: 4, COPY_DST: 8, INDEX: 16, VERTEX: 32, UNIFORM: 64, STORAGE: 128, INDIRECT: 256, QUERY_RESOLVE: 512 },
@@ -218,6 +256,9 @@ export class NodeDOMAdapter {
         (globalThis as any).removeEventListener = removeGlobalListener;
         if (!globalThis.document) {
             const makeElement = (tagName: string): Record<string, unknown> => {
+                if (tagName.toLowerCase() === "canvas") {
+                    return this.createCanvas() as unknown as Record<string, unknown>;
+                }
                 const element: Record<string, unknown> = {
                     tagName: tagName.toUpperCase(),
                     style: {},

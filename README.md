@@ -1,6 +1,6 @@
 # PixiJS 8 + Node Native WebGPU
 
-Minimal proof of concept for rendering PixiJS 8 directly into a native SDL window from Node.js, without a browser DOM, WebView, CEF, or WebGL fallback.
+Minimal proof of concept for rendering PixiJS 8 directly into a native SDL window from Node.js, without a browser DOM, WebView, or CEF. WebGPU is the default; WebGL is available with `PIXI_RENDERER=webgl`.
 
 ## Stack
 
@@ -9,11 +9,16 @@ Minimal proof of concept for rendering PixiJS 8 directly into a native SDL windo
 - PixiJS 8.20.0
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
+- Optional WebGL2 window rendering through `@node-3d/glfw` and `@node-3d/webgl`
 - Skia-backed `NodeCanvas` using `@napi-rs/canvas` for Canvas2D text and image rasterization
 - Rust/napi-rs video bridge for native FFmpeg stdout frame delivery
 - CMake, a C++ compiler, and Go 1.26+ for rebuilding the addon
 
-The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }`. Pixi is initialized with `preference: ["webgpu"]`, so initialization fails instead of falling back to WebGL.
+The WebGL backend is optional and uses prebuilt, ABI-compatible native packages; it does not require Python or a local node-gyp build. The default WebGPU backend does not load these packages.
+
+The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }` in WebGPU mode. Set `PIXI_RENDERER=webgl` to use a GLFW OpenGL context with the WebGL2 API from `@node-3d/webgl`; there is no automatic backend fallback.
+
+Set `PIXI_RENDERER=webgpu` or `PIXI_RENDERER=webgl` in the local `.env`; `.env.example` contains the default. WebGPU owns the SDL window and WebGL owns a GLFW window, so the two native window paths remain independent.
 
 ## Requirements
 
@@ -143,4 +148,4 @@ Scenes are selected with `1`–`8`: Graphics, Sprite, Text, BitmapText, Video, A
 
 ## Current limitations
 
-The checked-in GPU addon targets Linux x64 and Vulkan. Windows x64 builds its own ignored D3D12 addon from the pinned source. Native video currently supports Windows x64 and Linux x64. Video output is normalized SDR BT.709 limited NV12; source color metadata, HDR, direct D3D11/VA-API surface import, Howler spatial audio, and native compressed-audio decoding are not implemented. Audio decoding and pitch-preserving video rate changes currently require FFmpeg. Live video is non-seekable, has infinite duration, and intentionally supports only playback rate 1. The native window, renderer, ticker, Sprite, Graphics, Text, BitmapText, video, and audio paths are isolated from the desktop host runtime; there is no WebView or WebGL fallback.
+The checked-in GPU addon targets Linux x64 and Vulkan. Windows x64 builds its own ignored D3D12 addon from the pinned source. Native video currently supports Windows x64 and Linux x64 and requires the WebGPU backend. Video output is normalized SDR BT.709 limited NV12; source color metadata, HDR, direct D3D11/VA-API surface import, Howler spatial audio, and native compressed-audio decoding are not implemented. Audio decoding and pitch-preserving video rate changes currently require FFmpeg. Live video is non-seekable, has infinite duration, and intentionally supports only playback rate 1. The native window, renderer, ticker, Sprite, Graphics, Text, BitmapText, video, and audio paths are isolated from the desktop host runtime; there is no WebView fallback.

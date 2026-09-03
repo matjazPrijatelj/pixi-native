@@ -9,6 +9,53 @@ import {
 } from "../src/pixi-node/NodeDOMAdapter.ts";
 import { NodeGPUCanvas } from "../src/pixi-node/NodeGPUCanvas.ts";
 import { NodeCanvas } from "../src/pixi-node/NodeCanvas.ts";
+import { NodeGLCanvas } from "../src/pixi-node/NodeGLCanvas.ts";
+
+test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
+    let resized: [number, number] | undefined;
+    const context = {
+        getExtension(name: string) {
+            return name === "STACKGL_resize_drawingbuffer"
+                ? { resize: (width: number, height: number) => { resized = [width, height]; } }
+                : null;
+        },
+    };
+    const canvas = new NodeGLCanvas(context, 1280, 720);
+    assert.equal(canvas.getContext("webgl"), context);
+    assert.equal(canvas.getContext("webgl2"), context);
+    assert.equal(canvas.getContext("webgpu"), null);
+    canvas.resize(640.8, 360.2);
+    assert.deepEqual(resized, [640, 360]);
+    assert.equal(canvas.width, 640);
+    assert.equal(canvas.height, 360);
+});
+
+test("NodeDOMAdapter creates GL canvases for WebGL capability detection", () => {
+    const context = { getContextAttributes: () => ({ stencil: true }) };
+    const adapter = new NodeDOMAdapter(null, 60, undefined, context);
+    const canvas = adapter.createCanvas(32, 16);
+    assert.equal(canvas.getContext("webgl"), context);
+    assert.equal(canvas.getContext("webgl2"), context);
+    assert.equal((canvas.getContext("webgl") as { getContextAttributes(): { stencil: boolean } })
+        .getContextAttributes().stencil, true);
+});
+
+test("NodeDOMAdapter exposes WebGL 1 constructor without misclassifying WebGL 2", () => {
+    class WebGLRenderingContext {}
+    class WebGL2RenderingContext {}
+    const context = {
+        WebGLRenderingContext,
+        WebGL2RenderingContext,
+    };
+    const adapter = new NodeDOMAdapter(null, 60, undefined, context);
+    const webgl1 = adapter.getWebGLRenderingContext();
+
+    assert.equal(webgl1, WebGLRenderingContext);
+    assert.equal(
+        Object.create(WebGL2RenderingContext.prototype) instanceof webgl1,
+        false,
+    );
+});
 
 test("NodeGPUCanvas exposes the native WebGPU context and resizes", () => {
     const context = {} as GPUCanvasContext;
