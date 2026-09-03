@@ -192,3 +192,5 @@
   instruction sets remain valid after scene changes.
 - Normalized native WebGL image uploads for external FNT BitmapText atlases,
   preventing animated bitmap text from being vertically mirrored.
+- Accepted browser-style WebGL arrow-key names in scene navigation so the
+  arrow controls work consistently across WebGL and WebGPU.

@@ -21,7 +21,9 @@ test("number keys select the matching scene", () => {
 
 test("arrow keys navigate with wraparound", () => {
     assert.equal(getSceneIndexForKey("left", 0, 4), 3);
+    assert.equal(getSceneIndexForKey("ArrowLeft", 0, 4), 3);
     assert.equal(getSceneIndexForKey("right", 3, 4), 0);
+    assert.equal(getSceneIndexForKey("ArrowRight", 3, 4), 0);
     assert.equal(getSceneIndexForKey("right", 1, 4), 2);
 });
 
@@ -39,7 +41,9 @@ test("number keys beyond the available scenes are ignored", () => {
 
 test("video navigation cycles with up and down", () => {
     assert.equal(getVideoIndexForKey("up", 0, 5), 4);
+    assert.equal(getVideoIndexForKey("ArrowUp", 0, 5), 4);
     assert.equal(getVideoIndexForKey("down", 4, 5), 0);
+    assert.equal(getVideoIndexForKey("ArrowDown", 4, 5), 0);
     assert.equal(getVideoIndexForKey("down", 1, 5), 2);
     assert.equal(getVideoIndexForKey("left", 1, 5), null);
     assert.equal(getVideoIndexForKey("up", 1, 5, true), null);
@@ -47,7 +51,9 @@ test("video navigation cycles with up and down", () => {
 
 test("Sprite population controls add and remove batches of ten", () => {
     assert.equal(getSpriteCountDeltaForKey("up"), 10);
+    assert.equal(getSpriteCountDeltaForKey("ArrowUp"), 10);
     assert.equal(getSpriteCountDeltaForKey("down"), -10);
+    assert.equal(getSpriteCountDeltaForKey("ArrowDown"), -10);
     assert.equal(getSpriteCountDeltaForKey("left"), null);
     assert.equal(getSpriteCountDeltaForKey("up", true), null);
 });

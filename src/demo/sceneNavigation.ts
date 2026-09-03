@@ -9,6 +9,16 @@ const NUMBER_KEYS: Readonly<Record<string, number>> = {
   "8": 7,
 };
 
+function normalizeDirectionalKey(key: string | null): string | null {
+  switch (key) {
+    case "ArrowUp": return "up";
+    case "ArrowDown": return "down";
+    case "ArrowLeft": return "left";
+    case "ArrowRight": return "right";
+    default: return key;
+  }
+}
+
 /** Returns the scene selected by a non-repeating SDL key press, or null for other keys. */
 export function getSceneIndexForKey(
   key: string | null,
@@ -17,6 +27,7 @@ export function getSceneIndexForKey(
   repeat: number | boolean = 0,
 ): number | null {
   if (repeat || sceneCount <= 0) return null;
+  key = normalizeDirectionalKey(key);
   const numberedIndex = key === null ? undefined : NUMBER_KEYS[key];
   if (numberedIndex !== undefined && numberedIndex < sceneCount)
     return numberedIndex;
@@ -34,6 +45,7 @@ export function getVideoIndexForKey(
   repeat: number | boolean = 0,
 ): number | null {
   if (repeat || videoCount <= 0) return null;
+  key = normalizeDirectionalKey(key);
   if (key === "up") return (currentIndex - 1 + videoCount) % videoCount;
   if (key === "down") return (currentIndex + 1) % videoCount;
   return null;
@@ -45,6 +57,7 @@ export function getSpriteCountDeltaForKey(
   repeat: number | boolean = 0,
 ): number | null {
   if (repeat) return null;
+  key = normalizeDirectionalKey(key);
   if (key === "up") return 10;
   if (key === "down") return -10;
   return null;
