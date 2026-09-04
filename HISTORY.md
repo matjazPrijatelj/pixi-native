@@ -296,4 +296,8 @@
 - Updated the PixiJS 7 WebGL audio scene to match PixiJS 8 with the drum atlas, clickable/key-triggered pads, music sprites, fades, mute, and diagnostics.
 ## 2026-09-04
 
+- Changed PixiJS 8 WebGL and PixiJS 7 WebGL7 presentation to use direct GLFW buffer swaps, bypassing the GLFW frame gate that suppressed modal RAF frames during window dragging and resizing.
+- Routed WebGL modal timer frames directly through the Pixi ticker after application initialization, removing the remaining dependency on a pending RAF callback during native window moves and resizes.
+- Added a modal-frame listener for the independent GSAP ticker so Sprite animations advance with Graphics during WebGL window dragging and resizing.
+- Connected the native Windows modal-frame controller to PixiJS 8 WebGL and PixiJS 7 WebGL7, keeping RAF-driven animations running while the window is moved or resized.
 - Added animated stencil masks to the PixiJS 7 video test and fixed PixiJS 8 mask toggling so the ellipse remains mask-only and is never rendered as a white shape.

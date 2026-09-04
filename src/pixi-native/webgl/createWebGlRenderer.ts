@@ -283,7 +283,7 @@ export async function createWebGlRenderer(
 
     const renderer: NodeRenderSurface = {
       resize: (width, height) => canvas.resize(width, height),
-      swap: () => window.drawWindow(() => undefined),
+      swap: () => window.swapBuffers(),
       destroy: () => undefined,
     };
 
@@ -299,6 +299,7 @@ export async function createWebGlRenderer(
     domAdapter.install();
 
     const app = new Application();
+    const modalFrameListeners = new Set<() => void>();
 
     await app.init({
       preference: ["webgl"],
@@ -320,6 +321,22 @@ export async function createWebGlRenderer(
         `WebGL is required; Pixi selected ${app.renderer.name}`,
       );
     }
+
+    const nativeWindow = require("../../../native/window") as {
+      create(
+        nativeData: Uint8Array,
+        onFrame: () => void,
+        onState: (active: boolean) => void,
+      ): { detach(): void };
+    };
+    const modalController = nativeWindow.create(
+      window.nativeWindowData,
+      () => {
+        for (const listener of [...modalFrameListeners]) listener();
+        app.ticker.update(performance.now());
+      },
+      () => undefined,
+    );
 
     window.on("resize", () => {
       canvas.resize(window.pixelWidth, window.pixelHeight);
@@ -346,6 +363,7 @@ export async function createWebGlRenderer(
 
       destroyed = true;
 
+      modalController.detach();
       renderer.destroy();
       window.destroy();
     };
@@ -367,6 +385,10 @@ export async function createWebGlRenderer(
           dispatchGlobalEvent: (type, event) =>
             domAdapter.dispatchGlobalEvent(type, event),
         },
+        addModalFrameListener: (listener) => {
+          modalFrameListeners.add(listener);
+          return () => modalFrameListeners.delete(listener);
+        },
         destroy,
       },
     };
@@ -377,5 +399,3 @@ export async function createWebGlRenderer(
     );
   }
 }
-
-

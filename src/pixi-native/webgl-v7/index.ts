@@ -1,4 +1,5 @@
 import type { Application } from "pixi.js-v7";
+import { createRequire } from "node:module";
 import { NodeDOMAdapter } from "../NodeDOMAdapter.ts";
 import { NodeGLCanvas } from "../NodeGLCanvas.ts";
 import { NodeGLWindow } from "../NodeGLWindow.ts";
@@ -6,12 +7,15 @@ import { NodeCanvas } from "../NodeCanvas.ts";
 import { copyRgbaRowsFlippedY } from "../rgbaUpload.ts";
 import type { NodeNativeInput, NodeRendererOptions } from "../nativeTypes.ts";
 
+const require = createRequire(import.meta.url);
+
 export interface PixiWebGL7Result {
   readonly app: Application;
     readonly native: {
         readonly window: NodeGLWindow;
         readonly canvas: NodeGLCanvas;
         readonly input: NodeNativeInput;
+        readonly addModalFrameListener: (listener: () => void) => () => void;
         readonly swap: () => void;
     readonly destroy: () => void;
   };
@@ -45,7 +49,6 @@ export async function createPixiWebGL7(
   );
   const { Application, settings } = await import("pixi.js-v7");
   adapter.installPixi7(settings);
-
   const nativeBufferData = webgl.bufferData.bind(webgl) as (
     target: number,
     data: ArrayBufferView,
@@ -159,6 +162,23 @@ export async function createPixiWebGL7(
     autoStart: false,
     backgroundColor: 0x101544,
   });
+  const modalFrameListeners = new Set<() => void>();
+
+  const nativeWindow = require("../../../native/window") as {
+    create(
+      nativeData: Uint8Array,
+      onFrame: () => void,
+      onState: (active: boolean) => void,
+    ): { detach(): void };
+  };
+  const modalController = nativeWindow.create(
+    window.nativeWindowData,
+    () => {
+      for (const listener of [...modalFrameListeners]) listener();
+      app.ticker.update(performance.now());
+    },
+    () => undefined,
+  );
 
   window.on("resize", () => {
     canvas.resize(window.pixelWidth, window.pixelHeight);
@@ -169,6 +189,7 @@ export async function createPixiWebGL7(
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
+    modalController.detach();
     app.destroy(true, { children: true, texture: false, baseTexture: false });
     window.destroy();
   };
@@ -182,7 +203,11 @@ export async function createPixiWebGL7(
         dispatchCanvasEvent: (type, event) => canvas.dispatchNativeEvent(type, event),
         dispatchGlobalEvent: (type, event) => adapter.dispatchGlobalEvent(type, event),
       },
-      swap: () => window.drawWindow(() => undefined),
+      addModalFrameListener: (listener) => {
+        modalFrameListeners.add(listener);
+        return () => modalFrameListeners.delete(listener);
+      },
+      swap: () => window.swapBuffers(),
       destroy,
     },
   };

@@ -48,6 +48,18 @@ export class NodeGLWindow implements NodeWindowHandle {
 
     public get pixelWidth(): number { return this.glfwWindow.framebufferSize.width; }
     public get pixelHeight(): number { return this.glfwWindow.framebufferSize.height; }
+    /** Encodes the GLFW platform handle for the native Windows modal hook. */
+    public get nativeWindowData(): Uint8Array {
+        const handle = this.glfwWindow.platformWindow;
+        if (!Number.isSafeInteger(handle) || handle < 0) {
+            throw new Error(`Invalid native GL window handle: ${handle}`);
+        }
+        const data = new Uint8Array(process.arch === "ia32" ? 4 : 8);
+        const view = new DataView(data.buffer);
+        if (data.byteLength === 4) view.setUint32(0, handle, true);
+        else view.setBigUint64(0, BigInt(handle), true);
+        return data;
+    }
     public get display(): { readonly frequency: number } {
         return { frequency: this.glfwWindow.getCurrentMonitor()?.rate ?? 60 };
     }

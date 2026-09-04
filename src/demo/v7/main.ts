@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { Assets, Container, Texture } from "pixi.js-v7";
+import { gsap } from "gsap";
 import { createPixiWebGL7 } from "../../pixi-native/webgl-v7/index.ts";
 import { createGraphicsTest } from "./scenes/GraphicsTest.ts";
 import { createSpriteTest } from "./scenes/SpriteTest.ts";
@@ -28,6 +29,7 @@ const nativePointerEventType = (mouseType: "down" | "up" | "move"): string =>
         ? `pointer${mouseType}`
         : `mouse${mouseType}`;
 const { app, native } = await createPixiWebGL7({ title: "PixiJS 7 Native Node WebGL" });
+native.addModalFrameListener(() => gsap.ticker.tick());
 const asset = (name: string): string => fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
 // Native v7 has no browser format-detection surface. PNG is selected below,
 // so the detection plugins (including compressed-texture GL probes) are not

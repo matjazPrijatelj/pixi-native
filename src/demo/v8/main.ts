@@ -41,6 +41,7 @@ const {
 const { FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
 const { Howler } = await import("../../pixi-native/audio/index.ts");
+const { gsap } = await import("gsap");
 const { copyRgbaRowsFlippedY } = await import("../../pixi-native/rgbaUpload.ts");
 const {
   getSceneIndexForKey,
@@ -51,6 +52,7 @@ const {
   await import("./sceneNavigation.ts");
 
 const { app, native } = await createRenderer();
+native.addModalFrameListener?.(() => gsap.ticker.tick());
 const supportsVideo =
   (native.backend === "webgpu" || native.backend === "webgl") &&
   supportsNativeVideo(process.platform);
@@ -490,4 +492,3 @@ const restartApp = async (): Promise<void> => {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
-

@@ -10,6 +10,7 @@ import {
 import { NodeGPUCanvas } from "../../pixi-native/NodeGPUCanvas.ts";
 import { NodeCanvas } from "../../pixi-native/NodeCanvas.ts";
 import { NodeGLCanvas } from "../../pixi-native/NodeGLCanvas.ts";
+import { NodeGLWindow } from "../../pixi-native/NodeGLWindow.ts";
 import { copyRgbaRowsFlippedY } from "../../pixi-native/rgbaUpload.ts";
 import { sliceWebGlBufferData } from "../../pixi-native/webglBufferUpload.ts";
 
@@ -44,6 +45,33 @@ test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
     assert.equal(canvas.width, 640);
     assert.equal(canvas.height, 360);
     assert.equal(canvas.getPremultipliedRgbaPixels().byteLength, 640 * 360 * 4);
+});
+
+test("NodeGLWindow serializes its platform handle for native modal hooks", () => {
+    let drawCalls = 0;
+    let swapCalls = 0;
+    const window = new NodeGLWindow({
+        framebufferSize: { width: 1, height: 1 },
+        width: 1,
+        height: 1,
+        shouldClose: false,
+        currentContext: {},
+        platformWindow: 0x010203040506,
+        getCurrentMonitor: () => ({ rate: 60 }),
+        makeCurrent() {},
+        swapBuffers() { swapCalls++; },
+        drawWindow() { drawCalls++; },
+        destroy() {},
+        on() {},
+    }, () => undefined);
+
+    assert.deepEqual(
+        Array.from(window.nativeWindowData),
+        [0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0, 0],
+    );
+    window.swapBuffers();
+    assert.equal(swapCalls, 1);
+    assert.equal(drawCalls, 0);
 });
 
 test("Pixi 7 adapter patches an existing incomplete document", () => {

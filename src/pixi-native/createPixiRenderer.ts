@@ -20,6 +20,7 @@ export interface NodeRendererContext {
     readonly canvas: NodeGPUCanvas | NodeGLCanvas;
     readonly backend: "webgpu" | "webgl";
     readonly input: NodeNativeInput;
+    readonly addModalFrameListener?: (listener: () => void) => () => void;
     readonly destroy: () => void;
 }
 
