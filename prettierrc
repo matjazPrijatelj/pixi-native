@@ -1,0 +1,15 @@
+{
+  "singleQuote": false,
+  "semi": true,
+  "useTabs": false,
+  "printWidth": 140,
+  "trailingComma": "es5",
+  "overrides": [
+    {
+      "files": ["*.json", "*.jsonc"],
+      "options": {
+        "trailingComma": "none"
+      }
+    }
+  ]
+}

@@ -10,14 +10,14 @@ import {
 } from "pixi.js";
 import {
     createBitmapTextTest,
-} from "../scenes/BitmapTextTest.ts";
+} from "../v8/scenes/BitmapTextTest.ts";
 import {
     createMetricBitmapText,
     DYNAMIC_BITMAP_FONT_NAME,
     installDynamicBitmapTextFont,
-} from "../bitmapFonts.ts";
-import { FpsOverlay } from "../FpsOverlay.ts";
-import { disposeDemoScene } from "../sceneLifecycle.ts";
+} from "../v8/bitmapFonts.ts";
+import { FpsOverlay } from "../v8/FpsOverlay.ts";
+import { disposeDemoScene } from "../v8/sceneLifecycle.ts";
 import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
 
 const FONT_URL = new URL(

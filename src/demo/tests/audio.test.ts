@@ -7,7 +7,7 @@ import {
     DRUM_PADS,
     DRUM_SOURCE_PATH,
     getDrumPadForKey,
-} from "../drumKit.ts";
+} from "../v8/drumKit.ts";
 
 const source = fileURLToPath(
     new URL("../assets/audio/howler-test.wav", import.meta.url),

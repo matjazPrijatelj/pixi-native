@@ -7,9 +7,9 @@ import { gsap } from "gsap";
 import {
     DYNAMIC_BITMAP_FONT_NAME,
     installDynamicBitmapTextFont,
-} from "../bitmapFonts.ts";
-import { createSpriteTest } from "../scenes/SpriteTest.ts";
-import { disposeDemoScene } from "../sceneLifecycle.ts";
+} from "../v8/bitmapFonts.ts";
+import { createSpriteTest } from "../v8/scenes/SpriteTest.ts";
+import { disposeDemoScene } from "../v8/sceneLifecycle.ts";
 import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
 
 test("Sprite scene adds and removes animated batches without leaking tweens", () => {

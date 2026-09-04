@@ -1,0 +1,36 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { NativeVideoSprite7 } from "../../pixi-native/video/NativeVideoSprite7.ts";
+
+test("NativeVideoSprite7 uploads an NV12 frame through a Pixi 7 canvas resource", () => {
+    const frame = {
+        width: 2,
+        height: 2,
+        timestampUs: 0,
+        y: new Uint8Array([128, 128, 128, 128]),
+        uv: new Uint8Array([128, 128]),
+        yStride: 2,
+        uvStride: 2,
+        pixelFormat: "nv12" as const,
+    };
+    let presented = 0;
+    let destroyed = 0;
+    const video = {
+        width: 2,
+        height: 2,
+        takeLatestFrame: () => frame,
+        markFramePresented: () => presented++,
+        destroy: () => destroyed++,
+    } as never;
+
+    const sprite = new NativeVideoSprite7(video);
+    assert.doesNotThrow(() => sprite.updateFrame());
+    assert.equal(presented, 1);
+    const planes = sprite as unknown as { yPlane: { data: Uint8Array }; uvPlane: { data: Uint8Array } };
+    assert.deepEqual(Array.from(planes.yPlane.data), [128, 128, 128, 128]);
+    assert.deepEqual(Array.from(planes.uvPlane.data), [128, 128]);
+    assert.doesNotThrow(() => sprite.updateFrame());
+    assert.equal(presented, 2);
+    sprite.destroy();
+    assert.equal(destroyed, 1);
+});

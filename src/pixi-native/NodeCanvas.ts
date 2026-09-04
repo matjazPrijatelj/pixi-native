@@ -34,6 +34,7 @@ export class NodeCanvas {
                 HIGH_FLOAT: 36338,
                 getParameter: (name: number) => (name === 16 ? 16 : 16),
                 getShaderPrecisionFormat: () => ({ precision: 1 }),
+                getContextAttributes: () => ({ stencil: true }),
                 getExtension: () => ({ loseContext() {} }),
             };
         }

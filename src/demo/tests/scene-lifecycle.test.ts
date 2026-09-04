@@ -4,7 +4,7 @@ import { Container, Sprite, Texture } from "pixi.js";
 import {
     disposeDemoScene,
     type DisposableDemoScene,
-} from "../sceneLifecycle.ts";
+} from "../v8/sceneLifecycle.ts";
 import {
     NativeVideo,
     NativeVideoSprite,

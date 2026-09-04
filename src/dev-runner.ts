@@ -3,8 +3,8 @@ import { existsSync } from "node:fs";
 
 const RESTART_EXIT_CODE = 75;
 const backend = process.argv[2];
-if (backend !== "webgpu" && backend !== "webgl") {
-  throw new Error("Choose `webgpu` or `webgl` as the demo backend argument");
+if (backend !== "webgpu" && backend !== "webgl" && backend !== "webgl7") {
+  throw new Error("Choose `webgpu`, `webgl`, or `webgl7` as the demo backend argument");
 }
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -12,7 +12,11 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 const startApp = (): void => {
   const child = spawn(
     process.execPath,
-    ["--enable-source-maps", "src/demo/main.ts", backend],
+    [
+      "--enable-source-maps",
+      backend === "webgl7" ? "src/demo/v7/main.ts" : "src/demo/v8/main.ts",
+      backend,
+    ],
     {
       cwd: process.cwd(),
       stdio: "inherit",

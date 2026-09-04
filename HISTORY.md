@@ -1,5 +1,72 @@
 # Development history
 
+## 2026-09-04
+
+- Fixed PixiJS 7 drum hit-testing by assigning explicit ellipse hit areas;
+  transparent zero-alpha Graphics had no usable bounds for mouse interaction.
+- Waited for PixiJS 7 demo textures to finish loading before creating scenes,
+  keeping drum hit-targets and animated texture frame dimensions aligned with
+  their visible assets.
+- Matched the PixiJS 7 WebGL native mouse bridge to its selected pointer or
+  legacy mouse event mode and supplied the pointer metadata required by the
+  interaction system.
+- Fixed PixiJS 7 WebGL mouse interaction by attaching the application to the
+  same `NodeGLCanvas` that receives native mouse events.
+- Replaced the deprecated PixiJS 7 drum-pad `interactive` flag with
+  `eventMode = "static"`.
+- Added the PixiJS 7 WebGL mouse event bridge for drum-pad clicks and
+  aligned its Sprite test with the PixiJS 8 GSAP/static/dynamic animation,
+  resize, counting, and cleanup behavior.
+- Fixed the PixiJS 7 dynamic BitmapFont character range so the ASCII letters
+  used by the BitmapText scene are included alongside the Slovenian glyphs.
+- Switched dynamic PixiJS 7 demo titles and diagnostics in Video, RTP video,
+  Sprite, Rain, and Audio scenes to the shared BitmapText atlas.
+- Added the PixiJS 7 global top-right FPS overlay and aligned scene 9 with the PixiJS 8 bounded particle emitter, including Tab toggling, scene lifecycle, resize, recycling, and shutdown cleanup.
+- Replaced the PixiJS 7 scene 4 text samples and frequently updated metric helper with real BitmapText, including dynamic and external bitmap-font atlases matching the PixiJS 8 BitmapText test.
+- Fixed PixiJS 7 external BitmapText startup by bypassing unsupported native format detection and registering the FNT descriptor with its PNG atlas directly.
+
+- Removed empty legacy renderer/demo directories after verifying their replacements are active. Normalized comparisons confirmed PixiJS 8 WebGL/WebGPU behavior is unchanged apart from relocation imports and the required native addon path adjustment.
+- Fixed PixiJS 7 native video frame uploads by rasterizing converted NV12 pixels into the project `NodeCanvas` before calling `Texture.from`; Pixi 7 does not auto-detect `@node-3d/core` `Image` objects as resources.
+- Stabilized the PixiJS 7 video texture lifecycle, centered the video after its frame dimensions are known, and aligned scene `[5]` with the V8 video sources and diagnostics.
+- Added lazy PixiJS 7 scene factories so file and RTP video playback starts only after selecting its scene, and replaced the v7 CPU RGBA bridge with persistent Y/UV textures and a BT.709 GLSL shader.
+- Normalized SDL/DOM arrow-key names in the PixiJS 7 runner so sprite population and video selection receive the same `up`/`down` commands.
+- Corrected PixiJS 8 WebGPU native addon paths after moving the renderer under `src/pixi-native/webgpu`.
+- Kept the PixiJS 7 video sprite out of the shared video barrel so PixiJS 8 WebGPU startup does not load the PixiJS 7 package.
+- Removed the empty legacy renderer/demo directories and verified the active PixiJS 8 WebGL and WebGPU implementations are unchanged apart from relocation paths.
+
+- Reorganized demos under `src/demo/v8` and `src/demo/v7` while preserving
+  shared assets in `src/demo/assets`.
+- Corrected PixiJS 7 WebGL source-row handling so Canvas text and image sprites
+  use the same non-flipped orientation.
+- Prefer PixiJS 7's normalized premultiplied pixel API before the raw native
+  image buffer, preventing sprites that expose both APIs from being flipped
+  during their initial upload.
+
+- Reorganized native renderer implementations under `src/pixi-native/webgl`
+  and `src/pixi-native/webgpu`, and moved the matching PixiJS 7 demo to
+  `src/demo/v7` with all nine scene slots and native media/audio integration.
+
+- Added a separate PixiJS 7 WebGL proof-of-concept entrypoint using the shared
+  native window, canvas, DOM adapter, resize, swap, and shutdown lifecycle.
+
+- Added an isolated PixiJS 7 demo under `src/demo/v7` with Sprite, Graphics,
+  Text, ticker animation, resize, and native WebGL presentation.
+
+- Expanded the PixiJS 7 demo with numbered navigation and separate v7 scene
+  implementations for Graphics, Sprite, Text, BitmapText, Rain Sprite, and
+  diagnostic video, audio, RTP, and Particle scenes.
+
+- Patched the PixiJS 7 native DOM adapter to support existing incomplete native
+  documents required by the accessibility plugin.
+
+- Routed PixiJS 7 offscreen canvas creation through the Canvas2D adapter so
+  built-in white textures and Graphics initialize correctly on WebGL.
+
+- Added the stencil capability query required by PixiJS 7 WebGL detection.
+
+- Added PixiJS 7 WebGL texture and dynamic buffer compatibility adapters for
+  native image uploads and shared geometry updates.
+
 - Fixed WebGL demo reload so only a non-repeating `Ctrl+R` press restarts the
   runner, including native `R` key casing and modifier state.
 
@@ -20,7 +87,7 @@
 - Enabled the WebGL OpenGL ES 3 path without injecting a duplicate `GL_ES`
   shader macro; the native ES context now owns that definition.
 
-- Split renderer startup into explicit `src/pixi-webgpu` and `src/pixi-webgl`
+- Split renderer startup into explicit `src/pixi-native/webgpu` and `src/pixi-native/webgl`
   entrypoints. Added `pnpm dev:webgpu` and `pnpm dev:webgl`, removed renderer
   selection from `.env`, and exposed the `pixi-native`, `/webgpu`, `/webgl`,
   `/audio`, and `/video` package exports. PixiJS is now a peer dependency with
@@ -211,3 +278,7 @@
   preventing animated bitmap text from being vertically mirrored.
 - Accepted browser-style WebGL arrow-key names in scene navigation so the
   arrow controls work consistently across WebGL and WebGPU.
+- Updated the PixiJS 7 WebGL audio scene to match PixiJS 8 with the drum atlas, clickable/key-triggered pads, music sprites, fades, mute, and diagnostics.
+## 2026-09-04
+
+- Added animated stencil masks to the PixiJS 7 video test and fixed PixiJS 8 mask toggling so the ellipse remains mask-only and is never rendered as a white shape.

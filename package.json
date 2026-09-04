@@ -13,9 +13,11 @@
     "dev": "pnpm dev:webgpu",
     "dev:webgpu": "node --enable-source-maps src/dev-runner.ts webgpu",
     "dev:webgl": "node --enable-source-maps src/dev-runner.ts webgl",
+    "dev:webgl7": "node --enable-source-maps src/dev-runner.ts webgl7",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/demo/tests/*.test.ts"
+    "test": "node --test src/demo/tests/*.test.ts",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@kmamal/sdl": "0.11.13",
@@ -23,20 +25,34 @@
     "@node-3d/core": "6.3.0"
   },
   "devDependencies": {
+    "@node-3d/glfw": "7.3.1",
     "@types/node": "22.15.21",
     "gsap": "^3.15.0",
+    "pixi.js": "8.20.0",
+    "pixi.js-v7": "npm:pixi.js@7.4.3",
     "typescript": "^5.7.2",
-    "pixi.js": "8.20.0"
+    "prettier": "3.2.5"
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "packageManager": "pnpm@9.15.9",
-  "files": ["src", "native", "README.md", "HISTORY.md"],
+  "pnpm": {
+    "overrides": {
+      "eventemitter3": "5.0.4"
+    }
+  },
+  "files": [
+    "src",
+    "native",
+    "README.md",
+    "HISTORY.md"
+  ],
   "exports": {
     ".": "./src/pixi-native/index.ts",
-    "./webgpu": "./src/pixi-webgpu/index.ts",
-    "./webgl": "./src/pixi-webgl/index.ts",
+    "./webgpu": "./src/pixi-native/webgpu/index.ts",
+    "./webgl": "./src/pixi-native/webgl/index.ts",
+    "./webgl-pixi7": "./src/pixi-native/webgl-v7/index.ts",
     "./audio": "./src/pixi-native/audio/index.ts",
     "./video": "./src/pixi-native/video/index.ts"
   },

@@ -1,12 +1,13 @@
 # PixiJS 8 + Node Native WebGPU
 
-Native PixiJS 8 runtime for rendering directly into a native window from Node.js, without a browser DOM, WebView, or CEF. The package is `pixi-native`; renderer entrypoints are `pixi-native/webgpu` and `pixi-native/webgl`.
+Native PixiJS runtime for rendering directly into a native window from Node.js, without a browser DOM, WebView, or CEF. PixiJS 8 is the primary runtime; the package is `pixi-native` with `pixi-native/webgpu` and `pixi-native/webgl` entrypoints.
 
 ## Stack
 
 - Node.js 24 LTS
 - pnpm 9.15.9
 - PixiJS 8.20.0
+- Separate PixiJS 7.4.3 WebGL proof-of-concept entrypoint (`pixi-native/webgl-pixi7`)
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
 - Optional WebGL2 window rendering through `@node-3d/glfw` and `@node-3d/webgl`
@@ -29,6 +30,12 @@ const { app, native } = await createPixiWebGPU();
 ```
 
 `pixi-native/webgl` exposes the equivalent `createPixiWebGL` factory. The package declares PixiJS 8 as a peer dependency so applications can update Pixi within the supported major version.
+
+PixiJS 7 can be tested through the separate `pixi.js-v7` dependency and
+`pixi-native/webgl-pixi7` export. Run the isolated scene demo with
+`pnpm dev:webgl7`; it contains the same nine scene slots as the Pixi 8 demo,
+with Pixi 7-specific Graphics, text, sprite, particle, and native media
+adaptations. Use number keys `1`–`9` or left/right to navigate.
 
 ## Requirements
 

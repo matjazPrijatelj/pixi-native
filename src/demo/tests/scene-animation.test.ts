@@ -4,7 +4,7 @@ import { Container, Graphics } from "pixi.js";
 import {
     animateDemoScene,
     createGraphicsTest,
-} from "../DemoScene.ts";
+} from "../v8/DemoScene.ts";
 
 test("animateDemoScene tolerates scenes with fewer than three children", () => {
     assert.doesNotThrow(() => animateDemoScene(new Container(), 16));

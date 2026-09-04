@@ -35,6 +35,16 @@ export function createNativeMouseEvent(data: NativeMouseEventData): Event {
         offsetY: data.clientY,
         screenX: data.clientX,
         screenY: data.clientY,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+        width: 1,
+        height: 1,
+        pressure: data.buttons ? 0.5 : 0,
+        tiltX: 0,
+        tiltY: 0,
+        twist: 0,
+        tangentialPressure: 0,
         isTrusted: true,
         altKey: false,
         ctrlKey: false,
@@ -80,6 +90,7 @@ export class NodeDOMAdapter {
     private readonly waitForPresent?: () => Promise<boolean>;
     private readonly imageConstructor: NativeImageConstructor;
     private readonly webglRenderingContextConstructor?: NativeWebGLRenderingContextConstructor;
+    private usePixi7CanvasAdapter = false;
     private frameScheduler?: FrameScheduler | VSyncFrameScheduler;
     private readonly globalListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
@@ -100,7 +111,7 @@ export class NodeDOMAdapter {
     }
 
     public createCanvas(width = 1, height = 1): HTMLCanvasElement {
-        const canvas = this.webglContext
+        const canvas = this.webglContext && !this.usePixi7CanvasAdapter
             ? new NodeGLCanvas(this.webglContext, width, height)
             : new NodeCanvas(width, height);
         return canvas as unknown as HTMLCanvasElement;
@@ -290,6 +301,64 @@ export class NodeDOMAdapter {
             };
         }
         this.installFrameScheduler();
+    }
+
+    /** Installs this adapter for Pixi 7's settings-based environment API. */
+    public installPixi7(settings: { ADAPTER: unknown }): void {
+        this.usePixi7CanvasAdapter = true;
+        this.install();
+        this.patchPixi7Document();
+        settings.ADAPTER = this;
+    }
+
+    /** Adds the DOM operations used by Pixi 7 when another native document exists. */
+    private patchPixi7Document(): void {
+        const documentObject = (globalThis as any).document as {
+            body?: Record<string, unknown>;
+            createElement?: (tagName: string) => Record<string, unknown> | null;
+        } | undefined;
+        if (!documentObject) return;
+
+        const originalCreateElement = documentObject.createElement?.bind(documentObject);
+        const createElement = (tagName: string): Record<string, unknown> => {
+            const existing = originalCreateElement?.(tagName);
+            if (existing) return existing;
+            if (tagName.toLowerCase() === "canvas") {
+                return this.createCanvas() as unknown as Record<string, unknown>;
+            }
+            return this.createPixi7Element(tagName);
+        };
+        documentObject.createElement = createElement;
+        documentObject.body ??= this.createPixi7Element("body");
+    }
+
+    private createPixi7Element(tagName: string): Record<string, unknown> {
+        const element: Record<string, unknown> = {
+            tagName: tagName.toUpperCase(),
+            style: {},
+            children: [],
+            parentNode: null,
+            appendChild: (child: Record<string, unknown>) => {
+                child.parentNode = element;
+                (element.children as Record<string, unknown>[]).push(child);
+                return child;
+            },
+            removeChild: (child: Record<string, unknown>) => {
+                element.children = (element.children as Record<string, unknown>[])
+                    .filter((item) => item !== child);
+                child.parentNode = null;
+            },
+            contains: (child: Record<string, unknown>) =>
+                (element.children as Record<string, unknown>[]).includes(child),
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            setAttribute: (name: string, value: string) => {
+                element[name] = value;
+            },
+            getAttribute: (name: string) => element[name] ?? null,
+            canPlayType: () => "",
+        };
+        return element;
     }
 }
 

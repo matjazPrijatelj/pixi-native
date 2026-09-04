@@ -46,6 +46,44 @@ test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
     assert.equal(canvas.getPremultipliedRgbaPixels().byteLength, 640 * 360 * 4);
 });
 
+test("Pixi 7 adapter patches an existing incomplete document", () => {
+    const previousDocument = (globalThis as { document?: unknown }).document;
+    const incompleteDocument = {
+        createElement: () => null,
+    };
+    Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: incompleteDocument,
+    });
+
+    try {
+        const settings = { ADAPTER: null as unknown };
+        const adapter = new NodeDOMAdapter({} as never);
+        adapter.installPixi7(settings);
+        const documentObject = globalThis.document as unknown as {
+            body: { appendChild(child: Record<string, unknown>): void };
+            createElement(tagName: string): Record<string, unknown>;
+        };
+        const div = documentObject.createElement("div");
+        assert.deepEqual(div.style, {});
+        assert.ok(documentObject.body);
+        assert.ok(adapter.createCanvas().getContext("2d"));
+        documentObject.body.appendChild(div);
+        assert.equal(div.parentNode, documentObject.body);
+        assert.equal(settings.ADAPTER !== null, true);
+    } finally {
+        if (previousDocument === undefined) {
+            delete (globalThis as { document?: unknown }).document;
+        } else {
+            Object.defineProperty(globalThis, "document", {
+                configurable: true,
+                writable: true,
+                value: previousDocument,
+            });
+        }
+    }
+});
+
 test("NodeDOMAdapter creates GL canvases for WebGL capability detection", () => {
     const context = { getContextAttributes: () => ({ stencil: true }) };
     const adapter = new NodeDOMAdapter(null, 60, undefined, context);

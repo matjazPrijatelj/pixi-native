@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadRtpTestConfig } from "../rtpTestConfig.ts";
+import { loadRtpTestConfig } from "../v8/rtpTestConfig.ts";
 
 test("RTP test remains disabled until both local URLs are configured", () => {
     assert.equal(loadRtpTestConfig({}), null);

@@ -1,8 +1,8 @@
 import type { Application } from "pixi.js";
 import type { NodeGLCanvas } from "./NodeGLCanvas.ts";
 import type { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
-import { createWebGlRenderer } from "../pixi-webgl/createWebGlRenderer.ts";
-import { createWebGpuRenderer } from "../pixi-webgpu/createWebGpuRenderer.ts";
+import { createWebGlRenderer } from "./webgl/createWebGlRenderer.ts";
+import { createWebGpuRenderer } from "./webgpu/createWebGpuRenderer.ts";
 import type {
     NodeNativeInput,
     NodeRendererOptions,
