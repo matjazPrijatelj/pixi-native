@@ -235,6 +235,10 @@ export class NodeDOMAdapter {
         if (!canvas2d) throw new Error("Native Canvas2D backend is unavailable");
         DOMAdapter.set(this as never);
         const globalObject = globalThis as any;
+        // Pixi 7's Assets image parser constructs `new Image()` directly
+        // instead of going through the adapter. Keep that constructor aligned
+        // with HTMLImageElement so BaseImageResource accepts the loaded image.
+        globalObject.Image = this.imageConstructor;
         // Pixi's CanvasSource uses this constructor for its instanceof check.
         // @napi-rs/canvas may expose a different global constructor, while the
         // project-owned NodeCanvas is the object actually returned by createCanvas.

@@ -2,6 +2,21 @@
 
 ## 2026-09-04
 
+- Rasterized PixiJS 7 Assets image resources through NodeCanvas before native
+  WebGL upload when the native Image has no raw pixel buffer, preventing stale
+  BitmapFont texture contents from appearing in Sprite scenes.
+- Destroyed PixiJS 7 scenes recursively during navigation so cached BitmapText
+  geometry from a previous scene cannot render over Sprite scenes.
+- Initialized the PixiJS 7 Assets loader with native-safe PNG preferences and
+  disabled data-URI format detection before direct asset loading.
+- Removed PixiJS 7 browser detection plugins from the native startup path,
+  because v7 detection still probes compressed-texture GL support when tests
+  are skipped.
+- Aligned the native global `Image` constructor with PixiJS 7's Assets parser
+  and `HTMLImageElement` adapter type so direct PNG loads create valid image
+  resources.
+- Switched PixiJS 7 demo texture loading to direct `Assets.load` calls,
+  matching the PixiJS 8 asset lifecycle without a wrapper loader.
 - Fixed PixiJS 7 drum hit-testing by assigning explicit ellipse hit areas;
   transparent zero-alpha Graphics had no usable bounds for mouse interaction.
 - Waited for PixiJS 7 demo textures to finish loading before creating scenes,

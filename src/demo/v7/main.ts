@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { Container, Texture } from "pixi.js-v7";
+import { Assets, Container, Texture } from "pixi.js-v7";
 import { createPixiWebGL7 } from "../../pixi-native/webgl-v7/index.ts";
 import { createGraphicsTest } from "./scenes/GraphicsTest.ts";
 import { createSpriteTest } from "./scenes/SpriteTest.ts";
@@ -10,11 +10,11 @@ import { createAudioTest } from "./scenes/AudioTest.ts";
 import { createRtpVideoTest } from "./scenes/RtpVideoTest.ts";
 import { createRainSpriteTest } from "./scenes/RainSpriteTest.ts";
 import { createParticleTest } from "./scenes/ParticleTest.ts";
+import { disposeDemoScene } from "./sceneLifecycle.ts";
 import { FpsOverlay7 } from "./FpsOverlay.ts";
 import { ParticleEmitter7 } from "./ParticleEmitter.ts";
 import { destroyBitmapFonts, installDynamicBitmapTextFont, loadExternalBitmapFont } from "./bitmapFonts.ts";
 import { createNativeMouseEvent } from "../../pixi-native/NodeDOMAdapter.ts";
-import { loadPixi7Texture } from "./textureLoading.ts";
 
 type Pixi7Scene = Container & { update?: (deltaMS: number, now: number) => void; dispose?: () => void; resize?: (width: number, height: number) => void; handleKey?: (key: string | null, repeat?: number) => boolean; addRandomSprites?: (count?: number) => number; removeRandomSprites?: (count?: number) => number };
 type Pixi7SceneFactory = () => Pixi7Scene;
@@ -29,6 +29,14 @@ const nativePointerEventType = (mouseType: "down" | "up" | "move"): string =>
         : `mouse${mouseType}`;
 const { app, native } = await createPixiWebGL7({ title: "PixiJS 7 Native Node WebGL" });
 const asset = (name: string): string => fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
+// Native v7 has no browser format-detection surface. PNG is selected below,
+// so the detection plugins (including compressed-texture GL probes) are not
+// needed and would otherwise inspect an unsupported data URI.
+Assets.detections.length = 0;
+await Assets.init({
+    skipDetections: true,
+    texturePreference: { format: ["png"] },
+});
 installDynamicBitmapTextFont();
 await loadExternalBitmapFont(asset("bitmap-font/native-pixel.fnt"));
 const videos: Pixi7VideoSource[] = [
@@ -42,7 +50,7 @@ const videos: Pixi7VideoSource[] = [
 ];
 const [texture, batman, mario, rain, drumTexture] = await Promise.all(
     ["test-texture.png", "batman.png", "mario.png", "rain-drop-30.png", "drum-kit.png"]
-        .map((name) => loadPixi7Texture(asset(name))),
+        .map((name) => Assets.load(asset(name))),
 ) as [Texture, Texture, Texture, Texture, Texture];
 const sceneFactories: Pixi7SceneFactory[] = [
     () => createGraphicsTest() as Pixi7Scene,
@@ -71,9 +79,8 @@ activeScene.resize?.(native.canvas.width, native.canvas.height);
 const selectScene = (nextIndex: number): void => {
     const normalized = (nextIndex + sceneFactories.length) % sceneFactories.length;
     if (normalized === sceneIndex) return;
-    activeScene.dispose?.();
+    disposeDemoScene(activeScene);
     if (sceneIndex === 8) particleEmitter.setEnabled(false);
-    app.stage.removeChild(activeScene);
     sceneIndex = normalized;
     activeScene = sceneFactories[sceneIndex]();
     app.stage.addChild(activeScene);
@@ -149,7 +156,7 @@ async function shutdown(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     app.ticker.stop();
-    activeScene.dispose?.();
+    disposeDemoScene(activeScene);
     particleEmitter.destroy();
     fpsOverlay.destroy({ children: true });
     destroyBitmapFonts();

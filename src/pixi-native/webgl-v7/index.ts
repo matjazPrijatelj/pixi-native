@@ -94,7 +94,20 @@ export async function createPixiWebGL7(
 
     // Pixi 7 ImageResource's native image data is bottom-up in this GL
     // bridge, so reverse only this fallback path. Canvas text never uses it.
-    if (!source.data) return value;
+    if (!source.data) {
+      const imageCanvas = new NodeCanvas(source.width, source.height);
+      const context = imageCanvas.getContext("2d") as {
+        drawImage?: (image: unknown, x: number, y: number, width: number, height: number) => void;
+      };
+      if (!context.drawImage) return value;
+      context.drawImage(value, 0, 0, source.width, source.height);
+      return Image.fromPixels(
+        source.width,
+        source.height,
+        32,
+        Buffer.from(imageCanvas.getPremultipliedRgbaPixels()),
+      );
+    }
     const imageCanvas = new NodeCanvas(source.width, source.height);
     const context = imageCanvas.getContext("2d") as {
       createImageData(width: number, height: number): ImageData;
