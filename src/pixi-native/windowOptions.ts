@@ -52,16 +52,21 @@ export function resolveNodeRendererOptions(
   if (transparent && platform !== "win32") {
     throw new Error("transparent native windows are supported only on Windows 11");
   }
-  const backgroundAlpha = options.backgroundAlpha ?? (transparent ? 0 : 1);
+  const requestedBackgroundAlpha =
+    options.backgroundAlpha ?? (transparent ? 0 : 1);
   if (
-    !Number.isFinite(backgroundAlpha) ||
-    backgroundAlpha < 0 ||
-    backgroundAlpha > 1
+    !Number.isFinite(requestedBackgroundAlpha) ||
+    requestedBackgroundAlpha < 0 ||
+    requestedBackgroundAlpha > 1
   ) {
     throw new Error("backgroundAlpha must be a finite number from 0 to 1");
   }
-  if (!transparent && backgroundAlpha < 1) {
-    throw new Error("backgroundAlpha below 1 requires transparent: true");
+  let backgroundAlpha = requestedBackgroundAlpha;
+  if (!transparent && requestedBackgroundAlpha < 1) {
+    console.warn(
+      "[pixi-native] backgroundAlpha below 1 is ignored because transparent is false; using backgroundAlpha: 1",
+    );
+    backgroundAlpha = 1;
   }
 
   return {

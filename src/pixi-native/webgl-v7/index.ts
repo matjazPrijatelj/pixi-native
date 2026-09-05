@@ -20,6 +20,10 @@ import {
   assertGlfwTransparency,
   requestGlfwTransparency,
 } from "../glfwTransparency.ts";
+import {
+  manageNativeApplication,
+  type ManagedNativeApplication,
+} from "../ManagedNativeApplication.ts";
 
 export interface PixiWebGL7Result {
   readonly app: Application;
@@ -32,6 +36,11 @@ export interface PixiWebGL7Result {
     readonly destroy: () => void;
   };
 }
+
+export type NativePixiApplication7 = ManagedNativeApplication<
+  Application,
+  PixiWebGL7Result["native"]
+>;
 
 export async function createPixiWebGL7(
   options: NodeRendererOptions = {},
@@ -244,7 +253,7 @@ export async function createPixiWebGL7(
     nativeWindowData,
     () => {
       for (const listener of [...modalFrameListeners]) listener();
-      app.ticker.update(performance.now());
+      adapter.dispatchModalFrame(performance.now());
     },
     () => undefined,
   );
@@ -289,4 +298,18 @@ export async function createPixiWebGL7(
       destroy,
     },
   };
+}
+
+/** Creates a self-running Pixi 7 application on the native WebGL surface. */
+export async function createNativePixiApplication(
+  options: NodeRendererOptions = {},
+): Promise<NativePixiApplication7> {
+  const { app, native } = await createPixiWebGL7(options);
+  return manageNativeApplication({
+    app,
+    native,
+    // The Pixi 7 low-level context owns its non-idempotent Application
+    // teardown so the managed path cannot invoke ResizePlugin twice.
+    destroyApplication: () => undefined,
+  });
 }

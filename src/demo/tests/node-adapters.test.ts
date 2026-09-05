@@ -91,21 +91,36 @@ test("native window options normalize transparency and desktop position", () => 
       /finite number from 0 to 1/,
     );
   }
-  assert.throws(
-    () => resolveNodeRendererOptions({ backgroundAlpha: 0.35 }, "x", "win32"),
-    /requires transparent: true/,
-  );
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...values: unknown[]): void => {
+    warnings.push(values);
+  };
+  try {
+    assert.equal(
+      resolveNodeRendererOptions(
+        { transparent: false, backgroundAlpha: 0.35 },
+        "x",
+        "win32",
+      ).backgroundAlpha,
+      1,
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 1);
+  assert.match(String(warnings[0][0]), /backgroundAlpha below 1 is ignored/);
 });
 
-test("native demos request a transparent decorated window at the desktop origin", () => {
+test("native demos expose explicit decorated window defaults", () => {
   assert.deepEqual(DEMO_WINDOW_OPTIONS, {
     width: 1280,
     height: 720,
     borderless: false,
-    transparent: true,
-    backgroundAlpha: 0.5,
-    x: 0,
-    y: 0,
+    transparent: false,
+    backgroundAlpha: 1,
+    x: 50,
+    y: 50,
   });
 });
 
@@ -334,7 +349,11 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
     destroy() {
       destroyed = true;
     },
-    on() {},
+    on(event: string, listener: (event: Record<string, number>) => void) {
+      if (event === "wheel") {
+        listener({ x: 4, y: 5, deltaX: 2, deltaY: -3 });
+      }
+    },
   };
   const window = new NodeGLWindow(glfwWindow, {
     pollEvents() {},
@@ -350,6 +369,15 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
   window.swapBuffers();
   assert.equal(swapCalls, 1);
   assert.equal(drawCalls, 0);
+  let wheelEvent: unknown;
+  window.on("mouseWheel", (event) => { wheelEvent = event; });
+  assert.deepEqual(wheelEvent, {
+    x: 4,
+    y: 5,
+    dx: 2,
+    dy: -3,
+    flipped: false,
+  });
   window.setPosition(-200, 300);
   assert.deepEqual(position, { x: -200, y: 300 });
   assert.equal(window.x, -200);

@@ -1,9 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { Assets, Container, Texture } from "pixi.js-v7";
-import { gsap } from "gsap";
-import { createPixiWebGL7 } from "../../pixi-native/webgl-v7/index.ts";
+import { createNativePixiApplication } from "../../pixi-native/webgl-v7/index.ts";
 import { createGraphicsTest } from "./scenes/GraphicsTest.ts";
-import { createSpriteTest } from "./scenes/SpriteTest.ts";
 import { createTextTest } from "./scenes/TextTest.ts";
 import { createBitmapTextTest } from "./scenes/BitmapTextTest.ts";
 import { createVideoTest, type Pixi7VideoSource } from "./scenes/VideoTest.ts";
@@ -15,25 +13,16 @@ import { disposeDemoScene } from "./sceneLifecycle.ts";
 import { FpsOverlay7 } from "./FpsOverlay.ts";
 import { ParticleEmitter7 } from "./ParticleEmitter.ts";
 import { destroyBitmapFonts, installDynamicBitmapTextFont, loadExternalBitmapFont } from "./bitmapFonts.ts";
-import { createNativeMouseEvent } from "../../pixi-native/NodeDOMAdapter.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 
 type Pixi7Scene = Container & { update?: (deltaMS: number, now: number) => void; dispose?: () => void; resize?: (width: number, height: number) => void; handleKey?: (key: string | null, repeat?: number) => boolean; addRandomSprites?: (count?: number) => number; removeRandomSprites?: (count?: number) => number };
 type Pixi7SceneFactory = () => Pixi7Scene;
-type Pixi7MouseEvent = { readonly x: number; readonly y: number; readonly button: number };
-const readMouseEvent = (event: unknown): Pixi7MouseEvent => {
-    const value = event as Partial<Pixi7MouseEvent>;
-    return { x: Number(value.x ?? 0), y: Number(value.y ?? 0), button: Number(value.button ?? 0) };
-};
-const nativePointerEventType = (mouseType: "down" | "up" | "move"): string =>
-    typeof (globalThis as { PointerEvent?: unknown }).PointerEvent === "function"
-        ? `pointer${mouseType}`
-        : `mouse${mouseType}`;
-const { app, native } = await createPixiWebGL7({
+const { app, native, addDestroyListener } = await createNativePixiApplication({
     ...DEMO_WINDOW_OPTIONS,
     title: "PixiJS 7 Native Node WebGL",
 });
-native.addModalFrameListener(() => gsap.ticker.tick());
+// Load GSAP-backed scenes after the initializer installs native RAF globals.
+const { createSpriteTest } = await import("./scenes/SpriteTest.ts");
 const asset = (name: string): string => fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
 // Native v7 has no browser format-detection surface. PNG is selected below,
 // so the detection plugins (including compressed-texture GL probes) are not
@@ -102,7 +91,8 @@ const normalizeKey = (key: string): string => {
         default: return key;
     }
 };
-native.window.on("keyDown", (event: any) => {
+globalThis.addEventListener("keydown", (rawEvent) => {
+    const event = rawEvent as KeyboardEvent;
     const key = normalizeKey(String(event.key ?? "").toLowerCase());
     if (event.repeat) return;
     if (key === "left" || key === "arrowleft") return selectScene(sceneIndex - 1);
@@ -116,56 +106,21 @@ native.window.on("keyDown", (event: any) => {
     if (key === "up") activeScene.addRandomSprites?.(10);
     if (key === "down") activeScene.removeRandomSprites?.(10);
 });
-native.window.on("resize", () => {
+globalThis.addEventListener("resize", () => {
     activeScene.resize?.(native.canvas.width, native.canvas.height);
     particleEmitter.resize(native.canvas.width, native.canvas.height);
     fpsOverlay.alignRight(native.canvas.width);
 });
-let mouseButtons = 0;
-native.window.on("mouseButtonDown", (event) => {
-    const mouse = readMouseEvent(event);
-    mouseButtons |= 1 << (mouse.button - 1);
-    const type = nativePointerEventType("down");
-    native.input.dispatchCanvasEvent(type, createNativeMouseEvent({
-        type, clientX: mouse.x, clientY: mouse.y,
-        button: mouse.button - 1, buttons: mouseButtons,
-    }));
-});
-native.window.on("mouseButtonUp", (event) => {
-    const mouse = readMouseEvent(event);
-    mouseButtons &= ~(1 << (mouse.button - 1));
-    const type = nativePointerEventType("up");
-    native.input.dispatchGlobalEvent(type, createNativeMouseEvent({
-        type, clientX: mouse.x, clientY: mouse.y,
-        button: mouse.button - 1, buttons: mouseButtons,
-    }));
-});
-native.window.on("mouseMove", (event) => {
-    const mouse = readMouseEvent(event);
-    const type = nativePointerEventType("move");
-    native.input.dispatchGlobalEvent(type, createNativeMouseEvent({
-        type, clientX: mouse.x, clientY: mouse.y,
-        button: -1, buttons: mouseButtons,
-    }));
-});
-native.window.on("close", () => void shutdown());
 app.ticker.add((delta) => {
-    native.window.pollEvents?.();
     activeScene.update?.(delta * (1000 / 60), performance.now());
     particleEmitter.update(app.ticker.deltaMS);
     fpsOverlay.tick(app.ticker.deltaMS);
-    app.renderer.render(app.stage);
-    native.swap();
 });
-app.ticker.start();
-async function shutdown(): Promise<void> {
+addDestroyListener(() => {
     if (shuttingDown) return;
     shuttingDown = true;
-    app.ticker.stop();
     disposeDemoScene(activeScene);
     particleEmitter.destroy();
     fpsOverlay.destroy({ children: true });
     destroyBitmapFonts();
-    app.destroy(true, { children: true, texture: false, baseTexture: false });
-    native.destroy();
-}
+});

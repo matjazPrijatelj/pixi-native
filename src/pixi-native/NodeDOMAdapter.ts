@@ -319,6 +319,11 @@ export class NodeDOMAdapter {
     };
     (globalThis as any).addEventListener = addGlobalListener;
     (globalThis as any).removeEventListener = removeGlobalListener;
+    (globalThis as any).dispatchEvent = (event: Event): boolean => {
+      this.dispatchGlobalEvent(event.type, event);
+      return true;
+    };
+    (globalThis as any).window ??= globalThis;
     if (!globalThis.document) {
       const makeElement = (tagName: string): Record<string, unknown> => {
         if (tagName.toLowerCase() === "canvas") {

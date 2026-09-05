@@ -347,7 +347,7 @@ export async function createWebGlRenderer(
       nativeWindowData,
       () => {
         for (const listener of [...modalFrameListeners]) listener();
-        app.ticker.update(performance.now());
+        domAdapter.dispatchModalFrame(performance.now());
       },
       setNativeVideoModalState,
     );

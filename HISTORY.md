@@ -2,6 +2,16 @@
 
 ## 2026-09-05
 
+- Changed opaque-window option handling so `backgroundAlpha` below `1` emits a
+  warning and normalizes to `1` instead of aborting renderer startup. Invalid
+  values outside the `0` to `1` range remain errors.
+- Added one managed `createNativePixiApplication()` initializer for PixiJS 8
+  WebGPU/WebGL and the same named initializer for PixiJS 7 WebGL. It owns the
+  render/present ticker, native polling, pointer/keyboard/wheel forwarding,
+  resize delivery, modal-frame RAF advancement, and idempotent close/signal
+  teardown while preserving all low-level factories. Migrated both demos to
+  the managed lifecycle and added focused lifecycle/input/order tests without
+  rebuilding native code.
 - Fixed Alt+F4 shutdown for PixiJS 8 WebGL by skipping WebGPU queue draining
   when no GPU device exists. WebGL and PixiJS 7 teardown now also avoid asking
   SDL to destroy a window that its close-event handler already destroyed. Type

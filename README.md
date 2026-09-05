@@ -22,12 +22,14 @@ The project-owned native addon creates the Dawn adapter/device and connects it t
 
 The demo selects its renderer explicitly: use `pnpm dev:webgpu`, `pnpm dev:webgl`, or `pnpm dev:webgl7`. The commands open the interactive scene demo; use number keys or left/right to switch between Graphics, Sprite, Text, BitmapText, audio, video, rain-sprite, and particle scenes. WebGPU and Windows WebGL share SDL window behavior while owning separate Dawn and ANGLE presentation surfaces.
 
-For library use, install the package and Pixi peer dependency with `pnpm add pixi-native pixi.js`, then import a factory:
+For library use, install the package and Pixi peer dependency with `pnpm add pixi-native pixi.js`. The managed initializer creates the Pixi application and owns native event polling, Pixi rendering, presentation, input, resize, and shutdown:
 
 ```ts
-import { createPixiWebGPU } from "pixi-native/webgpu";
+import { Sprite } from "pixi.js";
+import { createNativePixiApplication } from "pixi-native";
 
-const { app, native } = await createPixiWebGPU({
+const { app, native, destroy } = await createNativePixiApplication({
+  backend: "webgpu", // or "webgl"
   width: 1280,
   height: 720,
   borderless: false,
@@ -37,13 +39,29 @@ const { app, native } = await createPixiWebGPU({
   y: 0,
 });
 
+app.stage.addChild(Sprite.from("./character.png"));
+
 native.window.setPosition(2000, 100);
 native.window.minimize();
 native.window.maximize();
 native.window.restore();
+
+// Optional explicit teardown. Window close, SIGINT, and SIGTERM use the same path.
+await destroy();
 ```
 
-`pixi-native/webgl` exposes the equivalent `createPixiWebGL` factory. The package declares PixiJS 8 as a peer dependency so applications can update Pixi within the supported major version.
+The returned `app` is the normal Pixi `Application`; scene code can use Pixi
+containers, sprites, graphics, text, ticker callbacks, and interaction APIs
+without a separate native render loop. `addDestroyListener()` registers cleanup
+for application-owned native resources. The initializer intentionally provides
+only the browser surface Pixi needs: it does not emulate HTML/CSS layout,
+browser media elements, navigation, or arbitrary DOM applications.
+
+The low-level `createPixiWebGPU` and `createPixiWebGL` factories remain
+available from `pixi-native/webgpu` and `pixi-native/webgl` for callers that
+need to own polling, rendering, presentation, and teardown themselves. The
+package declares PixiJS 8 as a peer dependency so applications can update Pixi
+within the supported major version.
 
 The WebGPU, WebGL, and PixiJS 7 WebGL factories accept the same native-window
 options and expose the same programmatic window controls. The optional `x` and
@@ -59,9 +77,10 @@ Per-pixel transparency is currently supported on Windows 11. With
 `transparent: true`, transparent Pixi pixels reveal the desktop and
 partially-transparent pixels retain smooth premultiplied-alpha edges. The
 optional `backgroundAlpha` controls the Pixi background opacity from `0` to
-`1`; it defaults to `0` for transparent windows and `1` otherwise. Values below
-`1` require `transparent: true`. All renderers use premultiplied presentation,
-so `0.5` contributes half of the background color consistently. The
+`1`; it defaults to `0` for transparent windows and `1` otherwise. When
+`transparent` is false, a lower value emits a warning and is normalized to
+`1`. All renderers use premultiplied presentation, so `0.5` contributes half
+of the background color consistently on a transparent window. The
 transparent areas still receive mouse input; click-through and runtime
 transparency switching are not part of this API. Other platforms reject the
 option instead of silently creating an opaque window.
@@ -71,6 +90,9 @@ PixiJS 7 can be tested through the separate `pixi.js-v7` dependency and
 `pnpm dev:webgl7`; it contains the same nine scene slots as the Pixi 8 demo,
 with Pixi 7-specific Graphics, text, sprite, particle, and native media
 adaptations. Use number keys `1`–`9` or left/right to navigate.
+That entrypoint exports the same `createNativePixiApplication()` name for a
+managed PixiJS 7 WebGL application; its existing `createPixiWebGL7()` low-level
+factory is unchanged.
 
 ## Requirements
 

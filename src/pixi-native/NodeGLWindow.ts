@@ -120,6 +120,7 @@ export class NodeGLWindow implements NodeWindowHandle {
             mouseButtonDown: "mousedown",
             mouseButtonUp: "mouseup",
             mouseMove: "mousemove",
+            mouseWheel: "wheel",
             keyDown: "keydown",
             keyUp: "keyup",
         };
@@ -155,6 +156,15 @@ export class NodeGLWindow implements NodeWindowHandle {
                 y: Number(raw.y ?? 0),
                 button: Number(raw.button ?? 0),
             } satisfies GlWindowMouseEvent;
+        }
+        if (event === "mouseWheel") {
+            return {
+                x: Number(raw.x ?? 0),
+                y: Number(raw.y ?? 0),
+                dx: Number(raw.deltaX ?? raw.dx ?? 0),
+                dy: Number(raw.deltaY ?? raw.dy ?? 0),
+                flipped: false,
+            };
         }
         if (event === "keyDown" || event === "keyUp") {
             return {
