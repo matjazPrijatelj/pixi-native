@@ -3,6 +3,7 @@ import type { SpriteTestScene } from "./scenes/SpriteTest.ts";
 import type { AudioTestScene } from "./scenes/AudioTest.ts";
 import type { RainSpriteTestScene } from "./scenes/RainSpriteTest.ts";
 import type { VideoTestScene } from "./scenes/VideoTest.ts";
+import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -51,7 +52,7 @@ const {
 } =
   await import("./sceneNavigation.ts");
 
-const { app, native } = await createRenderer();
+const { app, native } = await createRenderer(DEMO_WINDOW_OPTIONS);
 native.addModalFrameListener?.(() => gsap.ticker.tick());
 const supportsVideo =
   (native.backend === "webgpu" || native.backend === "webgl") &&

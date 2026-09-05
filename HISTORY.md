@@ -2,6 +2,19 @@
 
 ## 2026-09-05
 
+- Added Windows 11 per-pixel transparency for WebGPU with premultiplied
+  Dawn/DXGI composition; the user visually confirmed that path. WebGL and
+  PixiJS 7 WebGL request GLFW transparent framebuffers without overriding
+  GLFW's compositor setup. Both OpenGL ES and desktop OpenGL presentation
+  remained opaque in manual tests, so WebGL and WebGL7 transparency remain
+  unresolved at the native GLFW/Windows presentation boundary. Added the
+  Windows 8+ layered-window workaround proposed in GLFW PR #2681 as a separate
+  GL-only native operation and rebuilt the window addon; visual verification
+  remains pending.
+- Added shared WebGPU, WebGL, and PixiJS 7 WebGL support for startup-only
+  borderless windows, validated absolute virtual-desktop positioning, and
+  programmatic move, minimize, maximize, and restore controls; type checking,
+  all 91 repository tests, and the production package build pass.
 - Repaired and updated the existing MSYS2 UCRT64 installation, installed the
   required GCC 16.2.0, NASM 2.16.03, and base development toolchain, and built
   the pinned FFmpeg 8.0 source without invoking the Dawn `native:build`.

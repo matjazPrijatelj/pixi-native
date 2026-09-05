@@ -10,10 +10,18 @@ if (!Fs.existsSync(bindingPath)) {
 
 const binding = requireNative(bindingPath)
 
+const setTransparent = (nativeData, transparent) => {
+    binding.setTransparent(nativeData, transparent)
+}
+
+const setGlFramebufferTransparent = (nativeData, transparent) => {
+    binding.setGlFramebufferTransparent(nativeData, transparent)
+}
+
 const create = (nativeData, onFrame, onState) => {
     const controller = new binding.ModalFrameController(nativeData, onFrame, onState)
     controller.attach()
     return controller
 }
 
-module.exports = { create }
+module.exports = { create, setGlFramebufferTransparent, setTransparent }

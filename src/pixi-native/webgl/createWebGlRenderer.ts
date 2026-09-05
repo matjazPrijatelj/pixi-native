@@ -30,7 +30,15 @@ import {
 } from "../rgbaUpload.ts";
 import { setNativeVideoModalState } from "../video/NativeVideo.ts";
 import { sliceWebGlBufferData } from "../webglBufferUpload.ts";
-import { createModalFrameController } from "../ModalFrameController.ts";
+import {
+  createModalFrameController,
+  setNativeGlFramebufferTransparent,
+} from "../ModalFrameController.ts";
+import { resolveNodeRendererOptions } from "../windowOptions.ts";
+import {
+  assertGlfwTransparency,
+  requestGlfwTransparency,
+} from "../glfwTransparency.ts";
 
 export async function createWebGlRenderer(
   options: NodeRendererOptions = {},
@@ -40,11 +48,10 @@ export async function createWebGlRenderer(
 }> {
   const selectedBackend = "webgl" as const;
 
-  const title = options.title ?? "PixiJS 8 Native Node WebGL";
-  const width = options.width ?? 1920;
-  const height = options.height ?? 1080;
-  const resizable = options.resizable ?? true;
-  const vsync = options.vsync ?? true;
+  const windowOptions = resolveNodeRendererOptions(
+    options,
+    "PixiJS 8 Native Node WebGL",
+  );
   const isGles3 = true;
 
   try {
@@ -52,17 +59,33 @@ export async function createWebGlRenderer(
     const { glfw } = await import("@node-3d/glfw");
 
     const { doc } = init({
-      title,
-      width,
-      height,
-      resizable,
-      vsync,
+      title: windowOptions.title,
+      width: windowOptions.width,
+      height: windowOptions.height,
+      resizable: windowOptions.resizable,
+      decorated: !windowOptions.borderless,
+      vsync: windowOptions.vsync,
       isGles3,
       isWebGL2: true,
       autoEsc: true,
+      onBeforeWindow: (_window: unknown, rawGlfw: unknown) => {
+        requestGlfwTransparency(rawGlfw, windowOptions.transparent);
+      },
     });
 
-    const window = new NodeGLWindow(doc as never, glfw.pollEvents);
+    assertGlfwTransparency(glfw, doc.handle, windowOptions.transparent);
+
+    const window = new NodeGLWindow(doc as never, {
+      pollEvents: glfw.pollEvents,
+      maximize: () => glfw.maximizeWindow(doc.handle),
+    });
+    setNativeGlFramebufferTransparent(
+      window.nativeWindowData,
+      windowOptions.transparent,
+    );
+    if (windowOptions.x !== undefined && windowOptions.y !== undefined) {
+      window.setPosition(windowOptions.x, windowOptions.y);
+    }
 
     const nativeTexImage2D = webgl.texImage2D.bind(webgl) as (
       ...args: unknown[]
@@ -304,6 +327,7 @@ export async function createWebGlRenderer(
       width: canvas.width,
       height: canvas.height,
       background: 0x101544,
+      backgroundAlpha: windowOptions.transparent ? 0 : 1,
       resolution: 1,
       antialias: true,
       autoStart: false,

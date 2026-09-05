@@ -16,6 +16,7 @@ import { FpsOverlay7 } from "./FpsOverlay.ts";
 import { ParticleEmitter7 } from "./ParticleEmitter.ts";
 import { destroyBitmapFonts, installDynamicBitmapTextFont, loadExternalBitmapFont } from "./bitmapFonts.ts";
 import { createNativeMouseEvent } from "../../pixi-native/NodeDOMAdapter.ts";
+import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 
 type Pixi7Scene = Container & { update?: (deltaMS: number, now: number) => void; dispose?: () => void; resize?: (width: number, height: number) => void; handleKey?: (key: string | null, repeat?: number) => boolean; addRandomSprites?: (count?: number) => number; removeRandomSprites?: (count?: number) => number };
 type Pixi7SceneFactory = () => Pixi7Scene;
@@ -28,7 +29,10 @@ const nativePointerEventType = (mouseType: "down" | "up" | "move"): string =>
     typeof (globalThis as { PointerEvent?: unknown }).PointerEvent === "function"
         ? `pointer${mouseType}`
         : `mouse${mouseType}`;
-const { app, native } = await createPixiWebGL7({ title: "PixiJS 7 Native Node WebGL" });
+const { app, native } = await createPixiWebGL7({
+    ...DEMO_WINDOW_OPTIONS,
+    title: "PixiJS 7 Native Node WebGL",
+});
 native.addModalFrameListener(() => gsap.ticker.tick());
 const asset = (name: string): string => fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
 // Native v7 has no browser format-detection surface. PNG is selected below,

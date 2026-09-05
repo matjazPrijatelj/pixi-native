@@ -8,6 +8,14 @@ export interface NodeRendererOptions {
   readonly height?: number;
   readonly resizable?: boolean;
   readonly vsync?: boolean;
+  /** Creates an undecorated window. Borderless windows are not user-resizable. */
+  readonly borderless?: boolean;
+  /** Enables per-pixel window transparency. Supported on Windows 11. */
+  readonly transparent?: boolean;
+  /** Absolute virtual-desktop X coordinate. Must be provided with `y`. */
+  readonly x?: number;
+  /** Absolute virtual-desktop Y coordinate. Must be provided with `x`. */
+  readonly y?: number;
 }
 
 export interface NodeGPUApi {
@@ -16,6 +24,7 @@ export interface NodeGPUApi {
     device: GPUDevice;
     window: unknown;
     presentMode?: string;
+    alphaMode?: "opaque" | "premultiplied";
   }): NodeWindowRenderer;
   destroy(instance: NodeGPUInstance): void;
 }
@@ -37,11 +46,17 @@ export interface NodeRenderSurface {
 }
 
 export interface NodeWindowHandle {
+  readonly x: number;
+  readonly y: number;
   readonly pixelWidth: number;
   readonly pixelHeight: number;
   readonly display: { readonly frequency: number };
   readonly destroyed: boolean;
   readonly pollEvents?: () => void;
+  setPosition(x: number, y: number): void;
+  minimize(): void;
+  maximize(): void;
+  restore(): void;
   on(event: string, listener: (event: any) => void): void;
   destroy(): void;
 }

@@ -22,6 +22,9 @@ type GlfwWindow = {
     readonly framebufferSize: { width: number; height: number };
     readonly width: number;
     readonly height: number;
+    readonly x: number;
+    readonly y: number;
+    pos: { x: number; y: number };
     readonly shouldClose: boolean;
     readonly currentContext: unknown;
     readonly platformWindow: number;
@@ -29,8 +32,15 @@ type GlfwWindow = {
     makeCurrent(): void;
     swapBuffers(): void;
     drawWindow(callback: (timestamp: number) => void): void;
+    iconify(): void;
+    restore(): void;
     destroy(): void;
     on(event: string, listener: (event: GlfwEvent) => void): void;
+};
+
+type GlfwWindowApi = {
+    pollEvents(): void;
+    maximize(): void;
 };
 
 /** Adapts GLFW's browser-shaped events to the renderer's existing native API. */
@@ -39,13 +49,15 @@ export class NodeGLWindow implements NodeWindowHandle {
     private closeNotified = false;
     private readonly closeListeners = new Set<(event: unknown) => void>();
     private readonly glfwWindow: GlfwWindow;
-    private readonly pollGlfwEvents: () => void;
+    private readonly glfw: GlfwWindowApi;
 
-    public constructor(glfwWindow: GlfwWindow, pollGlfwEvents: () => void) {
+    public constructor(glfwWindow: GlfwWindow, glfw: GlfwWindowApi) {
         this.glfwWindow = glfwWindow;
-        this.pollGlfwEvents = pollGlfwEvents;
+        this.glfw = glfw;
     }
 
+    public get x(): number { return this.glfwWindow.x; }
+    public get y(): number { return this.glfwWindow.y; }
     public get pixelWidth(): number { return this.glfwWindow.framebufferSize.width; }
     public get pixelHeight(): number { return this.glfwWindow.framebufferSize.height; }
     /** Encodes the GLFW platform handle for the native Windows modal hook. */
@@ -65,7 +77,7 @@ export class NodeGLWindow implements NodeWindowHandle {
     }
     public get destroyed(): boolean { return this.isDestroyed; }
     public pollEvents(): void {
-        this.pollGlfwEvents();
+        this.glfw.pollEvents();
         if (this.glfwWindow.shouldClose && !this.closeNotified) {
             this.closeNotified = true;
             for (const listener of this.closeListeners) listener({ type: "close" });
@@ -76,6 +88,29 @@ export class NodeGLWindow implements NodeWindowHandle {
     public swapBuffers(): void { this.glfwWindow.swapBuffers(); }
     public drawWindow(callback: (timestamp: number) => void): void {
         this.glfwWindow.drawWindow(callback);
+    }
+
+    public setPosition(x: number, y: number): void {
+        this.assertAlive();
+        if (!Number.isInteger(x) || !Number.isInteger(y)) {
+            throw new Error("window x and y must be integers");
+        }
+        this.glfwWindow.pos = { x, y };
+    }
+
+    public minimize(): void {
+        this.assertAlive();
+        this.glfwWindow.iconify();
+    }
+
+    public maximize(): void {
+        this.assertAlive();
+        this.glfw.maximize();
+    }
+
+    public restore(): void {
+        this.assertAlive();
+        this.glfwWindow.restore();
     }
 
     public on(event: string, listener: (event: unknown) => void): void {
@@ -101,6 +136,10 @@ export class NodeGLWindow implements NodeWindowHandle {
         if (this.isDestroyed) return;
         this.isDestroyed = true;
         this.glfwWindow.destroy();
+    }
+
+    private assertAlive(): void {
+        if (this.isDestroyed) throw new Error("window is destroyed");
     }
 
     private normalize(event: string, raw: GlfwEvent): unknown {

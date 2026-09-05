@@ -7,11 +7,39 @@ export interface ModalFrameController {
 }
 
 interface NativeWindowApi {
+    setGlFramebufferTransparent(nativeData: Uint8Array, transparent: boolean): void;
+    setTransparent(nativeData: Uint8Array, transparent: boolean): void;
     create(
         nativeData: Uint8Array,
         onFrame: () => void,
         onState: (active: boolean) => void,
     ): ModalFrameController;
+}
+
+/** Applies the Windows layered-framebuffer workaround for GLFW OpenGL windows. */
+export function setNativeGlFramebufferTransparent(
+    nativeData: Uint8Array,
+    transparent: boolean,
+): void {
+    if (!transparent) return;
+    if (process.platform !== "win32") {
+        throw new Error("transparent native windows are supported only on Windows 11");
+    }
+    const nativeWindow = require("../../native/window") as NativeWindowApi;
+    nativeWindow.setGlFramebufferTransparent(nativeData, true);
+}
+
+/** Configures compositor transparency before the WebGPU surface is created. */
+export function setNativeWindowTransparent(
+    nativeData: Uint8Array,
+    transparent: boolean,
+): void {
+    if (!transparent) return;
+    if (process.platform !== "win32") {
+        throw new Error("transparent native windows are supported only on Windows 11");
+    }
+    const nativeWindow = require("../../native/window") as NativeWindowApi;
+    nativeWindow.setTransparent(nativeData, true);
 }
 
 const NOOP_MODAL_FRAME_CONTROLLER: ModalFrameController = {

@@ -5,7 +5,15 @@ import { NodeGLWindow } from "../NodeGLWindow.ts";
 import { NodeCanvas } from "../NodeCanvas.ts";
 import { copyRgbaRowsFlippedY } from "../rgbaUpload.ts";
 import type { NodeNativeInput, NodeRendererOptions } from "../nativeTypes.ts";
-import { createModalFrameController } from "../ModalFrameController.ts";
+import {
+  createModalFrameController,
+  setNativeGlFramebufferTransparent,
+} from "../ModalFrameController.ts";
+import { resolveNodeRendererOptions } from "../windowOptions.ts";
+import {
+  assertGlfwTransparency,
+  requestGlfwTransparency,
+} from "../glfwTransparency.ts";
 
 export interface PixiWebGL7Result {
   readonly app: Application;
@@ -22,19 +30,38 @@ export interface PixiWebGL7Result {
 export async function createPixiWebGL7(
   options: NodeRendererOptions = {},
 ): Promise<PixiWebGL7Result> {
+  const windowOptions = resolveNodeRendererOptions(
+    options,
+    "PixiJS 7 Native Node WebGL",
+  );
   const { init, gl: webgl, Image } = await import("@node-3d/core");
   const { glfw } = await import("@node-3d/glfw");
   const { doc } = init({
-    title: options.title ?? "PixiJS 7 Native Node WebGL",
-    width: options.width ?? 1920,
-    height: options.height ?? 1080,
-    resizable: options.resizable ?? true,
-    vsync: options.vsync ?? true,
+    title: windowOptions.title,
+    width: windowOptions.width,
+    height: windowOptions.height,
+    resizable: windowOptions.resizable,
+    decorated: !windowOptions.borderless,
+    vsync: windowOptions.vsync,
     isGles3: true,
     isWebGL2: true,
     autoEsc: true,
+    onBeforeWindow: (_window: unknown, rawGlfw: unknown) => {
+      requestGlfwTransparency(rawGlfw, windowOptions.transparent);
+    },
   });
-  const window = new NodeGLWindow(doc as never, glfw.pollEvents);
+  assertGlfwTransparency(glfw, doc.handle, windowOptions.transparent);
+  const window = new NodeGLWindow(doc as never, {
+    pollEvents: glfw.pollEvents,
+    maximize: () => glfw.maximizeWindow(doc.handle),
+  });
+  setNativeGlFramebufferTransparent(
+    window.nativeWindowData,
+    windowOptions.transparent,
+  );
+  if (windowOptions.x !== undefined && windowOptions.y !== undefined) {
+    window.setPosition(windowOptions.x, windowOptions.y);
+  }
   const canvas = new NodeGLCanvas(webgl, window.pixelWidth, window.pixelHeight);
   const adapter = new NodeDOMAdapter(
     null,
@@ -164,6 +191,7 @@ export async function createPixiWebGL7(
     antialias: true,
     autoStart: false,
     backgroundColor: 0x101544,
+    backgroundAlpha: windowOptions.transparent ? 0 : 1,
   });
   const modalFrameListeners = new Set<() => void>();
 

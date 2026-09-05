@@ -28,7 +28,7 @@ index cb70833c7..b8fe95a74 100644
  
  #ifdef DAWN_EMIT_COVERAGE
  extern "C" {
-@@ -43,10 +58,45 @@ int __llvm_profile_write_file(void);
+@@ -43,10 +58,50 @@ int __llvm_profile_write_file(void);
  }
  #endif  // DAWN_EMIT_COVERAGE
  
@@ -41,6 +41,11 @@ index cb70833c7..b8fe95a74 100644
 +    { "fifoRelaxed", WGPUPresentMode_FifoRelaxed },
 +    { "immediate", WGPUPresentMode_Immediate },
 +    { "mailbox", WGPUPresentMode_Mailbox }
++};
++
++std::map<std::string, WGPUCompositeAlphaMode> wgpuAlphaModes = {
++    { "opaque", WGPUCompositeAlphaMode_Opaque },
++    { "premultiplied", WGPUCompositeAlphaMode_Premultiplied }
 +};
 +
  namespace {
@@ -75,7 +80,7 @@ index cb70833c7..b8fe95a74 100644
  
      std::tuple<std::vector<std::string>> args;
      if (auto res = wgpu::interop::FromJS(info, args); !res) {
-@@ -68,7 +118,288 @@ Napi::Value CreateGPU(const Napi::CallbackInfo& info) {
+@@ -68,7 +123,321 @@ Napi::Value CreateGPU(const Napi::CallbackInfo& info) {
      }
  
      // Construct a wgpu::interop::GPU interface, implemented by wgpu::bindings::GPU.
@@ -117,6 +122,9 @@ index cb70833c7..b8fe95a74 100644
 +        Napi::String jsPresentMode = info[2].As<Napi::String>();
 +        _wgpuPresentMode = wgpuPresentModes[jsPresentMode.Utf8Value()];
 +
++        Napi::String jsAlphaMode = info[3].As<Napi::String>();
++        _wgpuAlphaMode = wgpuAlphaModes[jsAlphaMode.Utf8Value()];
++
 +        _wgpuDevice = reinterpret_cast<wgpu::binding::GPUDevice*>(wgpu::interop::GPUDevice::Unwrap(_device.Value()))->device_.Get();
 +        _wgpuAdapter = procs->deviceGetAdapter(_wgpuDevice);
 +        _wgpuInstance = procs->adapterGetInstance(_wgpuAdapter);
@@ -128,8 +136,9 @@ index cb70833c7..b8fe95a74 100644
 +    };
 +
 +
-+    static Napi::Object NewInstance(Napi::Env env, Napi::Value device, Napi::Value window, Napi::Value presentMode) {
-+        return constructor.New({ device, window, presentMode });
++    static Napi::Object NewInstance(Napi::Env env, Napi::Value device, Napi::Value window,
++                                    Napi::Value presentMode, Napi::Value alphaMode) {
++        return constructor.New({ device, window, presentMode, alphaMode });
 +    }
 +
 +    Napi::Value getPreferredFormat(const Napi::CallbackInfo& info) {
@@ -232,6 +241,7 @@ index cb70833c7..b8fe95a74 100644
 +    Napi::ObjectReference _device;
 +    Napi::ObjectReference _window;
 +    WGPUPresentMode _wgpuPresentMode;
++    WGPUCompositeAlphaMode _wgpuAlphaMode;
 +    WGPUDevice _wgpuDevice;
 +    WGPUAdapter _wgpuAdapter;
 +    WGPUInstance _wgpuInstance;
@@ -265,6 +275,20 @@ index cb70833c7..b8fe95a74 100644
 +        WGPUSurfaceCapabilities wgpuCapabilities = {};
 +        procs->surfaceGetCapabilities(_wgpuSurface, _wgpuAdapter, &wgpuCapabilities);
 +
++        bool alphaModeSupported = false;
++        for (size_t i = 0; i < wgpuCapabilities.alphaModeCount; ++i) {
++            if (wgpuCapabilities.alphaModes[i] == _wgpuAlphaMode) {
++                alphaModeSupported = true;
++                break;
++            }
++        }
++        if (!alphaModeSupported) {
++            _destroySurface();
++            Napi::Error::New(env, "requested surface alphaMode is not supported")
++                .ThrowAsJavaScriptException();
++            return;
++        }
++
 +        _wgpuPreferredFormat = wgpuCapabilities.formats[0];
 +        for (size_t i = 0; i < wgpuCapabilities.formatCount; ++i) {
 +            if (wgpuCapabilities.formats[i] == WGPUTextureFormat_BGRA8Unorm) {
@@ -295,7 +319,7 @@ index cb70833c7..b8fe95a74 100644
 +        wgpuConfig.device = _wgpuDevice;
 +        wgpuConfig.format = _wgpuPreferredFormat;
 +        wgpuConfig.usage = WGPUTextureUsage_RenderAttachment;
-+        wgpuConfig.alphaMode = WGPUCompositeAlphaMode_Opaque;
++        wgpuConfig.alphaMode = _wgpuAlphaMode;
 +        wgpuConfig.width = width;
 +        wgpuConfig.height = height;
 +        wgpuConfig.presentMode = _wgpuPresentMode;
@@ -361,11 +385,25 @@ index cb70833c7..b8fe95a74 100644
 +        }
 +    }
 +
-+    return Renderer::NewInstance(env, jsDevice, jsWindow, jsPresentMode);
++    Napi::Value jsAlphaMode = jsObj.Get("alphaMode");
++    if (jsAlphaMode.IsUndefined()) {
++        jsAlphaMode = Napi::String::New(env, "opaque");
++    } else if (!jsAlphaMode.IsString()) {
++        Napi::Error::New(env, "alphaMode argument to renderGPUDeviceToWindow must be a string").ThrowAsJavaScriptException();
++        return env.Undefined();
++    } else {
++        std::string alphaModeStr = jsAlphaMode.As<Napi::String>().Utf8Value();
++        if (wgpuAlphaModes.find(alphaModeStr) == wgpuAlphaModes.end()) {
++            Napi::Error::New(env, "alphaMode argument to renderGPUDeviceToWindow has invalid value").ThrowAsJavaScriptException();
++            return env.Undefined();
++        }
++    }
++
++    return Renderer::NewInstance(env, jsDevice, jsWindow, jsPresentMode, jsAlphaMode);
  }
  
  #ifdef DAWN_EMIT_COVERAGE
-@@ -104,13 +435,18 @@ struct Coverage {
+@@ -104,13 +473,18 @@ struct Coverage {
  // object.
  NAPI_MODULE_EXPORT Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
      // Set all the Dawn procedure function pointers.

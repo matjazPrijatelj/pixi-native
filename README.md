@@ -26,10 +26,39 @@ For library use, install the package and Pixi peer dependency with `pnpm add pix
 ```ts
 import { createPixiWebGPU } from "pixi-native/webgpu";
 
-const { app, native } = await createPixiWebGPU();
+const { app, native } = await createPixiWebGPU({
+    width: 1280,
+    height: 720,
+    borderless: true,
+    transparent: true,
+    x: 0,
+    y: 0,
+});
+
+native.window.setPosition(2000, 100);
+native.window.minimize();
+native.window.maximize();
+native.window.restore();
 ```
 
 `pixi-native/webgl` exposes the equivalent `createPixiWebGL` factory. The package declares PixiJS 8 as a peer dependency so applications can update Pixi within the supported major version.
+
+The WebGPU, WebGL, and PixiJS 7 WebGL factories accept the same native-window
+options and expose the same programmatic window controls. The optional `x` and
+`y` values are absolute integer coordinates in the virtual desktop, must be
+provided together, and may be negative for monitors left of or above the
+primary display. A borderless window defaults to non-resizable;
+`borderless: true` together with `resizable: true` is rejected. This API does
+not add a custom title bar, drag region, or resize handles. `maximize()` uses
+the operating system work area and does not enable fullscreen or always-on-top
+behavior.
+
+Per-pixel transparency is currently supported on Windows 11. With
+`transparent: true`, transparent Pixi pixels reveal the desktop and
+partially-transparent pixels retain smooth premultiplied-alpha edges. The
+transparent areas still receive mouse input; click-through and runtime
+transparency switching are not part of this API. Other platforms reject the
+option instead of silently creating an opaque window.
 
 PixiJS 7 can be tested through the separate `pixi.js-v7` dependency and
 `pixi-native/webgl-pixi7` export. Run the isolated scene demo with

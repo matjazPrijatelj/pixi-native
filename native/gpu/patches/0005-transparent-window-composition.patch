@@ -1,0 +1,102 @@
+diff --git a/src/dawn/native/d3d/SwapChainD3D.cpp b/src/dawn/native/d3d/SwapChainD3D.cpp
+--- a/src/dawn/native/d3d/SwapChainD3D.cpp
++++ b/src/dawn/native/d3d/SwapChainD3D.cpp
+@@ -28,1 +28,3 @@
+ #include "src/dawn/native/d3d/SwapChainD3D.h"
++
++#pragma comment(lib, "dcomp.lib")
+@@ -199,3 +201,4 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
+     bool canReuseSwapChain =
+         ((mConfig.swapChainFlags ^ previousD3DSwapChain->mConfig.swapChainFlags) &
+-         DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) == 0;
++         DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) == 0 &&
++        GetAlphaMode() == previousSwapChain->GetAlphaMode();
+@@ -212,1 +215,4 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
+     mDXGISwapChain = std::move(previousD3DSwapChain->mDXGISwapChain);
++    mDCompDevice = std::move(previousD3DSwapChain->mDCompDevice);
++    mDCompTarget = std::move(previousD3DSwapChain->mDCompTarget);
++    mDCompVisual = std::move(previousD3DSwapChain->mDCompVisual);
+@@ -259,5 +265,14 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
+     swapChainDesc.BufferUsage = mConfig.usage;
+     swapChainDesc.BufferCount = mConfig.bufferCount;
+     swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
+-    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+-    swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
++    const bool usesDirectComposition =
++        GetSurface()->GetType() == Surface::Type::WindowsHWND &&
++        GetAlphaMode() == wgpu::CompositeAlphaMode::Premultiplied;
++    swapChainDesc.SwapEffect = usesDirectComposition ? DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL
++                                                     : DXGI_SWAP_EFFECT_FLIP_DISCARD;
++    swapChainDesc.AlphaMode = GetAlphaMode() == wgpu::CompositeAlphaMode::Premultiplied
++                                  ? DXGI_ALPHA_MODE_PREMULTIPLIED
++                                  : DXGI_ALPHA_MODE_IGNORE;
+     swapChainDesc.Flags = mConfig.swapChainFlags;
++    if (usesDirectComposition) {
++        swapChainDesc.Flags &= ~DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
++    }
+@@ -279,8 +294,15 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
+     ComPtr<IDXGISwapChain1> swapChain1;
+     switch (GetSurface()->GetType()) {
+         case Surface::Type::WindowsHWND: {
+-            DAWN_TRY(CheckHRESULT(
+-                factory2->CreateSwapChainForHwnd(GetD3DDeviceForCreatingSwapChain(),
+-                                                 static_cast<HWND>(GetSurface()->GetHWND()),
+-                                                 &swapChainDesc, nullptr, nullptr, &swapChain1),
+-                "Creating the IDXGISwapChain1"));
++            HWND hwnd = static_cast<HWND>(GetSurface()->GetHWND());
++            if (usesDirectComposition) {
++                DAWN_TRY(CheckHRESULT(
++                    factory2->CreateSwapChainForComposition(GetD3DDeviceForCreatingSwapChain(),
++                                                            &swapChainDesc, nullptr, &swapChain1),
++                    "Creating the DirectComposition IDXGISwapChain1"));
++                DAWN_TRY(AttachDirectCompositionSwapChain(hwnd, swapChain1.Get()));
++            } else {
++                DAWN_TRY(CheckHRESULT(
++                    factory2->CreateSwapChainForHwnd(GetD3DDeviceForCreatingSwapChain(), hwnd,
++                                                     &swapChainDesc, nullptr, nullptr, &swapChain1),
++                    "Creating the HWND IDXGISwapChain1"));
++            }
+@@ -288,3 +310,2 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
+             DAWN_TRY(
+-                CheckHRESULT(factory2->MakeWindowAssociation(
+-                                 static_cast<HWND>(GetSurface()->GetHWND()), DXGI_MWA_NO_ALT_ENTER),
++                CheckHRESULT(factory2->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER),
+                              "Disabling DXGI's alt+enter fullscreen handling"));
+@@ -350,1 +371,19 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
++MaybeError SwapChain::AttachDirectCompositionSwapChain(HWND hwnd, IDXGISwapChain1* swapChain) {
++    DAWN_TRY(CheckHRESULT(
++        DCompositionCreateDevice(nullptr, IID_PPV_ARGS(&mDCompDevice)),
++        "Creating the DirectComposition device"));
++    DAWN_TRY(CheckHRESULT(
++        mDCompDevice->CreateTargetForHwnd(hwnd, TRUE, &mDCompTarget),
++        "Creating the DirectComposition window target"));
++    DAWN_TRY(CheckHRESULT(mDCompDevice->CreateVisual(&mDCompVisual),
++                          "Creating the DirectComposition visual"));
++    DAWN_TRY(CheckHRESULT(mDCompVisual->SetContent(swapChain),
++                          "Attaching the DirectComposition swapchain"));
++    DAWN_TRY(CheckHRESULT(mDCompTarget->SetRoot(mDCompVisual.Get()),
++                          "Attaching the DirectComposition visual root"));
++    DAWN_TRY(CheckHRESULT(mDCompDevice->Commit(), "Committing the DirectComposition visual tree"));
++    return {};
++}
++
+ void SwapChain::RegisterFrameLatencyHandle() {
+@@ -421,1 +460,4 @@ void SwapChain::ReleaseDXGISwapChain() {
+     mDXGISwapChain = nullptr;
++    mDCompVisual = nullptr;
++    mDCompTarget = nullptr;
++    mDCompDevice = nullptr;
+diff --git a/src/dawn/native/d3d/SwapChainD3D.h b/src/dawn/native/d3d/SwapChainD3D.h
+--- a/src/dawn/native/d3d/SwapChainD3D.h
++++ b/src/dawn/native/d3d/SwapChainD3D.h
+@@ -31,1 +31,2 @@
+ #include <vector>
++#include <dcomp.h>
+@@ -82,1 +83,2 @@ class SwapChain : public SwapChainBase {
+     void UnregisterFrameLatencyHandle();
++    MaybeError AttachDirectCompositionSwapChain(HWND hwnd, IDXGISwapChain1* swapChain);
+@@ -89,1 +91,4 @@ class SwapChain : public SwapChainBase {
+     ComPtr<IDXGISwapChain3> mDXGISwapChain;
++    ComPtr<IDCompositionDevice> mDCompDevice;
++    ComPtr<IDCompositionTarget> mDCompTarget;
++    ComPtr<IDCompositionVisual> mDCompVisual;

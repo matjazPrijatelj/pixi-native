@@ -23,7 +23,11 @@ import {
 import * as sdl from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "../gpuCompatibility.ts";
 import { setNativeVideoModalState } from "../video/NativeVideo.ts";
-import { createModalFrameController } from "../ModalFrameController.ts";
+import {
+  createModalFrameController,
+  setNativeWindowTransparent,
+} from "../ModalFrameController.ts";
+import { resolveNodeRendererOptions } from "../windowOptions.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -31,13 +35,24 @@ import type { NodeRendererOptions } from "../nativeTypes.ts";
 import type { NodeRendererContext } from "../createPixiRenderer.ts";
 
 export async function createWebGpuRenderer(options: NodeRendererOptions = {}): Promise<{ app: Application; native: NodeRendererContext }> {
-  const title = options.title ?? "PixiJS 8 Native Node WebGPU";
-  const width = options.width ?? 1920;
-  const height = options.height ?? 1080;
-  const resizable = options.resizable ?? true;
+  const windowOptions = resolveNodeRendererOptions(
+    options,
+    "PixiJS 8 Native Node WebGPU",
+  );
   const window = sdl.video.createWindow({
-    title, width, height, resizable, webgpu: true,
+    title: windowOptions.title,
+    width: windowOptions.width,
+    height: windowOptions.height,
+    resizable: windowOptions.resizable,
+    borderless: windowOptions.borderless,
+    x: windowOptions.x,
+    y: windowOptions.y,
+    webgpu: true,
   });
+  setNativeWindowTransparent(
+    (window as unknown as { _native: { gpu: Uint8Array } })._native.gpu,
+    windowOptions.transparent,
+  );
 
   const gpu = require("../../../native/gpu") as NodeGPUApi;
   const backend = resolveGpuBackend();
@@ -151,6 +166,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     device,
     window,
     presentMode: "fifo",
+    alphaMode: windowOptions.transparent ? "premultiplied" : "opaque",
   });
 
   const canvas = new NodeGPUCanvas(
@@ -187,6 +203,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     width: canvas.width,
     height: canvas.height,
     background: 0x101544,
+    backgroundAlpha: windowOptions.transparent ? 0 : 1,
     resolution: 1,
     antialias: true,
     autoStart: false,

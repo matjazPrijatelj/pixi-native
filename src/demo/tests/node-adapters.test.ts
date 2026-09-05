@@ -13,6 +13,96 @@ import { NodeGLCanvas } from "../../pixi-native/NodeGLCanvas.ts";
 import { NodeGLWindow } from "../../pixi-native/NodeGLWindow.ts";
 import { copyRgbaRowsFlippedY } from "../../pixi-native/rgbaUpload.ts";
 import { sliceWebGlBufferData } from "../../pixi-native/webglBufferUpload.ts";
+import { resolveNodeRendererOptions } from "../../pixi-native/windowOptions.ts";
+import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
+import {
+    assertGlfwTransparency,
+    requestGlfwTransparency,
+} from "../../pixi-native/glfwTransparency.ts";
+
+test("native window options normalize transparency and desktop position", () => {
+    assert.deepEqual(resolveNodeRendererOptions({}, "Default title", "win32"), {
+        title: "Default title",
+        width: 1920,
+        height: 1080,
+        resizable: true,
+        vsync: true,
+        borderless: false,
+        transparent: false,
+        x: undefined,
+        y: undefined,
+    });
+    assert.deepEqual(
+        resolveNodeRendererOptions(
+            { borderless: true, transparent: true, x: -1280, y: 120 },
+            "Default title",
+            "win32",
+        ),
+        {
+            title: "Default title",
+            width: 1920,
+            height: 1080,
+            resizable: false,
+            vsync: true,
+            borderless: true,
+            transparent: true,
+            x: -1280,
+            y: 120,
+        },
+    );
+    assert.throws(
+        () => resolveNodeRendererOptions({ borderless: true, resizable: true }, "x"),
+        /mutually exclusive/,
+    );
+    assert.throws(
+        () => resolveNodeRendererOptions({ x: 100 }, "x"),
+        /provided together/,
+    );
+    assert.throws(
+        () => resolveNodeRendererOptions({ x: 10.5, y: 20 }, "x"),
+        /must be integers/,
+    );
+    assert.throws(
+        () => resolveNodeRendererOptions({ transparent: true }, "x", "linux"),
+        /only on Windows 11/,
+    );
+});
+
+test("native demos request a transparent borderless window at the desktop origin", () => {
+    assert.deepEqual(DEMO_WINDOW_OPTIONS, {
+        width: 1280,
+        height: 720,
+        borderless: true,
+        transparent: true,
+        x: 0,
+        y: 0,
+    });
+});
+
+test("GLFW transparency is requested and verified", () => {
+    const hints: Array<{ hint: number; value: number }> = [];
+    let transparentFramebuffer = 1;
+    const glfw = {
+        TRUE: 1,
+        FALSE: 0,
+        TRANSPARENT_FRAMEBUFFER: 0x0002000a,
+        windowHint(hint: number, value: number) {
+            hints.push({ hint, value });
+        },
+        getWindowAttrib() {
+            return transparentFramebuffer;
+        },
+    };
+
+    requestGlfwTransparency(glfw, true);
+    assert.deepEqual(hints, [{ hint: 0x0002000a, value: 1 }]);
+    assert.doesNotThrow(() => assertGlfwTransparency(glfw, {}, true));
+    transparentFramebuffer = 0;
+    assert.throws(
+        () => assertGlfwTransparency(glfw, {}, true),
+        /could not create a transparent framebuffer/,
+    );
+});
 
 test("WebGL buffer upload copies are compact and independent", () => {
     const data = new Float32Array([0, 1, 2, 3, 4]);
@@ -47,13 +137,22 @@ test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
     assert.equal(canvas.getPremultipliedRgbaPixels().byteLength, 640 * 360 * 4);
 });
 
-test("NodeGLWindow serializes its platform handle for native modal hooks", () => {
+test("NodeGLWindow serializes its handle and controls window state", () => {
     let drawCalls = 0;
     let swapCalls = 0;
-    const window = new NodeGLWindow({
+    let maximizeCalls = 0;
+    let minimizeCalls = 0;
+    let restoreCalls = 0;
+    let destroyed = false;
+    let position = { x: 10, y: 20 };
+    const glfwWindow = {
         framebufferSize: { width: 1, height: 1 },
         width: 1,
         height: 1,
+        get x() { return position.x; },
+        get y() { return position.y; },
+        get pos() { return position; },
+        set pos(value: { x: number; y: number }) { position = value; },
         shouldClose: false,
         currentContext: {},
         platformWindow: 0x010203040506,
@@ -61,9 +160,17 @@ test("NodeGLWindow serializes its platform handle for native modal hooks", () =>
         makeCurrent() {},
         swapBuffers() { swapCalls++; },
         drawWindow() { drawCalls++; },
-        destroy() {},
+        iconify() { minimizeCalls++; },
+        restore() { restoreCalls++; },
+        destroy() { destroyed = true; },
         on() {},
-    }, () => undefined);
+    };
+    const window = new NodeGLWindow(glfwWindow, {
+        pollEvents() {},
+        maximize() {
+            maximizeCalls++;
+        },
+    });
 
     assert.deepEqual(
         Array.from(window.nativeWindowData),
@@ -72,6 +179,22 @@ test("NodeGLWindow serializes its platform handle for native modal hooks", () =>
     window.swapBuffers();
     assert.equal(swapCalls, 1);
     assert.equal(drawCalls, 0);
+    window.setPosition(-200, 300);
+    assert.deepEqual(position, { x: -200, y: 300 });
+    assert.equal(window.x, -200);
+    assert.equal(window.y, 300);
+    window.minimize();
+    window.maximize();
+    window.restore();
+    assert.equal(minimizeCalls, 1);
+    assert.equal(maximizeCalls, 1);
+    assert.equal(restoreCalls, 1);
+    window.destroy();
+    assert.equal(destroyed, true);
+    assert.throws(() => window.setPosition(0, 0), /destroyed/);
+    assert.throws(() => window.minimize(), /destroyed/);
+    assert.throws(() => window.maximize(), /destroyed/);
+    assert.throws(() => window.restore(), /destroyed/);
 });
 
 test("Pixi 7 adapter patches an existing incomplete document", () => {

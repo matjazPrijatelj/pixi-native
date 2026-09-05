@@ -3087,6 +3087,7 @@ interface WebGPU {
     device: GPUDevice,
     window: any,
     presentMode?: PresentMode,
+    alphaMode?: 'opaque' | 'premultiplied',
   }): Renderer
   destroy(gpu: GPU)
 }
