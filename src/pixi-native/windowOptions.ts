@@ -50,7 +50,9 @@ export function resolveNodeRendererOptions(
 
   const transparent = options.transparent ?? false;
   if (transparent && platform !== "win32") {
-    throw new Error("transparent native windows are supported only on Windows 11");
+    throw new Error(
+      "transparent native windows are supported only on Windows 11",
+    );
   }
   const requestedBackgroundAlpha =
     options.backgroundAlpha ?? (transparent ? 0 : 1);

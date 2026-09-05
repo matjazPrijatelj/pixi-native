@@ -38,11 +38,14 @@ const require = createRequire(import.meta.url);
 import type { NodeRendererOptions } from "../nativeTypes.ts";
 import type { NodeRendererContext } from "../createPixiRenderer.ts";
 
-export async function createWebGpuRenderer(options: NodeRendererOptions = {}): Promise<{ app: Application; native: NodeRendererContext }> {
+export async function createWebGpuRenderer(
+  options: NodeRendererOptions = {},
+): Promise<{ app: Application; native: NodeRendererContext }> {
   const windowOptions = resolveNodeRendererOptions(
     options,
     "PixiJS 8 Native Node WebGPU",
   );
+
   const window = sdl.video.createWindow({
     title: windowOptions.title,
     width: windowOptions.width,
@@ -53,6 +56,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     y: windowOptions.y,
     webgpu: true,
   });
+
   setNativeWindowTransparent(
     (window as unknown as { _native: { gpu: Uint8Array } })._native.gpu,
     windowOptions.transparent,
@@ -84,7 +88,9 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
       getPremultipliedRgbaPixels?: () => Uint8Array;
     };
     const source = sourceInfo?.source as
-      { resource?: PixelResource } | PixelResource | undefined;
+      | { resource?: PixelResource }
+      | PixelResource
+      | undefined;
     let resource = (
       source && "resource" in source ? source.resource : source
     ) as PixelResource | undefined;
@@ -150,6 +156,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
       format === "bgra8unorm" ||
       format === "bgra8unorm-srgb" ||
       (premultiplyAlpha && !premultipliedPixels);
+
     const pixels = prepareRgbaPixelsForUpload(
       canvasPixels,
       format as RgbaUploadFormat,
@@ -158,6 +165,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
         ? getReusableUploadBuffer(rgbaUploadBuffers, canvasPixels.byteLength)
         : undefined,
     );
+
     queue.writeTexture(
       destination,
       pixels,
@@ -166,10 +174,11 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     );
   }) as typeof queue.copyExternalImageToTexture;
 
+  const presentMode = windowOptions.vsync ? "fifo" : "immediate";
   const renderer = gpu.renderGPUDeviceToWindow({
     device,
     window,
-    presentMode: "fifo",
+    presentMode,
     alphaMode: windowOptions.transparent ? "premultiplied" : "opaque",
   });
 
@@ -181,7 +190,9 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
 
   const refreshRateHz = normalizeRefreshRate(window.display.frequency);
   const waitForPresent =
-    process.platform === "win32" && renderer.waitForPresent
+    windowOptions.vsync &&
+    process.platform === "win32" &&
+    renderer.waitForPresent
       ? renderer.waitForPresent.bind(renderer)
       : undefined;
   const domAdapter = new NodeDOMAdapter(
@@ -272,6 +283,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     pixi: VERSION,
     renderer: app.renderer.name,
     backend,
+    presentMode,
     format: renderer.getPreferredFormat(),
     size: [canvas.width, canvas.height],
     devicePixelRatio: 1,
@@ -285,6 +297,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     destroyed = true;
     rgbaUploadBuffers.clear();
     modalController.detach();
+    domAdapter.dispose();
     renderer.destroy();
     device.destroy();
 
@@ -314,5 +327,4 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
       destroy,
     },
   };
-
 }

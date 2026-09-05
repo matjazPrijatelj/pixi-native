@@ -375,6 +375,7 @@ export async function createWebGlRenderer(
       destroyed = true;
 
       modalController.detach();
+      domAdapter.dispose();
       renderer.destroy();
       if (!window.destroyed) {
         window.destroy();

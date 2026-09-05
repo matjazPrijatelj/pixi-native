@@ -152,6 +152,29 @@ test("modal timer dispatch runs the current RAF batch exactly once", () => {
     assert.deepEqual(timestamps, [25, 40]);
 });
 
+test("disposing a timer frame scheduler cancels all later work", () => {
+    const timers: Array<() => void> = [];
+    const clearedTimers: unknown[] = [];
+    const timestamps: number[] = [];
+    const scheduler = new FrameScheduler({
+        setTimer: (callback) => {
+            timers.push(callback);
+            return 42;
+        },
+        clearTimer: (timer) => clearedTimers.push(timer),
+    });
+
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    scheduler.dispose();
+    scheduler.dispose();
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    timers[0]();
+
+    assert.deepEqual(clearedTimers, [42]);
+    assert.deepEqual(timestamps, []);
+    assert.equal(scheduler.dispatchNow(25), 0);
+});
+
 test("VSync frame scheduler batches callbacks on the native present signal", async () => {
     const waiters: Array<(signaled: boolean) => void> = [];
     const scheduler = new VSyncFrameScheduler({
@@ -213,4 +236,29 @@ test("modal VSync dispatch does not duplicate callbacks when its wait resolves",
     waiters[0](true);
     await Promise.resolve();
     assert.deepEqual(timestamps, [12]);
+});
+
+test("disposing a VSync scheduler ignores its pending native wait", async () => {
+    const waiters: Array<(signaled: boolean) => void> = [];
+    const timers: Array<() => void> = [];
+    const timestamps: number[] = [];
+    const scheduler = new VSyncFrameScheduler({
+        waitForPresent: () =>
+            new Promise<boolean>((resolve) => waiters.push(resolve)),
+        setTimer: (callback) => {
+            timers.push(callback);
+            return 42;
+        },
+    });
+
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    scheduler.dispose();
+    scheduler.dispose();
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    waiters[0](false);
+    await Promise.resolve();
+
+    assert.deepEqual(timestamps, []);
+    assert.deepEqual(timers, []);
+    assert.equal(scheduler.dispatchNow(25), 0);
 });

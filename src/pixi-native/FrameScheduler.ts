@@ -31,6 +31,7 @@ export class VSyncFrameScheduler {
     private nextId = 1;
     private waiting = false;
     private fallbackTimer: unknown | undefined;
+    private disposed = false;
 
     public constructor(options: VSyncFrameSchedulerOptions) {
         this.waitForPresent = options.waitForPresent;
@@ -53,6 +54,7 @@ export class VSyncFrameScheduler {
 
     public request(callback: FrameCallback): number {
         const id = this.nextId++;
+        if (this.disposed) return id;
         this.callbacks.set(id, callback);
         this.schedule();
         return id;
@@ -68,7 +70,20 @@ export class VSyncFrameScheduler {
 
     /** Dispatches the current RAF batch from a native Windows modal loop. */
     public dispatchNow(timestamp = this.now()): number {
+        if (this.disposed) return 0;
         return this.dispatchCallbacks(timestamp);
+    }
+
+    /** Stops scheduling and drops work that belongs to the disposed runtime. */
+    public dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.callbacks.clear();
+        this.waiting = false;
+        if (this.fallbackTimer !== undefined) {
+            this.clearTimer(this.fallbackTimer);
+            this.fallbackTimer = undefined;
+        }
     }
 
     private schedule(): void {
@@ -86,6 +101,7 @@ export class VSyncFrameScheduler {
 
     private dispatch(signaled: boolean): void {
         this.waiting = false;
+        if (this.disposed) return;
         if (!signaled) {
             if (this.callbacks.size === 0) return;
             this.fallbackTimer = this.setTimer(() => {
@@ -101,7 +117,10 @@ export class VSyncFrameScheduler {
     private dispatchCallbacks(timestamp: number): number {
         const pending = [...this.callbacks.values()];
         this.callbacks.clear();
-        for (const callback of pending) callback(timestamp);
+        for (const callback of pending) {
+            if (this.disposed) break;
+            callback(timestamp);
+        }
         this.schedule();
         return pending.length;
     }
@@ -123,6 +142,7 @@ export class FrameScheduler {
     private timer: unknown | undefined;
     private deadline: number | undefined;
     private dispatching = false;
+    private disposed = false;
 
     public constructor(options: FrameSchedulerOptions = {}) {
         this.now = options.now ?? (() => performance.now());
@@ -153,6 +173,7 @@ export class FrameScheduler {
 
     public request(callback: FrameCallback): number {
         const id = this.nextId++;
+        if (this.disposed) return id;
         const wasIdle =
             this.callbacks.size === 0 &&
             this.timer === undefined &&
@@ -174,6 +195,7 @@ export class FrameScheduler {
 
     /** Dispatches the current RAF batch from a native Windows modal loop. */
     public dispatchNow(timestamp = this.now()): number {
+        if (this.disposed) return 0;
         if (this.timer !== undefined) this.clearTimer(this.timer);
         this.timer = undefined;
         if (this.callbacks.size === 0) {
@@ -184,8 +206,21 @@ export class FrameScheduler {
         return this.dispatchCallbacks(timestamp);
     }
 
+    /** Stops scheduling and drops work that belongs to the disposed runtime. */
+    public dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.callbacks.clear();
+        this.deadline = undefined;
+        if (this.timer !== undefined) {
+            this.clearTimer(this.timer);
+            this.timer = undefined;
+        }
+    }
+
     private dispatch(): void {
         this.timer = undefined;
+        if (this.disposed) return;
         const timestamp = this.now();
         if (
             this.deadline !== undefined &&
@@ -228,7 +263,10 @@ export class FrameScheduler {
 
         this.dispatching = true;
         try {
-            for (const callback of pending) callback(timestamp);
+            for (const callback of pending) {
+                if (this.disposed) break;
+                callback(timestamp);
+            }
         } finally {
             this.dispatching = false;
             this.schedule();

@@ -117,8 +117,8 @@ test("native demos expose explicit decorated window defaults", () => {
     width: 1280,
     height: 720,
     borderless: false,
-    transparent: false,
-    backgroundAlpha: 1,
+    transparent: true,
+    backgroundAlpha: 0.5,
     x: 50,
     y: 50,
   });
@@ -652,6 +652,20 @@ test("NodeDOMAdapter dispatches native keyboard events to global listeners", () 
   assert.equal((received as KeyboardEvent).code, "KeyA");
   assert.equal((received as KeyboardEvent).repeat, true);
   globalThis.removeEventListener("keydown", listener);
+  adapter.dispose();
+});
+
+test("NodeDOMAdapter disposal clears native global event listeners", () => {
+  const adapter = new NodeDOMAdapter({} as never);
+  adapter.install();
+  let calls = 0;
+  globalThis.addEventListener("keydown", () => calls++);
+
+  adapter.dispose();
+  adapter.dispatchGlobalEvent("keydown", new Event("keydown"));
+
+  assert.equal(calls, 0);
+  assert.equal(adapter.dispatchModalFrame(), 0);
 });
 
 test("NodeCanvas provides a native Canvas2D context", () => {

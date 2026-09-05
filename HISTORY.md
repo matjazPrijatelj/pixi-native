@@ -2,6 +2,13 @@
 
 ## 2026-09-05
 
+- Added explicit RAF scheduler and DOM-adapter teardown across WebGPU, WebGL 8,
+  and WebGL 7 so pending timers, native present waits, callbacks, and global
+  listeners cannot resume after native shutdown. WebGPU now honors the existing
+  `vsync` option by selecting FIFO/DXGI pacing when enabled and immediate/timer
+  pacing when disabled, without changing the native Dawn or audio layers.
+  Type checking, all 112 tests, both WebGPU presentation modes, and clean
+  WebGL 8/WebGL 7 startup and shutdown smoke tests pass.
 - Restored PixiJS 7 child-specific texture ownership during scene disposal:
   Text now releases its private Canvas Texture/BaseTexture while Sprite and
   BitmapText continue preserving shared asset and font textures.

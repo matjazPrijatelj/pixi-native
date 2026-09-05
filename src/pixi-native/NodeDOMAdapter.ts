@@ -218,6 +218,7 @@ export class NodeDOMAdapter {
   }
 
   private installFrameScheduler(): void {
+    this.frameScheduler?.dispose();
     const scheduler = this.waitForPresent
       ? new VSyncFrameScheduler({
           waitForPresent: this.waitForPresent,
@@ -242,6 +243,13 @@ export class NodeDOMAdapter {
   /** Runs every pending RAF consumer while Windows owns the modal move/resize loop. */
   public dispatchModalFrame(timestamp = performance.now()): number {
     return this.frameScheduler?.dispatchNow(timestamp) ?? 0;
+  }
+
+  /** Releases frame and event work owned by this native runtime. */
+  public dispose(): void {
+    this.frameScheduler?.dispose();
+    this.frameScheduler = undefined;
+    this.globalListeners.clear();
   }
 
   /** Delivers SDL-translated events registered on document/window globals. */
