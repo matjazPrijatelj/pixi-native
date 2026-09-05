@@ -5,6 +5,7 @@ export const DEMO_WINDOW_OPTIONS = {
   height: 720,
   borderless: false,
   transparent: true,
+  backgroundAlpha: 0.5,
   x: 0,
   y: 0,
 } satisfies NodeRendererOptions;

@@ -27,7 +27,11 @@ import {
   createModalFrameController,
   setNativeWindowTransparent,
 } from "../ModalFrameController.ts";
-import { resolveNodeRendererOptions } from "../windowOptions.ts";
+import {
+  NATIVE_BACKGROUND_COLOR,
+  premultiplyBackgroundColor,
+  resolveNodeRendererOptions,
+} from "../windowOptions.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -202,8 +206,11 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     canvas: canvas as never,
     width: canvas.width,
     height: canvas.height,
-    background: 0x101544,
-    backgroundAlpha: windowOptions.transparent ? 0 : 1,
+    background: premultiplyBackgroundColor(
+      NATIVE_BACKGROUND_COLOR,
+      windowOptions.backgroundAlpha,
+    ),
+    backgroundAlpha: windowOptions.backgroundAlpha,
     resolution: 1,
     antialias: true,
     autoStart: false,

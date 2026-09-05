@@ -48,6 +48,14 @@ The Windows package contains `d3dcompiler_47.dll` from the Windows SDK. Its
 redistribution remains subject to the Microsoft Software License Terms for the
 Windows SDK used to build the binary.
 
+## webgl-node, native-gles, and ANGLE
+
+The Windows WebGL runtime installs `webgl-node` and `native-gles` as npm
+dependencies. Both packages are MIT-licensed. `native-gles` supplies prebuilt
+ANGLE/EGL binaries; ANGLE is BSD-licensed and includes third-party components
+governed by the notices in its upstream source distribution:
+<https://chromium.googlesource.com/angle/angle/+/HEAD/README.md#license>.
+
 ## FFmpeg
 
 The Windows x64 distribution contains a project-built, statically linked

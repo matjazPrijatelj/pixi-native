@@ -10,16 +10,17 @@ Native PixiJS runtime for rendering directly into a native window from Node.js, 
 - Separate PixiJS 7.4.3 WebGL proof-of-concept entrypoint (`pixi-native/webgl-pixi7`)
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
-- Optional WebGL2 window rendering through `@node-3d/glfw` and `@node-3d/webgl`
+- Windows WebGL2 through SDL plus `webgl-node`/`native-gles` ANGLE/EGL
+- Linux WebGL2 through `@node-3d/core` and `@node-3d/glfw`
 - Skia-backed `NodeCanvas` using `@napi-rs/canvas` for Canvas2D text and image rasterization
 - Rust/napi-rs video bridge for native FFmpeg stdout frame delivery
 - CMake, a C++ compiler, and Go 1.26+ for rebuilding the addon
 
-The WebGL backend is optional and uses prebuilt, ABI-compatible native packages; it does not require Python or a local node-gyp build. The default WebGPU backend does not load these packages.
+The WebGL backend uses prebuilt, ABI-compatible native packages and does not require Python or a local node-gyp build. The default WebGPU backend does not load them.
 
-The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }` in WebGPU mode. The WebGL entrypoint uses a GLFW OpenGL context with the WebGL2 API from `@node-3d/webgl`; there is no automatic backend fallback.
+The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }` in WebGPU mode. On Windows the WebGL entrypoints attach an ANGLE/EGL WebGL2 context to an SDL `HWND`; Linux retains the GLFW backend. There is no automatic backend fallback.
 
-The demo selects its renderer explicitly: use `pnpm dev:webgpu` or `pnpm dev:webgl`. Both commands open the interactive scene demo; use number keys or left/right to switch between Graphics, Sprite, Text, BitmapText, audio, video, rain-sprite, and particle scenes. WebGPU owns the SDL window and WebGL owns a GLFW window, so the two native window paths remain independent.
+The demo selects its renderer explicitly: use `pnpm dev:webgpu`, `pnpm dev:webgl`, or `pnpm dev:webgl7`. The commands open the interactive scene demo; use number keys or left/right to switch between Graphics, Sprite, Text, BitmapText, audio, video, rain-sprite, and particle scenes. WebGPU and Windows WebGL share SDL window behavior while owning separate Dawn and ANGLE presentation surfaces.
 
 For library use, install the package and Pixi peer dependency with `pnpm add pixi-native pixi.js`, then import a factory:
 
@@ -27,12 +28,13 @@ For library use, install the package and Pixi peer dependency with `pnpm add pix
 import { createPixiWebGPU } from "pixi-native/webgpu";
 
 const { app, native } = await createPixiWebGPU({
-    width: 1280,
-    height: 720,
-    borderless: true,
-    transparent: true,
-    x: 0,
-    y: 0,
+  width: 1280,
+  height: 720,
+  borderless: false,
+  transparent: true,
+  backgroundAlpha: 0.5,
+  x: 0,
+  y: 0,
 });
 
 native.window.setPosition(2000, 100);
@@ -56,6 +58,10 @@ behavior.
 Per-pixel transparency is currently supported on Windows 11. With
 `transparent: true`, transparent Pixi pixels reveal the desktop and
 partially-transparent pixels retain smooth premultiplied-alpha edges. The
+optional `backgroundAlpha` controls the Pixi background opacity from `0` to
+`1`; it defaults to `0` for transparent windows and `1` otherwise. Values below
+`1` require `transparent: true`. All renderers use premultiplied presentation,
+so `0.5` contributes half of the background color consistently. The
 transparent areas still receive mouse input; click-through and runtime
 transparency switching are not part of this API. Other platforms reject the
 option instead of silently creating an opaque window.

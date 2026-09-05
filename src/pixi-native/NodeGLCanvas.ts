@@ -8,44 +8,83 @@ export class NodeGLCanvas {
 
   private readonly context: unknown;
   private readonly canvas2d: NodeCanvas;
-  private readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  private readonly resizeDrawingBuffer?: (
+    width: number,
+    height: number,
+  ) => void;
+  private readonly listeners = new Map<
+    string,
+    Set<EventListenerOrEventListenerObject>
+  >();
 
-  public constructor(context: unknown, width = 1280, height = 720) {
+  public constructor(
+    context: unknown,
+    width = 1280,
+    height = 720,
+    resizeDrawingBuffer?: (width: number, height: number) => void,
+  ) {
     this.context = context;
     this.canvas2d = new NodeCanvas(width, height);
     this._width = width;
     this._height = height;
+    this.resizeDrawingBuffer = resizeDrawingBuffer;
   }
 
-  public get width(): number { return this._width; }
+  public get width(): number {
+    return this._width;
+  }
 
   public set width(value: number) {
     this._width = Math.max(1, Math.floor(value));
     this.canvas2d.width = this._width;
   }
 
-  public get height(): number { return this._height; }
+  public get height(): number {
+    return this._height;
+  }
 
   public set height(value: number) {
     this._height = Math.max(1, Math.floor(value));
     this.canvas2d.height = this._height;
   }
 
-  public get clientWidth(): number { return this.width; }
-  public get clientHeight(): number { return this.height; }
-
-  public getBoundingClientRect(): DOMRect {
-    return { left: 0, top: 0, width: this.width, height: this.height,
-      right: this.width, bottom: this.height, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+  public get clientWidth(): number {
+    return this.width;
+  }
+  public get clientHeight(): number {
+    return this.height;
   }
 
-  public addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+  public getBoundingClientRect(): DOMRect {
+    return {
+      left: 0,
+      top: 0,
+      width: this.width,
+      height: this.height,
+      right: this.width,
+      bottom: this.height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect;
+  }
+
+  public addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+  ): void {
     let listeners = this.listeners.get(type);
-    if (!listeners) { listeners = new Set(); this.listeners.set(type, listeners); }
+    if (!listeners) {
+      listeners = new Set();
+      this.listeners.set(type, listeners);
+    }
     listeners.add(listener);
   }
 
-  public removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+  public removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+  ): void {
     const listeners = this.listeners.get(type);
     listeners?.delete(listener);
     if (listeners?.size === 0) this.listeners.delete(type);
@@ -77,8 +116,16 @@ export class NodeGLCanvas {
   public resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    const extension = (this.context as { getExtension?: (name: string) => unknown })
-      .getExtension?.("STACKGL_resize_drawingbuffer") as { resize(width: number, height: number): void } | null | undefined;
+    if (this.resizeDrawingBuffer) {
+      this.resizeDrawingBuffer(this.width, this.height);
+      return;
+    }
+    const extension = (
+      this.context as { getExtension?: (name: string) => unknown }
+    ).getExtension?.("STACKGL_resize_drawingbuffer") as
+      | { resize(width: number, height: number): void }
+      | null
+      | undefined;
     extension?.resize(this.width, this.height);
   }
 }

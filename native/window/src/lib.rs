@@ -12,10 +12,9 @@ use windows_sys::Win32::Graphics::Dwm::{
 use windows_sys::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 #[cfg(windows)]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, DefWindowProcW, GetWindowLongPtrW, KillTimer, SetLayeredWindowAttributes,
-    SetTimer, SetWindowLongPtrW, GWLP_USERDATA, GWLP_WNDPROC, GWL_EXSTYLE, LWA_ALPHA,
+    CallWindowProcW, DefWindowProcW, GetWindowLongPtrW, KillTimer,
+    SetTimer, SetWindowLongPtrW, GWLP_USERDATA, GWLP_WNDPROC,
     WM_ENTERMENULOOP, WM_ENTERSIZEMOVE, WM_EXITMENULOOP, WM_EXITSIZEMOVE, WM_TIMER, WNDPROC,
-    WS_EX_LAYERED,
 };
 
 #[cfg(windows)]
@@ -84,45 +83,6 @@ fn configure_dwm_transparency(hwnd: HWND, transparent: bool) -> Result<()> {
             result as u32,
         )));
     }
-    Ok(())
-}
-
-/// Applies the Win32 layered-window workaround required by some OpenGL drivers.
-#[napi]
-pub fn set_gl_framebuffer_transparent(native_data: Buffer, transparent: bool) -> Result<()> {
-    #[cfg(windows)]
-    {
-        let hwnd = hwnd_from_native_data(&native_data)?;
-        let previous_style = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
-        let layered_style = WS_EX_LAYERED as isize;
-        let next_style = if transparent {
-            previous_style | layered_style
-        } else {
-            previous_style & !layered_style
-        };
-        unsafe {
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
-        }
-
-        if transparent && unsafe { SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA) } == 0 {
-            unsafe {
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, previous_style);
-            }
-            return Err(Error::from_reason(
-                "could not enable layered OpenGL framebuffer transparency",
-            ));
-        }
-        configure_dwm_transparency(hwnd, transparent)?;
-    }
-
-    #[cfg(not(windows))]
-    {
-        let _ = (native_data, transparent);
-        return Err(Error::from_reason(
-            "transparent native windows are supported only on Windows 11",
-        ));
-    }
-
     Ok(())
 }
 

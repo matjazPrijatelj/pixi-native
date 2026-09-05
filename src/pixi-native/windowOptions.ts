@@ -1,5 +1,19 @@
 import type { NodeRendererOptions } from "./nativeTypes.ts";
 
+export const NATIVE_BACKGROUND_COLOR = 0x101544;
+
+/** Produces the RGB values expected by a premultiplied presentation surface. */
+export function premultiplyBackgroundColor(
+  color: number,
+  alpha: number,
+): [number, number, number] {
+  return [
+    (((color >> 16) & 0xff) / 0xff) * alpha,
+    (((color >> 8) & 0xff) / 0xff) * alpha,
+    ((color & 0xff) / 0xff) * alpha,
+  ];
+}
+
 export interface ResolvedNodeRendererOptions {
   readonly title: string;
   readonly width: number;
@@ -8,6 +22,7 @@ export interface ResolvedNodeRendererOptions {
   readonly vsync: boolean;
   readonly borderless: boolean;
   readonly transparent: boolean;
+  readonly backgroundAlpha: number;
   readonly x?: number;
   readonly y?: number;
 }
@@ -37,6 +52,17 @@ export function resolveNodeRendererOptions(
   if (transparent && platform !== "win32") {
     throw new Error("transparent native windows are supported only on Windows 11");
   }
+  const backgroundAlpha = options.backgroundAlpha ?? (transparent ? 0 : 1);
+  if (
+    !Number.isFinite(backgroundAlpha) ||
+    backgroundAlpha < 0 ||
+    backgroundAlpha > 1
+  ) {
+    throw new Error("backgroundAlpha must be a finite number from 0 to 1");
+  }
+  if (!transparent && backgroundAlpha < 1) {
+    throw new Error("backgroundAlpha below 1 requires transparent: true");
+  }
 
   return {
     title: options.title ?? defaultTitle,
@@ -46,6 +72,7 @@ export function resolveNodeRendererOptions(
     vsync: options.vsync ?? true,
     borderless,
     transparent,
+    backgroundAlpha,
     x: options.x,
     y: options.y,
   };

@@ -12,6 +12,8 @@ export interface NodeRendererOptions {
   readonly borderless?: boolean;
   /** Enables per-pixel window transparency. Supported on Windows 11. */
   readonly transparent?: boolean;
+  /** Pixi background opacity. Values below 1 require a transparent window. */
+  readonly backgroundAlpha?: number;
   /** Absolute virtual-desktop X coordinate. Must be provided with `y`. */
   readonly x?: number;
   /** Absolute virtual-desktop Y coordinate. Must be provided with `x`. */

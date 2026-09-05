@@ -2,15 +2,33 @@
 
 ## 2026-09-05
 
+- Normalized PixiJS 8 WebGPU and WebGL background clears to premultiplied RGB,
+  matching PixiJS 7 and making `backgroundAlpha: 0.5` visually represent the
+  same half-transparent background on all three renderers. Centralized the
+  native background color and added focused conversion coverage. Type checking,
+  all 99 tests, and the production package build pass without a native rebuild.
+- Added a Canvas2D decode fallback for native `Image` objects in the PixiJS 8
+  WebGL texture-upload adapter, covering external PNG bitmap-font atlases that
+  do not expose pixels directly. Added a validated shared `backgroundAlpha`
+  renderer option and set the transparent demo background across
+  WebGPU, PixiJS 8 WebGL, and PixiJS 7 WebGL. Type checking, all 98 tests, the
+  focused real-image upload regression, and the production package build pass.
+- Replaced the ineffective Windows GLFW/layered-window WebGL transparency
+  workaround with the SDL HWND plus `webgl-node`/`native-gles` ANGLE/EGL path,
+  shared by PixiJS 8 and PixiJS 7. Added a PixiJS 8 image-upload adapter for
+  the browser-style `texImage2D`/`texSubImage2D` overloads so Canvas-backed
+  Sprite, AnimatedSprite, Text, and BitmapText textures reach native GLES.
+  A fresh PixiJS 8 run visually confirmed all three Sprite textures, GSAP
+  animation, and repeatable Text rendering over the transparent desktop at
+  about 59 FPS.
+- Added ANGLE context ownership, resize, swap, teardown, WebGL globals, Pixi 7
+  file-location compatibility, dependency/license metadata, and fresh-package
+  assertions for the installed ANGLE runtime. The demo remains decorated by
+  default with `borderless: false`.
 - Added Windows 11 per-pixel transparency for WebGPU with premultiplied
-  Dawn/DXGI composition; the user visually confirmed that path. WebGL and
-  PixiJS 7 WebGL request GLFW transparent framebuffers without overriding
-  GLFW's compositor setup. Both OpenGL ES and desktop OpenGL presentation
-  remained opaque in manual tests, so WebGL and WebGL7 transparency remain
-  unresolved at the native GLFW/Windows presentation boundary. Added the
-  Windows 8+ layered-window workaround proposed in GLFW PR #2681 as a separate
-  GL-only native operation and rebuilt the window addon; visual verification
-  remains pending.
+  Dawn/DXGI composition; the user visually confirmed that path. Initial GLFW
+  and layered-window WebGL experiments remained opaque and were superseded by
+  the SDL/ANGLE implementation above.
 - Added shared WebGPU, WebGL, and PixiJS 7 WebGL support for startup-only
   borderless windows, validated absolute virtual-desktop positioning, and
   programmatic move, minimize, maximize, and restore controls; type checking,
@@ -345,6 +363,7 @@
 - Accepted browser-style WebGL arrow-key names in scene navigation so the
   arrow controls work consistently across WebGL and WebGPU.
 - Updated the PixiJS 7 WebGL audio scene to match PixiJS 8 with the drum atlas, clickable/key-triggered pads, music sprites, fades, mute, and diagnostics.
+
 ## 2026-09-04
 
 - Changed PixiJS 8 WebGL and PixiJS 7 WebGL7 presentation to use direct GLFW buffer swaps, bypassing the GLFW frame gate that suppressed modal RAF frames during window dragging and resizing.
