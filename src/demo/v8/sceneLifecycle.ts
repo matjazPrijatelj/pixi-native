@@ -16,8 +16,10 @@ const SCENE_DESTROY_OPTIONS: DestroyOptions = {
 export function disposeDemoScene(scene: DisposableDemoScene): void {
     if (scene.destroyed) return;
     scene.parent?.removeChild(scene);
+    // Pixi's batcher keeps per-InstructionSet buffers for the renderer lifetime.
+    // Return the RenderGroup to Pixi's pool so later scenes reuse those buffers.
+    scene.disableRenderGroup();
     scene.dispose?.();
     scene.destroy(SCENE_DESTROY_OPTIONS);
 }
-
 

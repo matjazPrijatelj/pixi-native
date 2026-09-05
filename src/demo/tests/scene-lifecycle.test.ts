@@ -44,6 +44,28 @@ test("disposing a scene preserves textures owned outside the scene", () => {
     sharedTexture.destroy(false);
 });
 
+test("disposing a render-group scene returns its instruction buffers for reuse", () => {
+    const firstScene = new Container();
+    firstScene.enableRenderGroup();
+    const pooledRenderGroup = firstScene.renderGroup;
+    const instructionSetUid = pooledRenderGroup?.instructionSet.uid;
+
+    assert.ok(pooledRenderGroup);
+    assert.notEqual(instructionSetUid, undefined);
+
+    disposeDemoScene(firstScene);
+
+    assert.equal(firstScene.renderGroup, null);
+
+    const secondScene = new Container();
+    secondScene.enableRenderGroup();
+
+    assert.equal(secondScene.renderGroup, pooledRenderGroup);
+    assert.equal(secondScene.renderGroup?.instructionSet.uid, instructionSetUid);
+
+    disposeDemoScene(secondScene);
+});
+
 test("NativeVideoSprite destroys its owned planes and geometry buffers", () => {
     const video = new NativeVideo("unused.mp4", {
         width: 2,

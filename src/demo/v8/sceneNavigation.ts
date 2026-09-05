@@ -19,6 +19,14 @@ export function isReloadShortcut(
   return !repeat && (ctrlKey || ctrlDown) && key?.toLowerCase() === "r";
 }
 
+/** Returns true only for a non-repeating plus-key press. */
+export function isLoopDemoShortcut(
+  key: string | null,
+  repeat: number | boolean = 0,
+): boolean {
+  return !repeat && key === "+";
+}
+
 function normalizeDirectionalKey(key: string | null): string | null {
   switch (key) {
     case "ArrowUp": return "up";
@@ -72,5 +80,4 @@ export function getSpriteCountDeltaForKey(
   if (key === "down") return -10;
   return null;
 }
-
 
