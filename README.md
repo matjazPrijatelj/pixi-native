@@ -63,6 +63,24 @@ need to own polling, rendering, presentation, and teardown themselves. The
 package declares PixiJS 8 as a peer dependency so applications can update Pixi
 within the supported major version.
 
+Display code can resolve and read its own packaged files without depending on
+the launcher's working directory through the lightweight `pixi-native/files`
+entrypoint:
+
+```ts
+import { createModuleFileAccess } from "pixi-native/files";
+
+const files = createModuleFileAccess(import.meta.url);
+const config = await files.readJson("../assets/config.json");
+const texturePath = files.resolvePath("../assets/character.png");
+```
+
+Relative sources are resolved beside the calling module. Absolute paths, UNC
+paths, and `file:` URLs remain absolute and may point outside the display or
+release directory, including to another Windows drive. The helper only reads
+the filesystem; HTTP requests still use `fetch`, and callers use `node:fs`
+directly when they need to write files.
+
 The WebGPU, WebGL, and PixiJS 7 WebGL factories accept the same native-window
 options and expose the same programmatic window controls. The optional `x` and
 `y` values are absolute integer coordinates in the virtual desktop, must be

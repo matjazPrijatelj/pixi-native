@@ -55,6 +55,7 @@ try {
       '    "pixi-native/webgl-pixi7",',
       '    "pixi-native/audio",',
       '    "pixi-native/video",',
+      '    "pixi-native/files",',
       "];",
       "for (const entrypoint of entrypoints) await import(entrypoint);",
       'const packageRequire = createRequire(import.meta.resolve("pixi-native"));',
@@ -73,6 +74,24 @@ try {
       "",
     ].join("\n"),
   );
+  const displayDirectory = join(testDirectory, "displays", "example");
+  await mkdir(join(displayDirectory, "dist"), { recursive: true });
+  await mkdir(join(displayDirectory, "assets"), { recursive: true });
+  await writeFile(
+    join(displayDirectory, "assets", "config.json"),
+    '{"renderer":"webgpu"}\n',
+  );
+  await writeFile(
+    join(displayDirectory, "dist", "file-smoke.mjs"),
+    [
+      'import assert from "node:assert/strict";',
+      'import { createModuleFileAccess } from "pixi-native/files";',
+      "const files = createModuleFileAccess(import.meta.url);",
+      'assert.equal(await files.readText("../assets/config.json"), \'{"renderer":"webgpu"}\\n\');',
+      'assert.deepEqual(await files.readJson("../assets/config.json"), { renderer: "webgpu" });',
+      "",
+    ].join("\n"),
+  );
   await writeFile(
     join(testDirectory, "smoke.ts"),
     [
@@ -82,7 +101,8 @@ try {
       'import { createPixiWebGL7 } from "pixi-native/webgl-pixi7";',
       'import { Howl } from "pixi-native/audio";',
       'import { NativeVideo } from "pixi-native/video";',
-      "void [createPixiRenderer, createPixiWebGPU, createPixiWebGL, createPixiWebGL7, Howl, NativeVideo];",
+      'import { createModuleFileAccess } from "pixi-native/files";',
+      "void [createPixiRenderer, createPixiWebGPU, createPixiWebGL, createPixiWebGL7, Howl, NativeVideo, createModuleFileAccess];",
       "",
     ].join("\n"),
   );
@@ -113,6 +133,10 @@ try {
     encoding: "utf8",
   });
   process.stdout.write(smokeOutput);
+  execSync("node displays/example/dist/file-smoke.mjs", {
+    cwd: testDirectory,
+    stdio: "inherit",
+  });
   if (process.platform === "win32") {
     const bundledFfmpeg = smokeOutput.trimEnd().split(/\r?\n/).at(-1);
     const ffmpegDirectory = dirname(bundledFfmpeg);

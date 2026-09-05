@@ -1,5 +1,12 @@
 # Development history
 
+## 2026-09-06
+
+- Added the lightweight `pixi-native/files` entrypoint for module-relative file
+  resolution, existence checks, and asynchronous byte, text, and JSON reads.
+  Absolute paths, UNC paths, and file URLs remain unrestricted so displays can
+  access files outside the release tree without depending on launcher `cwd`.
+
 ## 2026-09-05
 
 - Added optional `maxFps` frame pacing from 24 to 360 FPS for WebGPU,

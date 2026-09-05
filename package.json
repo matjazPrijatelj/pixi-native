@@ -114,6 +114,10 @@
     "./video": {
       "types": "./dist/pixi-native/video/index.d.ts",
       "default": "./dist/pixi-native/video/index.js"
+    },
+    "./files": {
+      "types": "./dist/pixi-native/files.d.ts",
+      "default": "./dist/pixi-native/files.js"
     }
   },
   "peerDependencies": {
