@@ -4,6 +4,8 @@ node_modules/
 
 # Generated build output
 build/
+/dist/
+/artifacts/
 
 # Coverage and temporary caches
 coverage/
@@ -37,6 +39,9 @@ native/**/target/
 native/**/build/
 native/**/dawn/
 native/**/depot_tools/
+native/ffmpeg/source/
+native/ffmpeg/build/
+native/ffmpeg/out/
 
 
 # Crash dumps

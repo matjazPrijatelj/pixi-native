@@ -1,5 +1,3 @@
-import { createRequire } from "node:module";
-
 import { Image } from "@napi-rs/canvas";
 import * as sdl from "@kmamal/sdl";
 import { Application, VERSION } from "pixi.js";
@@ -32,8 +30,7 @@ import {
 } from "../rgbaUpload.ts";
 import { setNativeVideoModalState } from "../video/NativeVideo.ts";
 import { sliceWebGlBufferData } from "../webglBufferUpload.ts";
-
-const require = createRequire(import.meta.url);
+import { createModalFrameController } from "../ModalFrameController.ts";
 
 export async function createWebGlRenderer(
   options: NodeRendererOptions = {},
@@ -322,14 +319,7 @@ export async function createWebGlRenderer(
       );
     }
 
-    const nativeWindow = require("../../../native/window") as {
-      create(
-        nativeData: Uint8Array,
-        onFrame: () => void,
-        onState: (active: boolean) => void,
-      ): { detach(): void };
-    };
-    const modalController = nativeWindow.create(
+    const modalController = createModalFrameController(
       window.nativeWindowData,
       () => {
         for (const listener of [...modalFrameListeners]) listener();

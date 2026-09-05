@@ -27,9 +27,8 @@ test("RTP config builds low-latency FFmpeg input arguments", () => {
         "-localaddr", "10.1.45.80",
         "-fflags", "nobuffer",
         "-flags", "low_delay",
-        "-probesize", "32",
-        "-analyzeduration", "0",
-        "-threads", "1",
+        "-probesize", "32768",
+        "-analyzeduration", "100000",
         "-rw_timeout", "2000000",
     ]);
 });

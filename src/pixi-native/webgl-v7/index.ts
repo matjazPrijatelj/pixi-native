@@ -1,27 +1,24 @@
 import type { Application } from "pixi.js-v7";
-import { createRequire } from "node:module";
 import { NodeDOMAdapter } from "../NodeDOMAdapter.ts";
 import { NodeGLCanvas } from "../NodeGLCanvas.ts";
 import { NodeGLWindow } from "../NodeGLWindow.ts";
 import { NodeCanvas } from "../NodeCanvas.ts";
 import { copyRgbaRowsFlippedY } from "../rgbaUpload.ts";
 import type { NodeNativeInput, NodeRendererOptions } from "../nativeTypes.ts";
-
-const require = createRequire(import.meta.url);
+import { createModalFrameController } from "../ModalFrameController.ts";
 
 export interface PixiWebGL7Result {
   readonly app: Application;
-    readonly native: {
-        readonly window: NodeGLWindow;
-        readonly canvas: NodeGLCanvas;
-        readonly input: NodeNativeInput;
-        readonly addModalFrameListener: (listener: () => void) => () => void;
-        readonly swap: () => void;
+  readonly native: {
+    readonly window: NodeGLWindow;
+    readonly canvas: NodeGLCanvas;
+    readonly input: NodeNativeInput;
+    readonly addModalFrameListener: (listener: () => void) => () => void;
+    readonly swap: () => void;
     readonly destroy: () => void;
   };
 }
 
-/** Creates the minimal Pixi 7 WebGL proof-of-concept on the native surface. */
 export async function createPixiWebGL7(
   options: NodeRendererOptions = {},
 ): Promise<PixiWebGL7Result> {
@@ -100,7 +97,13 @@ export async function createPixiWebGL7(
     if (!source.data) {
       const imageCanvas = new NodeCanvas(source.width, source.height);
       const context = imageCanvas.getContext("2d") as {
-        drawImage?: (image: unknown, x: number, y: number, width: number, height: number) => void;
+        drawImage?: (
+          image: unknown,
+          x: number,
+          y: number,
+          width: number,
+          height: number,
+        ) => void;
       };
       if (!context.drawImage) return value;
       context.drawImage(value, 0, 0, source.width, source.height);
@@ -164,14 +167,7 @@ export async function createPixiWebGL7(
   });
   const modalFrameListeners = new Set<() => void>();
 
-  const nativeWindow = require("../../../native/window") as {
-    create(
-      nativeData: Uint8Array,
-      onFrame: () => void,
-      onState: (active: boolean) => void,
-    ): { detach(): void };
-  };
-  const modalController = nativeWindow.create(
+  const modalController = createModalFrameController(
     window.nativeWindowData,
     () => {
       for (const listener of [...modalFrameListeners]) listener();
@@ -200,8 +196,10 @@ export async function createPixiWebGL7(
       window,
       canvas,
       input: {
-        dispatchCanvasEvent: (type, event) => canvas.dispatchNativeEvent(type, event),
-        dispatchGlobalEvent: (type, event) => adapter.dispatchGlobalEvent(type, event),
+        dispatchCanvasEvent: (type, event) =>
+          canvas.dispatchNativeEvent(type, event),
+        dispatchGlobalEvent: (type, event) =>
+          adapter.dispatchGlobalEvent(type, event),
       },
       addModalFrameListener: (listener) => {
         modalFrameListeners.add(listener);

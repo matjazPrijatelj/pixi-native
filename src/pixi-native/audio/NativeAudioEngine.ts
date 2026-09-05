@@ -10,6 +10,9 @@ const CHANNELS = 2;
 const BYTES_PER_SAMPLE = 4;
 const CHUNK_FRAMES = 512;
 const TARGET_QUEUE_FRAMES = 2048;
+const AUDIO_WORKER_MODULE = import.meta.url.endsWith(".ts")
+    ? "./audioWorker.ts"
+    : "./audioWorker.js";
 
 export type NativeAudioEvent =
     | "load"
@@ -249,7 +252,7 @@ export class NativeAudioEngine {
             { type: "playback" },
             { channels: CHANNELS, frequency: SAMPLE_RATE, format: "f32", buffered: 1024 },
         );
-        this.worker = new Worker(new URL("./audioWorker.ts", import.meta.url), {
+        this.worker = new Worker(new URL(AUDIO_WORKER_MODULE, import.meta.url), {
             execArgv: ["--enable-source-maps"],
         });
         this.worker.on("message", (message) => this.handleWorkerMessage(message));

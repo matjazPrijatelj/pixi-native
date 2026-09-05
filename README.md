@@ -4,7 +4,7 @@ Native PixiJS runtime for rendering directly into a native window from Node.js, 
 
 ## Stack
 
-- Node.js 24 LTS
+- Node.js 24.13 or newer from the Node.js 24 LTS line
 - pnpm 9.15.9
 - PixiJS 8.20.0
 - Separate PixiJS 7.4.3 WebGL proof-of-concept entrypoint (`pixi-native/webgl-pixi7`)
@@ -41,13 +41,62 @@ adaptations. Use number keys `1`–`9` or left/right to navigate.
 
 The supported development targets are Linux x64 and Windows 11 x64. The same Node.js and pnpm versions should be used on both platforms:
 
-- Node.js 24 LTS
+- Node.js 24.13 or newer from the Node.js 24 LTS line
 - pnpm 9.15.9
 - Git
 - CMake
 - Go 1.26 or newer (required by Dawn's native build generators)
 - Rust and Cargo (required by the native video bridge)
-- FFmpeg available as `ffmpeg` and, preferably, `ffprobe` when using video or audio scenes
+- FFmpeg available as `ffmpeg` and, preferably, `ffprobe` for development video or audio scenes
+
+## Distribution package
+
+Create the verified private package with:
+
+```sh
+pnpm pack:dist
+```
+
+On Windows x64, first build the pinned minimal FFmpeg runtime with:
+
+```powershell
+pnpm ffmpeg:build
+```
+
+The command requires a healthy MSYS2 UCRT64 installation with `base-devel`,
+`nasm`, and `mingw-w64-ucrt-x86_64-toolchain`. Its preflight reports missing
+tools but never installs system prerequisites. It builds pinned FFmpeg 8.0 as
+two static LGPL executables, stages `ffmpeg.exe`, `ffprobe.exe`, the LGPL text
+and build manifest, and records SHA-256 checksums. The executables are tracked
+through Git LFS. `pnpm ffmpeg:stage` can restage an already completed build.
+Install or repair MSYS2 separately, open its UCRT64 shell, update it as directed
+by MSYS2, then install the required packages with:
+
+```sh
+pacman -S --needed base-devel nasm mingw-w64-ucrt-x86_64-toolchain
+```
+
+The build expects `C:\msys64` by default; set `MSYS2_ROOT` when MSYS2 is
+installed elsewhere.
+
+The command runs type checking, the complete Node test suite, a production
+TypeScript build, native-artifact validation, and `npm pack`. It writes
+`artifacts/pixi-native-0.1.0.tgz`, the corresponding pinned FFmpeg source
+archive, and SHA-256 files for both. It does not rebuild the native addons or
+FFmpeg.
+
+Install the tarball together with the PixiJS 8 peer dependency:
+
+```sh
+pnpm add ./artifacts/pixi-native-0.1.0.tgz pixi.js@8.20.0
+```
+
+The single x64 package contains Windows and Linux GPU/video bindings plus the
+Windows modal-window and native-audio bindings. Runtime loader selection is
+platform-specific. PixiJS 7 is installed under the separate `pixi.js-v7`
+alias for the `pixi-native/webgl-pixi7` entrypoint. Windows includes the staged
+minimal LGPL FFmpeg and FFprobe runtime. Linux FFmpeg is not bundled yet; set
+`FFMPEG_PATH` or make `ffmpeg` and `ffprobe` available in `PATH` there.
 
 The repository contains the TypeScript source and project patches, but native build output is platform-specific. Build the GPU addon on the platform where it will run; Linux and Windows artifacts must not be shared.
 
@@ -101,6 +150,7 @@ Install these prerequisites first:
 - Go 1.26 or newer in `PATH`
 - Rust and Cargo in `PATH` (required for the video bridge)
 - FFmpeg in `PATH` (required for the video/audio scenes); `ffprobe` is recommended for metadata probing
+- MSYS2 UCRT64 with `base-devel`, `nasm`, and the UCRT64 GCC toolchain when rebuilding the packaged minimal FFmpeg
 
 Open **Developer PowerShell for VS 2022**, then run:
 
@@ -147,7 +197,12 @@ FFmpeg executable lookup uses this order:
 3. `native/video/dist/<platform>-<arch>/ffmpeg[.exe]` next to the packaged addon;
 4. `ffmpeg` from `PATH` for development.
 
-Production packaging may place a verified FFmpeg executable in the app-relative location above. The binary is intentionally not downloaded or committed by this repository; the distributor must include the license and comply with the selected FFmpeg build's LGPL/GPL configuration.
+The Windows distribution places the verified static LGPL FFmpeg 8.0 runtime
+in that app-relative location, including FFprobe, license, build manifest, and
+checksums. It contains only H.264/H.265, common MP4/RTP inputs, AAC/MP3/PCM
+audio, the filters used by this runtime, D3D11VA, and the raw NV12/f32le output
+paths. Linux continues to use `FFMPEG_PATH` or `PATH` until a Linux bundle is
+added. See `THIRD_PARTY_NOTICES.md` for the exact source commit.
 
 `NativeVideo` provides `load()`, `play()`, `pause()`, writable `src` and `currentTime`, metadata, `loop`, `playbackRate`, volume/mute controls, EventTarget-compatible media events, separate video/audio error state, and decode/presentation/drop statistics. File metadata is probed with `ffprobe` beside the selected FFmpeg executable when available. Embedded audio is decoded as a bounded FFmpeg PCM stream and acts as the master playback clock; video-only files continue without audio. During the Windows move/resize modal loop file video continues silently, then discards stale audio and restarts A/V at the latest presented video time. On the video scene, use Up/Down to cycle through all MP4 files in `src/demo/assets`.
 

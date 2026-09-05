@@ -1,7 +1,45 @@
 # Development history
 
+## 2026-09-05
+
+- Repaired and updated the existing MSYS2 UCRT64 installation, installed the
+  required GCC 16.2.0, NASM 2.16.03, and base development toolchain, and built
+  the pinned FFmpeg 8.0 source without invoking the Dawn `native:build`.
+- Corrected the minimal FFmpeg raw float-audio muxer configuration from the
+  runtime name `f32le` to the configure component `pcm_f32le`, and made staging
+  reject builds that do not expose both the `rawvideo` and `f32le` muxers.
+- Accepted FFmpeg's release-form `n8.0` identity and shell-quoted configure
+  values while retaining exact option, pinned-source, LGPL, and static-runtime
+  checks; license validation now tolerates FFmpeg's wrapped console text.
+- Produced 4,231,680-byte `ffmpeg.exe` and 4,064,768-byte `ffprobe.exe`
+  binaries and a compact `pixi-native-0.1.0.tgz` below the enforced 100 MiB
+  unpacked-size limit.
+- Verified all 90 repository tests, the compiled package, seven native
+  artifacts, five FFmpeg distribution files, six fresh-package entrypoints,
+  H.264/H.265 and WAV/MP3/AAC decoding, float audio output, and a fresh consumer
+  install. The corresponding 16,397,147-byte source archive SHA-256 is
+  `083d0987eb7a1827187a6d4c6e5d37d71293a68eaecd7e0a03dccb38cc249b89`.
+
 ## 2026-09-04
 
+- Replaced the planned Gyan shared FFmpeg payload with a reproducible minimal
+  Windows x64 build pinned to FFmpeg commit `140fd653ae`: static `ffmpeg.exe`
+  and `ffprobe.exe`, LGPL-only decoding, D3D11VA, common MP4/RTP video and
+  AAC/MP3/PCM audio support, with no bundled FFmpeg DLL closure.
+- Added an MSYS2 UCRT64 preflight and build workflow that never installs system
+  prerequisites, captures the exact compiler/configuration manifest, stages
+  the verified result, and emits a hash-protected corresponding-source archive.
+- Added H.265, AAC, MP3/WAV, playback-rate, NV12, local HTTP, static-runtime,
+  source-archive, and fresh-package validation for the minimal build.
+- Added a verified private distribution pack that emits compiled JavaScript,
+  declarations, the exact Windows/Linux x64 native runtime inventory, and a
+  SHA-256 checksum without including demos or native build trees.
+- Added explicit package platform, engine, dependency, export, and third-party
+  notice metadata for the `pixi-native` 0.1.0 tarball.
+- Made the Windows modal-frame addon conditional through a shared controller,
+  so Linux renderers no longer try to load a Windows-only native binding.
+- Repaired the PixiJS 7 video adapter test setup and aligned the RTP config
+  regression with the active low-latency probe settings.
 - Rasterized PixiJS 7 Assets image resources through NodeCanvas before native
   WebGL upload when the native Image has no raw pixel buffer, preventing stale
   BitmapFont texture contents from appearing in Sprite scenes.

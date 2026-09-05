@@ -23,6 +23,7 @@ import {
 import * as sdl from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "../gpuCompatibility.ts";
 import { setNativeVideoModalState } from "../video/NativeVideo.ts";
+import { createModalFrameController } from "../ModalFrameController.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -39,13 +40,6 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
   });
 
   const gpu = require("../../../native/gpu") as NodeGPUApi;
-  const nativeWindow = require("../../../native/window") as {
-    create(
-      nativeData: Uint8Array,
-      onFrame: () => void,
-      onState: (active: boolean) => void,
-    ): { detach(): void };
-  };
   const backend = resolveGpuBackend();
   const instance = gpu.create([`backend=${backend}`, "verbose=1"]);
   const adapter = await instance.requestAdapter();
@@ -176,7 +170,7 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
     waitForPresent,
   );
   domAdapter.install();
-  const modalController = nativeWindow.create(
+  const modalController = createModalFrameController(
     (window as any)._native.gpu,
     () => {
       domAdapter.dispatchModalFrame(performance.now());
@@ -298,4 +292,3 @@ export async function createWebGpuRenderer(options: NodeRendererOptions = {}): P
   };
 
 }
-

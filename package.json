@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": false,
   "type": "module",
+  "author": {
+    "name": "MatjazP",
+    "email": "matjash@gmail.com"
+  },
   "scripts": {
     "native:build": "node native/gpu/scripts/build.mjs",
     "native:window:build": "node native/window/scripts/build.mjs",
@@ -10,32 +14,45 @@
     "native:video:build": "node native/video/scripts/build.mjs",
     "assets:bitmap-font": "node scripts/generate-bitmap-font-test.mjs",
     "assets:audio-test": "node scripts/generate-audio-test.mjs",
+    "ffmpeg:build": "node scripts/build-minimal-ffmpeg.mjs",
+    "ffmpeg:stage": "node scripts/stage-custom-ffmpeg.mjs",
     "dev": "pnpm dev:webgpu",
     "dev:webgpu": "node --enable-source-maps src/dev-runner.ts webgpu",
     "dev:webgl": "node --enable-source-maps src/dev-runner.ts webgl",
     "dev:webgl7": "node --enable-source-maps src/dev-runner.ts webgl7",
-    "build": "tsc --noEmit",
+    "build": "node scripts/build-package.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test src/demo/tests/*.test.ts",
+    "package:prepare": "pnpm typecheck && pnpm test && pnpm build && node scripts/validate-native-artifacts.mjs",
+    "pack:dist": "node scripts/pack-distribution.mjs",
+    "prepack": "pnpm package:prepare",
     "format": "prettier --write ."
   },
   "dependencies": {
     "@kmamal/sdl": "0.11.13",
     "@napi-rs/canvas": "1.0.8",
-    "@node-3d/core": "6.3.0"
+    "@node-3d/core": "6.3.0",
+    "@node-3d/glfw": "7.3.1"
   },
   "devDependencies": {
-    "@node-3d/glfw": "7.3.1",
     "@types/node": "22.15.21",
     "gsap": "^3.15.0",
     "pixi.js": "8.20.0",
     "pixi.js-v7": "npm:pixi.js@7.4.3",
-    "typescript": "^5.7.2",
+    "typescript": "7.0.2",
     "prettier": "3.2.5"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.13.0 <25"
   },
+  "os": [
+    "win32",
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "license": "UNLICENSED",
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
@@ -43,20 +60,70 @@
     }
   },
   "files": [
-    "src",
-    "native",
+    "dist",
+    "native/gpu/package.json",
+    "native/gpu/src/*.js",
+    "native/gpu/src/*.d.ts",
+    "native/gpu/dist/linux-x64",
+    "native/gpu/dist/win32-x64",
+    "native/window/package.json",
+    "native/window/binding-path.js",
+    "native/window/src/index.js",
+    "native/window/src/index.d.ts",
+    "native/window/dist/win32-x64",
+    "native/audio/package.json",
+    "native/audio/binding-path.js",
+    "native/audio/src/index.js",
+    "native/audio/src/index.d.ts",
+    "native/audio/dist/win32-x64",
+    "native/video/package.json",
+    "native/video/src/binding-path.js",
+    "native/video/src/index.js",
+    "native/video/src/index.d.ts",
+    "native/video/dist/linux-x64",
+    "native/video/dist/win32-x64",
     "README.md",
-    "HISTORY.md"
+    "HISTORY.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
+  "main": "./dist/pixi-native/index.js",
+  "types": "./dist/pixi-native/index.d.ts",
   "exports": {
-    ".": "./src/pixi-native/index.ts",
-    "./webgpu": "./src/pixi-native/webgpu/index.ts",
-    "./webgl": "./src/pixi-native/webgl/index.ts",
-    "./webgl-pixi7": "./src/pixi-native/webgl-v7/index.ts",
-    "./audio": "./src/pixi-native/audio/index.ts",
-    "./video": "./src/pixi-native/video/index.ts"
+    ".": {
+      "types": "./dist/pixi-native/index.d.ts",
+      "default": "./dist/pixi-native/index.js"
+    },
+    "./webgpu": {
+      "types": "./dist/pixi-native/webgpu/index.d.ts",
+      "default": "./dist/pixi-native/webgpu/index.js"
+    },
+    "./webgl": {
+      "types": "./dist/pixi-native/webgl/index.d.ts",
+      "default": "./dist/pixi-native/webgl/index.js"
+    },
+    "./webgl-pixi7": {
+      "types": "./dist/pixi-native/webgl-v7/index.d.ts",
+      "default": "./dist/pixi-native/webgl-v7/index.js"
+    },
+    "./audio": {
+      "types": "./dist/pixi-native/audio/index.d.ts",
+      "default": "./dist/pixi-native/audio/index.js"
+    },
+    "./video": {
+      "types": "./dist/pixi-native/video/index.d.ts",
+      "default": "./dist/pixi-native/video/index.js"
+    }
   },
   "peerDependencies": {
-    "pixi.js": ">=8.20.0 <9"
+    "pixi.js": ">=8.20.0 <9",
+    "pixi.js-v7": "npm:pixi.js@7.4.3"
+  },
+  "peerDependenciesMeta": {
+    "pixi.js": {
+      "optional": true
+    },
+    "pixi.js-v7": {
+      "optional": true
+    }
   }
 }
