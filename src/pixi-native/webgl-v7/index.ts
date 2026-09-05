@@ -259,9 +259,15 @@ export async function createPixiWebGL7(
     if (destroyed) return;
     destroyed = true;
     modalController.detach();
-    app.destroy(true, { children: true, texture: false, baseTexture: false });
+    // The application owner may release Pixi before the native ANGLE surface.
+    // Pixi 7 plugin teardown is not idempotent, so never destroy it twice.
+    if (app.renderer) {
+      app.destroy(true, { children: true, texture: false, baseTexture: false });
+    }
     renderer.destroy();
-    window.destroy();
+    if (!window.destroyed) {
+      window.destroy();
+    }
   };
 
   return {

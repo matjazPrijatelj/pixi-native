@@ -2,6 +2,14 @@
 
 ## 2026-09-05
 
+- Fixed Alt+F4 shutdown for PixiJS 8 WebGL by skipping WebGPU queue draining
+  when no GPU device exists. WebGL and PixiJS 7 teardown now also avoid asking
+  SDL to destroy a window that its close-event handler already destroyed. Type
+  checking, all 99 tests, and the production package build pass.
+- Made PixiJS 7 WebGL native teardown tolerate an application already destroyed
+  by its owner, preventing a second `ResizePlugin.destroy()` call from invoking
+  the cleared `cancelResize` callback when the SDL window closes. Type checking,
+  all 99 tests, and the production package build pass.
 - Normalized PixiJS 8 WebGPU and WebGL background clears to premultiplied RGB,
   matching PixiJS 7 and making `backgroundAlpha: 0.5` visually represent the
   same half-transparent background on all three renderers. Centralized the

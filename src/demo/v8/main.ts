@@ -434,10 +434,7 @@ const shutdown = async (): Promise<void> => {
   app.ticker.stop();
   stopActiveScene();
   particleEmitter.destroy();
-  const queue = native.device?.queue as GPUQueue & {
-    onSubmittedWorkDone?: () => Promise<void>;
-  };
-  await queue.onSubmittedWorkDone?.();
+  await native.device?.queue.onSubmittedWorkDone?.();
   destroyPixiApplication();
   await destroySpriteTextures();
   await destroyBitmapFonts();
@@ -464,11 +461,7 @@ const restartApp = async (): Promise<void> => {
   particleEmitter.destroy();
 
   try {
-    const queue = native.device?.queue as GPUQueue & {
-      onSubmittedWorkDone?: () => Promise<void>;
-    };
-
-    await queue.onSubmittedWorkDone?.();
+    await native.device?.queue.onSubmittedWorkDone?.();
   } catch {}
 
   try {
