@@ -3,6 +3,7 @@ import type { SpriteTestScene } from "./scenes/SpriteTest.ts";
 import type { AudioTestScene } from "./scenes/AudioTest.ts";
 import type { RainSpriteTestScene } from "./scenes/RainSpriteTest.ts";
 import type { VideoTestScene } from "./scenes/VideoTest.ts";
+import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 
 if (!(globalThis as any).navigator) {
@@ -50,7 +51,6 @@ const {
   getSceneIndexForKey,
   getSpriteCountDeltaForKey,
   getVideoIndexForKey,
-  isLoopDemoShortcut,
   isReloadShortcut,
 } =
   await import("./sceneNavigation.ts");
@@ -148,9 +148,6 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createBitmapTextTest(),
 ];
 
-const LOOP_DEMO_SCENE_INDICES = [0, 1, 2, 3] as const;
-const LOOP_DEMO_INTERVAL_MS = 2_000;
-
 const videoSceneIndex = supportsVideo
   ? scenes.length
   : null;
@@ -230,41 +227,8 @@ const selectScene = (nextIndex: number): void => {
   if (index === particleSceneIndex) particleEmitter.setEnabled(true);
 };
 
-let loopDemoTimer: ReturnType<typeof setInterval> | undefined;
-let loopSceneCursor = LOOP_DEMO_SCENE_INDICES.indexOf(
-  index as (typeof LOOP_DEMO_SCENE_INDICES)[number],
-);
-if (loopSceneCursor < 0) loopSceneCursor = 0;
-
-const setLoopDemoEnabled = (enabled: boolean): void => {
-  if (!enabled) {
-    if (loopDemoTimer === undefined) return;
-    clearInterval(loopDemoTimer);
-    loopDemoTimer = undefined;
-    console.warn("LOOP_DEMO disabled");
-    return;
-  }
-
-  if (loopDemoTimer !== undefined) return;
-  const currentLoopIndex = LOOP_DEMO_SCENE_INDICES.indexOf(
-    index as (typeof LOOP_DEMO_SCENE_INDICES)[number],
-  );
-  if (currentLoopIndex >= 0) loopSceneCursor = currentLoopIndex;
-
-  console.warn(
-    `LOOP_DEMO enabled: cycling core scenes every ${LOOP_DEMO_INTERVAL_MS} ms`,
-  );
-  loopDemoTimer = setInterval(() => {
-    loopSceneCursor = (loopSceneCursor + 1) % LOOP_DEMO_SCENE_INDICES.length;
-    selectScene(LOOP_DEMO_SCENE_INDICES[loopSceneCursor]);
-  }, LOOP_DEMO_INTERVAL_MS);
-};
-
-addDestroyListener(() => {
-  if (loopDemoTimer === undefined) return;
-  clearInterval(loopDemoTimer);
-  loopDemoTimer = undefined;
-});
+const demoLoop = createDemoLoop(selectScene, () => index);
+addDestroyListener(() => demoLoop.destroy());
 
 const selectVideo = (nextVideoIndex: number): void => {
   if (index !== videoSceneIndex || nextVideoIndex === videoIndex) return;
@@ -294,7 +258,7 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   }
 
   if (isLoopDemoShortcut(event.key, event.repeat)) {
-    setLoopDemoEnabled(loopDemoTimer === undefined);
+    demoLoop.toggle();
     return;
   }
 

@@ -13,6 +13,7 @@ import { disposeDemoScene } from "./sceneLifecycle.ts";
 import { FpsOverlay7 } from "./FpsOverlay.ts";
 import { ParticleEmitter7 } from "./ParticleEmitter.ts";
 import { destroyBitmapFonts, installDynamicBitmapTextFont, loadExternalBitmapFont } from "./bitmapFonts.ts";
+import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 
 type Pixi7Scene = Container & { update?: (deltaMS: number, now: number) => void; dispose?: () => void; resize?: (width: number, height: number) => void; handleKey?: (key: string | null, repeat?: number) => boolean; addRandomSprites?: (count?: number) => number; removeRandomSprites?: (count?: number) => number };
@@ -82,6 +83,7 @@ const selectScene = (nextIndex: number): void => {
     if (sceneIndex === 8) particleEmitter.setEnabled(true);
     activeScene.resize?.(native.canvas.width, native.canvas.height);
 };
+const demoLoop = createDemoLoop(selectScene, () => sceneIndex);
 const normalizeKey = (key: string): string => {
     switch (key) {
         case "arrowup": return "up";
@@ -95,6 +97,10 @@ globalThis.addEventListener("keydown", (rawEvent) => {
     const event = rawEvent as KeyboardEvent;
     const key = normalizeKey(String(event.key ?? "").toLowerCase());
     if (event.repeat) return;
+    if (isLoopDemoShortcut(key)) {
+        demoLoop.toggle();
+        return;
+    }
     if (key === "left" || key === "arrowleft") return selectScene(sceneIndex - 1);
     if (key === "right" || key === "arrowright") return selectScene(sceneIndex + 1);
     if (/^[1-9]$/.test(key)) return selectScene(Number(key) - 1);
@@ -119,6 +125,7 @@ app.ticker.add((delta) => {
 addDestroyListener(() => {
     if (shuttingDown) return;
     shuttingDown = true;
+    demoLoop.destroy();
     disposeDemoScene(activeScene);
     particleEmitter.destroy();
     fpsOverlay.destroy({ children: true });

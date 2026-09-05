@@ -2,10 +2,14 @@
 
 ## 2026-09-05
 
+- Restored PixiJS 7 child-specific texture ownership during scene disposal:
+  Text now releases its private Canvas Texture/BaseTexture while Sprite and
+  BitmapText continue preserving shared asset and font textures.
 - Returned disposed PixiJS 8 scene render groups to Pixi's pool so repeated
   scene changes reuse instruction-set batch buffers instead of retaining new
-  ArrayBuffer-backed batchers. Added a disabled-by-default four-scene loop that
-  can be toggled with `+` for isolated heap profiling.
+  ArrayBuffer-backed batchers. Added a shared, disabled-by-default four-scene
+  loop for PixiJS 8 and PixiJS 7 that can be toggled with `+` for isolated heap
+  profiling.
 - Routed PixiJS 7 Windows ANGLE image and Canvas uploads through the shared
   premultiplied-RGBA adapter already used by PixiJS 8. Real drum-atlas pixel
   coverage confirms transparent matte colors are removed and translucent

@@ -8,8 +8,6 @@ export interface DisposableDemoScene extends Container {
 
 const SCENE_DESTROY_OPTIONS: IDestroyOptions = {
     children: true,
-    texture: false,
-    baseTexture: false,
 };
 
 /** Releases one scene and all resources it owns, while preserving shared textures. */
@@ -19,5 +17,4 @@ export function disposeDemoScene(scene: DisposableDemoScene): void {
     scene.dispose?.();
     scene.destroy(SCENE_DESTROY_OPTIONS);
 }
-
 

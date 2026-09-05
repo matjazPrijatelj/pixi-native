@@ -4,7 +4,6 @@ import {
     getSceneIndexForKey,
     getSpriteCountDeltaForKey,
     getVideoIndexForKey,
-    isLoopDemoShortcut,
     isReloadShortcut,
 } from "../v8/sceneNavigation.ts";
 
@@ -13,13 +12,6 @@ test("Ctrl+R is a case-insensitive non-repeating reload shortcut", () => {
     assert.equal(isReloadShortcut("R", false, true), true);
     assert.equal(isReloadShortcut("r", false, false), false);
     assert.equal(isReloadShortcut("r", true, true, true), false);
-});
-
-test("plus toggles the demo loop only on the initial key press", () => {
-    assert.equal(isLoopDemoShortcut("+"), true);
-    assert.equal(isLoopDemoShortcut("+", true), false);
-    assert.equal(isLoopDemoShortcut("="), false);
-    assert.equal(isLoopDemoShortcut(null), false);
 });
 
 test("number keys select the matching scene", () => {
