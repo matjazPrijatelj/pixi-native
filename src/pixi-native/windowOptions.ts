@@ -20,6 +20,7 @@ export interface ResolvedNodeRendererOptions {
   readonly height: number;
   readonly resizable: boolean;
   readonly vsync: boolean;
+  readonly maxFps?: number;
   readonly borderless: boolean;
   readonly transparent: boolean;
   readonly backgroundAlpha: number;
@@ -33,6 +34,21 @@ export function resolveNodeRendererOptions(
   defaultTitle: string,
   platform: NodeJS.Platform = process.platform,
 ): ResolvedNodeRendererOptions {
+  const vsync = options.vsync ?? true;
+  let maxFps = options.maxFps;
+  if (
+    maxFps !== undefined &&
+    (!Number.isFinite(maxFps) || maxFps < 24 || maxFps > 360)
+  ) {
+    throw new Error("maxFps must be a finite number from 24 to 360");
+  }
+  if (vsync && maxFps !== undefined) {
+    console.warn(
+      "[pixi-native] maxFps is ignored because vsync is true; display VSync controls frame pacing",
+    );
+    maxFps = undefined;
+  }
+
   const borderless = options.borderless ?? false;
   const resizable = options.resizable ?? !borderless;
   if (borderless && resizable) {
@@ -76,11 +92,22 @@ export function resolveNodeRendererOptions(
     width: options.width ?? 1920,
     height: options.height ?? 1080,
     resizable,
-    vsync: options.vsync ?? true,
+    vsync,
+    maxFps,
     borderless,
     transparent,
     backgroundAlpha,
     x: options.x,
     y: options.y,
   };
+}
+
+/** Selects the timer-paced RAF rate without overriding display VSync. */
+export function resolveAnimationFrameRate(
+  options: Pick<ResolvedNodeRendererOptions, "vsync" | "maxFps">,
+  refreshRateHz: number,
+): number {
+  return !options.vsync && options.maxFps !== undefined
+    ? options.maxFps
+    : refreshRateHz;
 }

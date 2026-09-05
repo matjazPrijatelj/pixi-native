@@ -88,7 +88,7 @@ export class NodeDOMAdapter {
 
   private readonly gpu: NodeGPUInstance | null;
   private readonly webglContext: unknown;
-  private readonly refreshRateHz: number;
+  private readonly frameRateHz: number;
   private readonly waitForPresent?: () => Promise<boolean>;
   private readonly imageConstructor: NativeImageConstructor;
   private readonly webglRenderingContextConstructor?: NativeWebGLRenderingContextConstructor;
@@ -101,14 +101,14 @@ export class NodeDOMAdapter {
 
   public constructor(
     gpu: NodeGPUInstance | null,
-    refreshRateHz = 60,
+    frameRateHz = 60,
     waitForPresent?: () => Promise<boolean>,
     webglContext?: unknown,
     imageConstructor: NativeImageConstructor = Image as unknown as NativeImageConstructor,
     webglRenderingContextConstructor?: NativeWebGLRenderingContextConstructor,
   ) {
     this.gpu = gpu;
-    this.refreshRateHz = normalizeRefreshRate(refreshRateHz);
+    this.frameRateHz = normalizeRefreshRate(frameRateHz);
     this.waitForPresent = waitForPresent;
     this.webglContext = webglContext;
     this.imageConstructor = imageConstructor;
@@ -222,15 +222,15 @@ export class NodeDOMAdapter {
     const scheduler = this.waitForPresent
       ? new VSyncFrameScheduler({
           waitForPresent: this.waitForPresent,
-          fallbackFrameIntervalMS: 1000 / this.refreshRateHz,
+          fallbackFrameIntervalMS: 1000 / this.frameRateHz,
         })
-      : new FrameScheduler({ frameIntervalMS: 1000 / this.refreshRateHz });
+      : new FrameScheduler({ frameIntervalMS: 1000 / this.frameRateHz });
     this.frameScheduler = scheduler;
     console.log({
       animationFrameSource: this.waitForPresent
         ? "DXGI frame-latency signal"
         : "deadline timer",
-      refreshRateHz: this.refreshRateHz,
+      frameRateHz: this.frameRateHz,
     });
     (globalThis as any).requestAnimationFrame = (
       callback: FrameRequestCallback,

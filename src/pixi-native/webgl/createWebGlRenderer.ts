@@ -19,6 +19,7 @@ import { createModalFrameController } from "../ModalFrameController.ts";
 import {
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
+  resolveAnimationFrameRate,
   resolveNodeRendererOptions,
 } from "../windowOptions.ts";
 import {
@@ -308,7 +309,7 @@ export async function createWebGlRenderer(
 
     const domAdapter = new NodeDOMAdapter(
       null,
-      window.display.frequency,
+      resolveAnimationFrameRate(windowOptions, window.display.frequency),
       undefined,
       webgl,
       imageConstructor,

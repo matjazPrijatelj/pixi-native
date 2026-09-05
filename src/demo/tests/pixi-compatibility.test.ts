@@ -117,6 +117,23 @@ test("frame scheduler rearms when a timer fires before its deadline", () => {
     assert.deepEqual(timestamps, [10]);
 });
 
+test("frame scheduler supports a 240 FPS deadline", () => {
+    const delays: number[] = [];
+    const scheduler = new FrameScheduler({
+        now: () => 0,
+        frameIntervalMS: 1000 / 240,
+        setTimer: (_callback, delayMS) => {
+            delays.push(delayMS);
+            return 1;
+        },
+    });
+
+    scheduler.request(() => undefined);
+
+    assert.equal(delays.length, 1);
+    assert.ok(Math.abs(delays[0] - 1000 / 240) < Number.EPSILON);
+});
+
 test("canceling the final frame request clears its timer", () => {
     const clearedTimers: unknown[] = [];
     const scheduler = new FrameScheduler({

@@ -2,6 +2,12 @@
 
 ## 2026-09-05
 
+- Added optional `maxFps` frame pacing from 24 to 360 FPS for WebGPU,
+  WebGL 8, and WebGL 7 when `vsync` is disabled. Without the option, timer
+  pacing still follows the display refresh rate; enabled VSync remains owned
+  by FIFO/DXGI and warns when `maxFps` would be ignored. Type checking, all
+  114 tests, and 240 FPS WebGPU/WebGL 8/WebGL 7 startup and shutdown smoke
+  tests pass without a native rebuild.
 - Added explicit RAF scheduler and DOM-adapter teardown across WebGPU, WebGL 8,
   and WebGL 7 so pending timers, native present waits, callbacks, and global
   listeners cannot resume after native shutdown. WebGPU now honors the existing

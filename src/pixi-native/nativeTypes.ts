@@ -8,6 +8,8 @@ export interface NodeRendererOptions {
   readonly height?: number;
   readonly resizable?: boolean;
   readonly vsync?: boolean;
+  /** Caps timer-paced RAF when VSync is disabled. Defaults to display refresh. */
+  readonly maxFps?: number;
   /** Creates an undecorated window. Borderless windows are not user-resizable. */
   readonly borderless?: boolean;
   /** Enables per-pixel window transparency. Supported on Windows 11. */

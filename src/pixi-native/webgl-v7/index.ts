@@ -14,6 +14,7 @@ import type {
 import { createModalFrameController } from "../ModalFrameController.ts";
 import {
   NATIVE_BACKGROUND_COLOR,
+  resolveAnimationFrameRate,
   resolveNodeRendererOptions,
 } from "../windowOptions.ts";
 import {
@@ -119,7 +120,7 @@ export async function createPixiWebGL7(
   }
   const adapter = new NodeDOMAdapter(
     null,
-    window.display.frequency,
+    resolveAnimationFrameRate(windowOptions, window.display.frequency),
     undefined,
     webgl,
     CanvasImage as unknown as new () => { src: string },

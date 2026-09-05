@@ -30,6 +30,7 @@ import {
 import {
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
+  resolveAnimationFrameRate,
   resolveNodeRendererOptions,
 } from "../windowOptions.ts";
 
@@ -197,7 +198,7 @@ export async function createWebGpuRenderer(
       : undefined;
   const domAdapter = new NodeDOMAdapter(
     instance,
-    refreshRateHz,
+    resolveAnimationFrameRate(windowOptions, refreshRateHz),
     waitForPresent,
   );
   domAdapter.install();

@@ -20,6 +20,7 @@ import {
 import {
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
+  resolveAnimationFrameRate,
   resolveNodeRendererOptions,
 } from "../../pixi-native/windowOptions.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
@@ -35,6 +36,7 @@ test("native window options normalize transparency and desktop position", () => 
     height: 1080,
     resizable: true,
     vsync: true,
+    maxFps: undefined,
     borderless: false,
     transparent: false,
     backgroundAlpha: 1,
@@ -53,6 +55,7 @@ test("native window options normalize transparency and desktop position", () => 
       height: 1080,
       resizable: false,
       vsync: true,
+      maxFps: undefined,
       borderless: true,
       transparent: true,
       backgroundAlpha: 0,
@@ -110,6 +113,54 @@ test("native window options normalize transparency and desktop position", () => 
   }
   assert.equal(warnings.length, 1);
   assert.match(String(warnings[0][0]), /backgroundAlpha below 1 is ignored/);
+});
+
+test("maxFps controls only timer-paced animation frames", () => {
+  const uncappedVSync = resolveNodeRendererOptions(
+    { vsync: false, maxFps: 240 },
+    "x",
+    "win32",
+  );
+  assert.equal(uncappedVSync.maxFps, 240);
+  assert.equal(resolveAnimationFrameRate(uncappedVSync, 60), 240);
+  assert.equal(
+    resolveAnimationFrameRate(
+      resolveNodeRendererOptions({ vsync: false }, "x", "win32"),
+      144,
+    ),
+    144,
+  );
+
+  for (const maxFps of [Number.NaN, 23.9, 360.1]) {
+    assert.throws(
+      () =>
+        resolveNodeRendererOptions(
+          { vsync: false, maxFps },
+          "x",
+          "win32",
+        ),
+      /finite number from 24 to 360/,
+    );
+  }
+
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...values: unknown[]): void => {
+    warnings.push(values);
+  };
+  try {
+    const synchronized = resolveNodeRendererOptions(
+      { vsync: true, maxFps: 240 },
+      "x",
+      "win32",
+    );
+    assert.equal(synchronized.maxFps, undefined);
+    assert.equal(resolveAnimationFrameRate(synchronized, 60), 60);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 1);
+  assert.match(String(warnings[0][0]), /maxFps is ignored/);
 });
 
 test("native demos expose explicit decorated window defaults", () => {
