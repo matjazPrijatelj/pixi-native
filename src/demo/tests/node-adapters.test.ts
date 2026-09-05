@@ -176,7 +176,7 @@ test("WebGL buffer upload copies are compact and independent", () => {
   assert.deepEqual([...sliced], [1, 2, 3]);
 });
 
-test("ANGLE adapter converts Pixi 8 image-source uploads to premultiplied RGBA", () => {
+test("ANGLE adapter converts Pixi image-source uploads to premultiplied RGBA", () => {
   const calls: Array<{ name: string; args: unknown[] }> = [];
   const gl = {
     RGBA: 0x1908,
@@ -266,6 +266,101 @@ test("ANGLE adapter decodes native Image texture uploads through Canvas2D", asyn
     (received?.[8] as Uint8Array).byteLength,
     image.width * image.height * 4,
   );
+});
+
+test("ANGLE adapter removes transparent matte colors from the drum atlas", async () => {
+  let received: unknown[] | undefined;
+  const gl = {
+    RGBA: 0x1908,
+    UNSIGNED_BYTE: 0x1401,
+    UNPACK_FLIP_Y_WEBGL: 0x9240,
+    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
+    getParameter(parameter: number) {
+      return parameter === this.UNPACK_PREMULTIPLY_ALPHA_WEBGL;
+    },
+    texImage2D(...args: unknown[]) {
+      received = args;
+    },
+    texSubImage2D() {},
+  } satisfies WebGlImageUploadContext;
+  installWebGlImageUploadAdapter(gl);
+
+  const image = new NodeDOMAdapter({} as never).createImage();
+  await new Promise<void>((resolve, reject) => {
+    image.onload = (): void => resolve();
+    image.onerror = reject;
+    image.src = fileURLToPath(
+      new URL("../assets/drum-kit.png", import.meta.url),
+    );
+  });
+  gl.texImage2D(1, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+  assert.ok(received?.[8] instanceof Uint8Array);
+  const pixels = received?.[8] as Uint8Array;
+  assert.equal(pixels.byteLength, image.width * image.height * 4);
+  const canvas = new NodeCanvas(image.width, image.height);
+  const context = canvas.getContext("2d") as {
+    drawImage(
+      source: CanvasImageSource,
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+    ): void;
+  };
+  context.drawImage(image, 0, 0, image.width, image.height);
+  const expectedPixels = canvas.getPremultipliedRgbaPixels();
+  let orientationProbe = -1;
+  for (let y = 0; y < Math.floor(image.height / 2) && orientationProbe < 0; y++) {
+    const flippedY = image.height - y - 1;
+    for (let x = 0; x < image.width; x++) {
+      const offset = (y * image.width + x) * 4;
+      const flippedOffset = (flippedY * image.width + x) * 4;
+      if (
+        expectedPixels[offset] !== expectedPixels[flippedOffset] ||
+        expectedPixels[offset + 1] !== expectedPixels[flippedOffset + 1] ||
+        expectedPixels[offset + 2] !== expectedPixels[flippedOffset + 2] ||
+        expectedPixels[offset + 3] !== expectedPixels[flippedOffset + 3]
+      ) {
+        orientationProbe = offset;
+        break;
+      }
+    }
+  }
+  assert.ok(orientationProbe >= 0);
+  assert.deepEqual(
+    Array.from(pixels.subarray(orientationProbe, orientationProbe + 4)),
+    Array.from(
+      expectedPixels.subarray(orientationProbe, orientationProbe + 4),
+    ),
+  );
+
+  let transparentPixels = 0;
+  let translucentPixels = 0;
+  let transparentColorViolations = 0;
+  let premultiplicationViolations = 0;
+  for (let offset = 0; offset < pixels.byteLength; offset += 4) {
+    const alpha = pixels[offset + 3];
+    if (alpha === 0) {
+      transparentPixels++;
+      if (pixels[offset] || pixels[offset + 1] || pixels[offset + 2]) {
+        transparentColorViolations++;
+      }
+    } else if (alpha < 255) {
+      translucentPixels++;
+      if (
+        pixels[offset] > alpha ||
+        pixels[offset + 1] > alpha ||
+        pixels[offset + 2] > alpha
+      ) {
+        premultiplicationViolations++;
+      }
+    }
+  }
+  assert.ok(transparentPixels > 0);
+  assert.ok(translucentPixels > 0);
+  assert.equal(transparentColorViolations, 0);
+  assert.equal(premultiplicationViolations, 0);
 });
 
 test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {

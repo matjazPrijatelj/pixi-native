@@ -24,6 +24,7 @@ import {
   manageNativeApplication,
   type ManagedNativeApplication,
 } from "../ManagedNativeApplication.ts";
+import { installWebGlImageUploadAdapter } from "../webglImageUpload.ts";
 
 export interface PixiWebGL7Result {
   readonly app: Application;
@@ -77,6 +78,7 @@ export async function createPixiWebGL7(
     canvas = angle.canvas;
     renderer = angle.renderer;
     webgl = angle.webgl;
+    installWebGlImageUploadAdapter(webgl);
     webglRenderingContextConstructor = angle.webglRenderingContextConstructor;
   } else {
     const { init, gl, Image } = await import("@node-3d/core");

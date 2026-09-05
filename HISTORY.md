@@ -2,6 +2,11 @@
 
 ## 2026-09-05
 
+- Routed PixiJS 7 Windows ANGLE image and Canvas uploads through the shared
+  premultiplied-RGBA adapter already used by PixiJS 8. Real drum-atlas pixel
+  coverage confirms transparent matte colors are removed and translucent
+  channels are premultiplied without changing orientation; final Text,
+  BitmapText, and sprite appearance remains subject to visual confirmation.
 - Changed opaque-window option handling so `backgroundAlpha` below `1` emits a
   warning and normalizes to `1` instead of aborting renderer startup. Invalid
   values outside the `0` to `1` range remain errors.
