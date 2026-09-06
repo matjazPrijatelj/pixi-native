@@ -21,6 +21,7 @@ import {
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
+  warnAntialiasSampleFallback,
 } from "../windowOptions.ts";
 import {
   assertGlfwTransparency,
@@ -76,6 +77,7 @@ export async function createWebGlRenderer(
         resizable: windowOptions.resizable,
         decorated: !windowOptions.borderless,
         vsync: windowOptions.vsync,
+        msaa: windowOptions.antialiasSamples,
         isGles3,
         isWebGL2: true,
         autoEsc: true,
@@ -84,6 +86,11 @@ export async function createWebGlRenderer(
         },
       });
       assertGlfwTransparency(glfw, doc.handle, windowOptions.transparent);
+      warnAntialiasSampleFallback(
+        "WebGL",
+        windowOptions.antialiasSamples,
+        Number(gl.getParameter(gl.SAMPLES)),
+      );
       const glfwWindow = new NodeGLWindow(doc as never, {
         pollEvents: glfw.pollEvents,
         maximize: () => glfw.maximizeWindow(doc.handle),
@@ -332,7 +339,7 @@ export async function createWebGlRenderer(
       ),
       backgroundAlpha: windowOptions.backgroundAlpha,
       resolution: 1,
-      antialias: true,
+      antialias: windowOptions.antialiasSamples !== 0,
       autoStart: false,
     } as never);
 

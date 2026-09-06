@@ -23,6 +23,8 @@ import {
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
+  resolveWebGpuAntialiasSamples,
+  warnAntialiasSampleFallback,
 } from "../../pixi-native/windowOptions.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 import {
@@ -41,6 +43,7 @@ test("native window options normalize transparency and desktop position", () => 
     borderless: false,
     transparent: false,
     backgroundAlpha: 1,
+    antialiasSamples: 4,
     x: undefined,
     y: undefined,
   });
@@ -60,6 +63,7 @@ test("native window options normalize transparency and desktop position", () => 
       borderless: true,
       transparent: true,
       backgroundAlpha: 0,
+      antialiasSamples: 4,
       x: -1280,
       y: 120,
     },
@@ -114,6 +118,44 @@ test("native window options normalize transparency and desktop position", () => 
   }
   assert.equal(warnings.length, 1);
   assert.match(String(warnings[0][0]), /backgroundAlpha below 1 is ignored/);
+
+  assert.equal(
+    resolveNodeRendererOptions(
+      { antialiasSamples: 8 },
+      "x",
+      "win32",
+    ).antialiasSamples,
+    8,
+  );
+  assert.throws(
+    () =>
+      resolveNodeRendererOptions(
+        { antialiasSamples: 3 as 2 },
+        "x",
+        "win32",
+      ),
+    /must be 0, 2, 4, or 8/,
+  );
+});
+
+test("MSAA fallback warnings report only changed sample counts", () => {
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...values: unknown[]): void => {
+    warnings.push(values);
+  };
+  try {
+    warnAntialiasSampleFallback("WebGL", 4, 4);
+    assert.equal(resolveWebGpuAntialiasSamples(0), 0);
+    assert.equal(resolveWebGpuAntialiasSamples(4), 4);
+    assert.equal(resolveWebGpuAntialiasSamples(2), 4);
+    assert.equal(resolveWebGpuAntialiasSamples(8), 4);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 2);
+  assert.match(String(warnings[0][0]), /requested 2x MSAA; using 4x/);
+  assert.match(String(warnings[1][0]), /requested 8x MSAA; using 4x/);
 });
 
 test("maxFps controls only timer-paced animation frames", () => {
@@ -236,7 +278,7 @@ test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () 
   const DRAW_FRAMEBUFFER_BINDING = 0x8ca6;
   const READ_FRAMEBUFFER_BINDING = 0x8caa;
   const RENDERBUFFER_BINDING = 0x8ca7;
-  const MAX_SAMPLES = 0x8d57;
+  const SAMPLES = 0x80a9;
   const FRAMEBUFFER_COMPLETE = 0x8cd5;
   const framebuffers = [{ name: "first" }, { name: "resized" }];
   const renderbuffers = [
@@ -252,6 +294,7 @@ test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () 
   let drawFramebuffer: unknown = null;
   let readFramebuffer: unknown = null;
   let renderbuffer: unknown = null;
+  let availableSamples = [8, 4, 2, 1];
 
   const context = {
     FRAMEBUFFER,
@@ -262,7 +305,7 @@ test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () 
     READ_FRAMEBUFFER_BINDING,
     RENDERBUFFER_BINDING,
     RENDERBUFFER: 0x8d41,
-    MAX_SAMPLES,
+    SAMPLES,
     RGBA8: 0x8058,
     DEPTH24_STENCIL8: 0x88f0,
     COLOR_ATTACHMENT0: 0x8ce0,
@@ -286,7 +329,6 @@ test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () 
       renderbuffer = value;
     },
     getParameter(parameter: number) {
-      if (parameter === MAX_SAMPLES) return 8;
       if (
         parameter === FRAMEBUFFER_BINDING ||
         parameter === DRAW_FRAMEBUFFER_BINDING
@@ -297,6 +339,7 @@ test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () 
       if (parameter === RENDERBUFFER_BINDING) return renderbuffer;
       return null;
     },
+    getInternalformatParameter: () => new Int32Array(availableSamples),
     getContextAttributes: () => ({ antialias: false }),
     renderbufferStorageMultisample(
       _target: number,
@@ -317,6 +360,7 @@ test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () 
   } as unknown as WebGL2RenderingContext;
 
   const screen = installWebGlMultisampleScreen(context, 320, 180);
+  assert.equal(screen.sampleCount, 4);
   assert.equal(context.getContextAttributes()?.antialias, true);
   assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
   assert.deepEqual(storageCalls, [
@@ -351,6 +395,29 @@ test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () 
   assert.equal(context.getContextAttributes()?.antialias, false);
   assert.equal(deletedFramebuffers.length, 2);
   assert.equal(deletedRenderbuffers.length, 4);
+
+  framebuffers.push({ name: "fallback" });
+  renderbuffers.push({ name: "fallback-color" }, { name: "fallback-depth" });
+  availableSamples = [4, 2, 1];
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...values: unknown[]): void => {
+    warnings.push(values);
+  };
+  const fallbackScreen = (() => {
+    try {
+      return installWebGlMultisampleScreen(context, 320, 180, 8);
+    } finally {
+      console.warn = originalWarn;
+    }
+  })();
+  assert.equal(fallbackScreen.sampleCount, 4);
+  assert.match(String(warnings[0][0]), /requested 8x.*using 4x/);
+  fallbackScreen.destroy();
+
+  const disabledScreen = installWebGlMultisampleScreen(context, 320, 180, 0);
+  assert.equal(disabledScreen.sampleCount, 0);
+  assert.equal(context.getContextAttributes()?.antialias, false);
 });
 
 test("ANGLE adapter converts Pixi image-source uploads to premultiplied RGBA", () => {

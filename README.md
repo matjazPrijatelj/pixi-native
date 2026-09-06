@@ -103,6 +103,12 @@ transparent areas still receive mouse input; click-through and runtime
 transparency switching are not part of this API. Other platforms reject the
 option instead of silently creating an opaque window.
 
+All renderers use 4x MSAA by default. Set `antialiasSamples` to `0`, `2`, `4`,
+or `8` to trade edge quality for GPU cost; `0` disables antialiasing. Windows
+WebGL falls back to the highest supported lower value, while GLFW WebGL reports
+the sample count provided by the platform. PixiJS WebGPU supports only 0x or 4x,
+so explicit 2x and 8x requests use 4x with a warning.
+
 PixiJS 7 can be tested through the separate `pixi.js-v7` dependency and
 `pixi-native/webgl-pixi7` export. Run the isolated scene demo with
 `pnpm dev:webgl7`; it contains the same nine scene slots as the Pixi 8 demo,

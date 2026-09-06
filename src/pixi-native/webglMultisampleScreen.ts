@@ -1,6 +1,10 @@
-const DEFAULT_SAMPLE_COUNT = 4;
+import {
+  DEFAULT_ANTIALIAS_SAMPLES,
+  type AntialiasSamples,
+} from "./nativeTypes.ts";
 
 export interface WebGlMultisampleScreen {
+  readonly sampleCount: AntialiasSamples;
   resize(width: number, height: number): void;
   resolve(): void;
   destroy(): void;
@@ -17,8 +21,18 @@ export function installWebGlMultisampleScreen(
   gl: WebGL2RenderingContext,
   width: number,
   height: number,
-  sampleCount = DEFAULT_SAMPLE_COUNT,
+  requestedSampleCount: AntialiasSamples = DEFAULT_ANTIALIAS_SAMPLES,
 ): WebGlMultisampleScreen {
+  const sampleCount = selectSupportedSampleCount(gl, requestedSampleCount);
+  if (sampleCount === 0) {
+    return {
+      sampleCount,
+      resize: () => undefined,
+      resolve: () => undefined,
+      destroy: () => undefined,
+    };
+  }
+
   const bindFramebuffer = gl.bindFramebuffer.bind(gl);
   const getParameter = gl.getParameter.bind(gl);
   const getContextAttributes = gl.getContextAttributes.bind(gl);
@@ -68,13 +82,6 @@ export function installWebGlMultisampleScreen(
   ): MultisampleAttachments {
     const attachmentWidth = normalizeSize(requestedWidth);
     const attachmentHeight = normalizeSize(requestedHeight);
-    const maxSamples = Number(getParameter(gl.MAX_SAMPLES));
-    if (!Number.isFinite(maxSamples) || maxSamples < sampleCount) {
-      throw new Error(
-        `WebGL requires ${sampleCount}x MSAA, but the context supports ${maxSamples || 0} samples`,
-      );
-    }
-
     const previousDraw = getParameter(
       gl.DRAW_FRAMEBUFFER_BINDING,
     ) as WebGLFramebuffer | null;
@@ -149,6 +156,7 @@ export function installWebGlMultisampleScreen(
   }
 
   return {
+    sampleCount,
     resize(nextWidth: number, nextHeight: number): void {
       if (destroyed) return;
       const normalizedWidth = normalizeSize(nextWidth);
@@ -223,6 +231,37 @@ export function installWebGlMultisampleScreen(
       gl.deleteRenderbuffer(attachments.depthStencil);
     },
   };
+}
+
+function selectSupportedSampleCount(
+  gl: WebGL2RenderingContext,
+  requestedSampleCount: AntialiasSamples,
+): AntialiasSamples {
+  if (requestedSampleCount === 0) return 0;
+
+  const colorSamples = new Set<number>(
+    gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA8, gl.SAMPLES),
+  );
+  const depthStencilSamples = new Set<number>(
+    gl.getInternalformatParameter(
+      gl.RENDERBUFFER,
+      gl.DEPTH24_STENCIL8,
+      gl.SAMPLES,
+    ),
+  );
+  const supportedSamples = [8, 4, 2].filter(
+    (samples) =>
+      samples <= requestedSampleCount &&
+      colorSamples.has(samples) &&
+      depthStencilSamples.has(samples),
+  ) as AntialiasSamples[];
+  const sampleCount = supportedSamples[0] ?? 0;
+  if (sampleCount !== requestedSampleCount) {
+    console.warn(
+      `[pixi-native] requested ${requestedSampleCount}x WebGL MSAA is unavailable; using ${sampleCount}x`,
+    );
+  }
+  return sampleCount;
 }
 
 function normalizeSize(value: number): number {

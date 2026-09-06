@@ -16,6 +16,7 @@ import {
   NATIVE_BACKGROUND_COLOR,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
+  warnAntialiasSampleFallback,
 } from "../windowOptions.ts";
 import {
   assertGlfwTransparency,
@@ -91,6 +92,7 @@ export async function createPixiWebGL7(
       resizable: windowOptions.resizable,
       decorated: !windowOptions.borderless,
       vsync: windowOptions.vsync,
+      msaa: windowOptions.antialiasSamples,
       isGles3: true,
       isWebGL2: true,
       autoEsc: true,
@@ -99,6 +101,11 @@ export async function createPixiWebGL7(
       },
     });
     assertGlfwTransparency(glfw, doc.handle, windowOptions.transparent);
+    warnAntialiasSampleFallback(
+      "WebGL7",
+      windowOptions.antialiasSamples,
+      Number(gl.getParameter(gl.SAMPLES)),
+    );
     const glfwWindow = new NodeGLWindow(doc as never, {
       pollEvents: glfw.pollEvents,
       maximize: () => glfw.maximizeWindow(doc.handle),
@@ -245,7 +252,7 @@ export async function createPixiWebGL7(
     width: canvas.width,
     height: canvas.height,
     resolution: 1,
-    antialias: true,
+    antialias: windowOptions.antialiasSamples !== 0,
     autoStart: false,
     backgroundColor: NATIVE_BACKGROUND_COLOR,
     backgroundAlpha: windowOptions.backgroundAlpha,

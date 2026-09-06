@@ -32,6 +32,7 @@ import {
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
+  resolveWebGpuAntialiasSamples,
 } from "../windowOptions.ts";
 
 const require = createRequire(import.meta.url);
@@ -45,6 +46,9 @@ export async function createWebGpuRenderer(
   const windowOptions = resolveNodeRendererOptions(
     options,
     "PixiJS 8 Native Node WebGPU",
+  );
+  const webGpuAntialiasSamples = resolveWebGpuAntialiasSamples(
+    windowOptions.antialiasSamples,
   );
 
   const window = sdl.video.createWindow({
@@ -224,7 +228,7 @@ export async function createWebGpuRenderer(
     ),
     backgroundAlpha: windowOptions.backgroundAlpha,
     resolution: 1,
-    antialias: true,
+    antialias: webGpuAntialiasSamples !== 0,
     autoStart: false,
     gpu: {
       adapter,

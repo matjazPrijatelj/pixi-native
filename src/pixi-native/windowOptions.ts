@@ -1,4 +1,8 @@
-import type { NodeRendererOptions } from "./nativeTypes.ts";
+import type {
+  AntialiasSamples,
+  NodeRendererOptions,
+} from "./nativeTypes.ts";
+import { DEFAULT_ANTIALIAS_SAMPLES } from "./nativeTypes.ts";
 
 export const NATIVE_BACKGROUND_COLOR = 0x101544;
 
@@ -24,6 +28,7 @@ export interface ResolvedNodeRendererOptions {
   readonly borderless: boolean;
   readonly transparent: boolean;
   readonly backgroundAlpha: number;
+  readonly antialiasSamples: AntialiasSamples;
   readonly x?: number;
   readonly y?: number;
 }
@@ -34,6 +39,17 @@ export function resolveNodeRendererOptions(
   defaultTitle: string,
   platform: NodeJS.Platform = process.platform,
 ): ResolvedNodeRendererOptions {
+  const antialiasSamples =
+    options.antialiasSamples ?? DEFAULT_ANTIALIAS_SAMPLES;
+  if (
+    antialiasSamples !== 0 &&
+    antialiasSamples !== 2 &&
+    antialiasSamples !== 4 &&
+    antialiasSamples !== 8
+  ) {
+    throw new Error("antialiasSamples must be 0, 2, 4, or 8");
+  }
+
   const vsync = options.vsync ?? true;
   let maxFps = options.maxFps;
   if (
@@ -97,9 +113,31 @@ export function resolveNodeRendererOptions(
     borderless,
     transparent,
     backgroundAlpha,
+    antialiasSamples,
     x: options.x,
     y: options.y,
   };
+}
+
+/** Reports when a renderer cannot provide the requested MSAA sample count. */
+export function warnAntialiasSampleFallback(
+  renderer: string,
+  requestedSamples: number,
+  actualSamples: number,
+): void {
+  if (requestedSamples === actualSamples) return;
+  console.warn(
+    `[pixi-native] ${renderer} cannot provide requested ${requestedSamples}x MSAA; using ${actualSamples}x`,
+  );
+}
+
+/** Maps the shared MSAA option to PixiJS WebGPU's supported 0x/4x modes. */
+export function resolveWebGpuAntialiasSamples(
+  requestedSamples: AntialiasSamples,
+): 0 | 4 {
+  const actualSamples = requestedSamples === 0 ? 0 : 4;
+  warnAntialiasSampleFallback("WebGPU", requestedSamples, actualSamples);
+  return actualSamples;
 }
 
 /** Selects the timer-paced RAF rate without overriding display VSync. */

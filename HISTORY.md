@@ -431,3 +431,4 @@
 ## 2026-09-06
 
 - Added a shared 4x MSAA screen framebuffer and resolve step to the Windows ANGLE surface used by PixiJS 7 and PixiJS 8 WebGL, replacing the non-multisampled default framebuffer that left Graphics edges visibly jagged.
+- Added the shared `antialiasSamples` option for WebGPU, WebGL8, and WebGL7 with a 4x default, explicit 0x/2x/4x/8x selection, and backend-specific fallback warnings.

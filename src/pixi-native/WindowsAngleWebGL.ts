@@ -69,6 +69,7 @@ export async function createWindowsAngleWebGLSurface(
       context.gl as WebGL2RenderingContext,
       window.pixelWidth,
       window.pixelHeight,
+      options.antialiasSamples,
     );
 
     const canvas = new NodeGLCanvas(

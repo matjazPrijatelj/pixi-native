@@ -2,6 +2,10 @@ export interface NodeGPUInstance {
   requestAdapter(options?: Record<string, unknown>): Promise<GPUAdapter | null>;
 }
 
+export type AntialiasSamples = 0 | 2 | 4 | 8;
+
+export const DEFAULT_ANTIALIAS_SAMPLES: AntialiasSamples = 4;
+
 export interface NodeRendererOptions {
   readonly title?: string;
   readonly width?: number;
@@ -16,6 +20,8 @@ export interface NodeRendererOptions {
   readonly transparent?: boolean;
   /** Pixi background opacity. Opaque windows normalize values below 1 to 1. */
   readonly backgroundAlpha?: number;
+  /** Requested MSAA samples. Defaults to 4; 0 disables antialiasing. */
+  readonly antialiasSamples?: AntialiasSamples;
   /** Absolute virtual-desktop X coordinate. Must be provided with `y`. */
   readonly x?: number;
   /** Absolute virtual-desktop Y coordinate. Must be provided with `x`. */
