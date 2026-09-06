@@ -6,7 +6,7 @@ const getBindingPath = (platform = process.platform, arch = process.arch) => Pat
 	__dirname,
 	'../dist',
 	getPlatformDirectory(platform, arch),
-	'dawn.node',
+	'pixi_native_gpu.node',
 )
 
 module.exports = { getBindingPath, getPlatformDirectory }

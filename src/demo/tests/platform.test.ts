@@ -25,7 +25,7 @@ test("WGPU_BACKEND overrides the platform default", () => {
 test("native GPU binding paths are isolated by platform and architecture", () => {
     assert.equal(getPlatformDirectory("win32", "x64"), "win32-x64");
     assert.equal(getPlatformDirectory("linux", "x64"), "linux-x64");
-    assert.equal(getBindingPath("win32", "x64").endsWith(path.join("dist", "win32-x64", "dawn.node")), true);
+    assert.equal(getBindingPath("win32", "x64").endsWith(path.join("dist", "win32-x64", "pixi_native_gpu.node")), true);
 });
 
 test("the native video scene is exposed on Windows and Linux", () => {

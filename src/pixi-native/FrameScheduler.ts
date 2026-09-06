@@ -15,9 +15,10 @@ export interface VSyncFrameSchedulerOptions {
     readonly setTimer?: (callback: () => void, delayMS: number) => unknown;
     readonly clearTimer?: (timer: unknown) => void;
     readonly fallbackFrameIntervalMS?: number;
+    readonly minimumFrameSpacingRatio?: number;
 }
 
-/** Present-signal-backed requestAnimationFrame scheduler for Windows DXGI. */
+/** Compositor-clock-backed requestAnimationFrame scheduler for Windows. */
 export class VSyncFrameScheduler {
     private readonly callbacks = new Map<number, FrameCallback>();
     private readonly waitForPresent: () => Promise<boolean>;
@@ -28,10 +29,12 @@ export class VSyncFrameScheduler {
     ) => unknown;
     private readonly clearTimer: (timer: unknown) => void;
     private readonly fallbackFrameIntervalMS: number;
+    private readonly minimumFrameSpacingMS: number;
     private nextId = 1;
     private waiting = false;
     private fallbackTimer: unknown | undefined;
     private disposed = false;
+    private lastDispatchTime: number | undefined;
 
     public constructor(options: VSyncFrameSchedulerOptions) {
         this.waitForPresent = options.waitForPresent;
@@ -50,6 +53,16 @@ export class VSyncFrameScheduler {
         ) {
             throw new Error("Fallback frame interval must be positive and finite");
         }
+        const minimumFrameSpacingRatio = options.minimumFrameSpacingRatio ?? 0.95;
+        if (
+            !Number.isFinite(minimumFrameSpacingRatio) ||
+            minimumFrameSpacingRatio < 0 ||
+            minimumFrameSpacingRatio > 1
+        ) {
+            throw new Error("Minimum frame spacing ratio must be between 0 and 1");
+        }
+        this.minimumFrameSpacingMS =
+            this.fallbackFrameIntervalMS * minimumFrameSpacingRatio;
     }
 
     public request(callback: FrameCallback): number {
@@ -111,12 +124,24 @@ export class VSyncFrameScheduler {
             return;
         }
 
-        this.dispatchCallbacks(this.now());
+        const timestamp = this.now();
+        const elapsed = this.lastDispatchTime === undefined
+            ? this.minimumFrameSpacingMS
+            : timestamp - this.lastDispatchTime;
+        if (elapsed < this.minimumFrameSpacingMS) {
+            this.fallbackTimer = this.setTimer(() => {
+                this.fallbackTimer = undefined;
+                this.dispatch(true);
+            }, this.minimumFrameSpacingMS - elapsed);
+            return;
+        }
+        this.dispatchCallbacks(timestamp);
     }
 
     private dispatchCallbacks(timestamp: number): number {
         const pending = [...this.callbacks.values()];
         this.callbacks.clear();
+        if (pending.length > 0) this.lastDispatchTime = timestamp;
         for (const callback of pending) {
             if (this.disposed) break;
             callback(timestamp);

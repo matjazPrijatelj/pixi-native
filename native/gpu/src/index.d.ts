@@ -3035,8 +3035,8 @@ interface Renderer {
   getCurrentTexture(): GPUTexture
   getCurrentTextureView(): GPUTextureView
   swap()
-  waitForPresent(): Promise<boolean>
   resize()
+  destroy()
 }
 
 interface WebGPU {
@@ -3082,14 +3082,18 @@ interface WebGPU {
   GPUInternalError: GPUInternalError
   GPUUncapturedErrorEvent: GPUUncapturedErrorEvent
 
-  create(args: string[]): GPU
-  renderGPUDeviceToWindow(options: {
-    device: GPUDevice,
+  createWindowContext(options: {
+    flags: string[],
     window: any,
     presentMode?: PresentMode,
     alphaMode?: 'opaque' | 'premultiplied',
-  }): Renderer
-  destroy(gpu: GPU)
+  }): {
+    gpu: GPU,
+    adapter: GPUAdapter,
+    device: GPUDevice,
+    renderer: Renderer,
+  }
+  destroy(context: object)
 }
 
 declare const gpu: WebGPU

@@ -16,6 +16,9 @@ const setTransparent = (nativeData, transparent) => {
   binding.setTransparent(nativeData, transparent);
 };
 
+const waitForCompositorFrame = (timeoutMs) =>
+  binding.waitForCompositorFrame(timeoutMs);
+
 const create = (nativeData, onFrame, onState) => {
   const controller = new binding.ModalFrameController(
     nativeData,
@@ -26,4 +29,4 @@ const create = (nativeData, onFrame, onState) => {
   return controller;
 };
 
-module.exports = { create, setTransparent };
+module.exports = { create, setTransparent, waitForCompositorFrame };

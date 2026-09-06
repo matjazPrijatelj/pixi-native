@@ -7,39 +7,38 @@ if (!Fs.existsSync(bindingPath)) {
 }
 const binding = require(bindingPath)
 
-const {
-	_create,
-	renderGPUDeviceToWindow,
-	globals,
-} = binding
+const contexts = new Set()
 
-const instances = new Set()
+// Pixi probes navigator.gpu by requesting a device before it initializes with
+// the explicitly supplied adapter/device pair. Return the context-owned device
+// so capability detection cannot create an unrelated second Dawn device.
+const createNavigatorAdapter = (context) => new Proxy(context.adapter, {
+	get: (target, property) => {
+		if (property === 'requestDevice') return async () => context.device
+		const value = Reflect.get(target, property, target)
+		return typeof value === 'function' ? value.bind(target) : value
+	},
+})
 
-const fn = () => { instances.delete(null) }
-let interval = null
-
-const create = (...args) => {
-	const instance = _create(...args)
-
-	if (instances.size === 0) {
-		interval = setInterval(fn, 60e3)
+const createWindowContext = (options) => {
+	const context = binding.createWindowContext(options)
+	const navigatorAdapter = createNavigatorAdapter(context)
+	const gpu = {
+		requestAdapter: async () => navigatorAdapter,
+		getPreferredCanvasFormat: () => context.renderer.getPreferredFormat(),
+		wgslLanguageFeatures: new Set(),
 	}
-	instances.add(instance)
-
-	return instance
+	const result = { ...context, gpu }
+	contexts.add(result)
+	return result
 }
 
-const destroy = (instance) => {
-	instances.delete(instance)
-	if (instances.size === 0) {
-		clearInterval(interval)
-		interval = null
-	}
+const destroy = (context) => {
+	contexts.delete(context)
 }
 
 module.exports = {
-	create,
+	createWindowContext,
 	destroy,
-	renderGPUDeviceToWindow,
-	...globals,
+	...binding.globals,
 }

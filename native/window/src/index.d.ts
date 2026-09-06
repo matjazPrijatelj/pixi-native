@@ -1,5 +1,6 @@
 export interface NativeWindowApi {
   setTransparent(nativeData: Uint8Array, transparent: boolean): void;
+  waitForCompositorFrame(timeoutMs?: number): Promise<boolean>;
   create(
     nativeData: Uint8Array,
     onFrame: () => void,

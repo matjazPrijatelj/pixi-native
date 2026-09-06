@@ -3,7 +3,9 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::FreeLibrary;
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows_sys::Win32::Graphics::Dwm::{
     DwmEnableBlurBehindWindow, DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND,
@@ -11,10 +13,12 @@ use windows_sys::Win32::Graphics::Dwm::{
 #[cfg(windows)]
 use windows_sys::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 #[cfg(windows)]
+use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+#[cfg(windows)]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, DefWindowProcW, GetWindowLongPtrW, KillTimer,
-    SetTimer, SetWindowLongPtrW, GWLP_USERDATA, GWLP_WNDPROC,
-    WM_ENTERMENULOOP, WM_ENTERSIZEMOVE, WM_EXITMENULOOP, WM_EXITSIZEMOVE, WM_TIMER, WNDPROC,
+    CallWindowProcW, DefWindowProcW, GetWindowLongPtrW, KillTimer, SetTimer, SetWindowLongPtrW,
+    GWLP_USERDATA, GWLP_WNDPROC, WM_ENTERMENULOOP, WM_ENTERSIZEMOVE, WM_EXITMENULOOP,
+    WM_EXITSIZEMOVE, WM_TIMER, WNDPROC,
 };
 
 #[cfg(windows)]
@@ -27,6 +31,70 @@ fn hwnd_from_native_data(native_data: &[u8]) -> Result<HWND> {
         return Err(Error::from_reason("native window handle is null"));
     }
     Ok(hwnd)
+}
+
+const DEFAULT_COMPOSITOR_WAIT_MS: u32 = 1_000;
+
+pub struct CompositorFrameTask {
+    timeout_ms: u32,
+}
+
+impl Task for CompositorFrameTask {
+    type Output = bool;
+    type JsValue = bool;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        #[cfg(windows)]
+        {
+            return Ok(wait_for_windows_compositor(self.timeout_ms));
+        }
+
+        #[cfg(not(windows))]
+        {
+            Ok(false)
+        }
+    }
+
+    fn resolve(&mut self, _env: Env, signaled: Self::Output) -> Result<Self::JsValue> {
+        Ok(signaled)
+    }
+}
+
+/// Waits off the JavaScript thread for the next Windows compositor clock tick.
+#[napi]
+pub fn wait_for_compositor_frame(timeout_ms: Option<u32>) -> AsyncTask<CompositorFrameTask> {
+    AsyncTask::new(CompositorFrameTask {
+        timeout_ms: timeout_ms.unwrap_or(DEFAULT_COMPOSITOR_WAIT_MS).max(1),
+    })
+}
+
+#[cfg(windows)]
+fn wait_for_windows_compositor(timeout_ms: u32) -> bool {
+    type WaitForCompositorClock = unsafe extern "system" fn(u32, *const HANDLE, u32) -> u32;
+
+    let library_name: Vec<u16> = "dcomp.dll\0".encode_utf16().collect();
+    let module = unsafe { LoadLibraryW(library_name.as_ptr()) };
+    if module.is_null() {
+        return false;
+    }
+
+    let procedure =
+        unsafe { GetProcAddress(module, b"DCompositionWaitForCompositorClock\0".as_ptr()) };
+    let signaled = match procedure {
+        Some(procedure) => {
+            let wait = unsafe {
+                std::mem::transmute::<unsafe extern "system" fn() -> isize, WaitForCompositorClock>(
+                    procedure,
+                )
+            };
+            unsafe { wait(0, std::ptr::null(), timeout_ms) == 0 }
+        }
+        None => false,
+    };
+    unsafe {
+        FreeLibrary(module);
+    }
+    signaled
 }
 
 #[napi]

@@ -1,5 +1,5 @@
 diff --git a/src/dawn/native/d3d/SwapChainD3D.cpp b/src/dawn/native/d3d/SwapChainD3D.cpp
-index 6dbcdf88a..e98f8721f 100644
+index 6dbcdf88a..762927c8a 100644
 --- a/src/dawn/native/d3d/SwapChainD3D.cpp
 +++ b/src/dawn/native/d3d/SwapChainD3D.cpp
 @@ -27,6 +27,8 @@
@@ -11,7 +11,7 @@ index 6dbcdf88a..e98f8721f 100644
  #if defined(DAWN_USE_WINDOWS_UI)
  #include <windows.ui.xaml.media.dxinterop.h>
  #endif  // defined(DAWN_USE_WINDOWS_UI)
-@@ -197,7 +199,8 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
+@@ -166,7 +168,8 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
      // DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING flag is changed.
      bool canReuseSwapChain =
          ((mConfig.swapChainFlags ^ previousD3DSwapChain->mConfig.swapChainFlags) &
@@ -21,17 +21,17 @@ index 6dbcdf88a..e98f8721f 100644
  
      // We can't reuse the previous swapchain, so we destroy it and wait for all of its reference
      // to be forgotten (otherwise DXGI complains that there are outstanding references).
-@@ -209,6 +212,9 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
+@@ -178,6 +181,9 @@ MaybeError SwapChain::Initialize(SwapChainBase* previousSwapChain) {
      // After all this we know we can reuse the swapchain, see if it is possible to also reuse
      // the buffers.
      mDXGISwapChain = std::move(previousD3DSwapChain->mDXGISwapChain);
 +    mDCompDevice = std::move(previousD3DSwapChain->mDCompDevice);
 +    mDCompTarget = std::move(previousD3DSwapChain->mDCompTarget);
 +    mDCompVisual = std::move(previousD3DSwapChain->mDCompVisual);
-     previousD3DSwapChain->UnregisterFrameLatencyHandle();
-     RegisterFrameLatencyHandle();
  
-@@ -253,9 +259,18 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
+     bool canReuseBuffers = GetWidth() == previousSwapChain->GetWidth() &&
+                            GetHeight() == previousSwapChain->GetHeight() &&
+@@ -222,9 +228,18 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
      swapChainDesc.BufferUsage = mConfig.usage;
      swapChainDesc.BufferCount = mConfig.bufferCount;
      swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
@@ -52,7 +52,7 @@ index 6dbcdf88a..e98f8721f 100644
  
      ComPtr<IDXGIFactory2> factory2 = nullptr;
      DAWN_TRY(CheckHRESULT(device->GetFactory()->QueryInterface(IID_PPV_ARGS(&factory2)),
-@@ -264,15 +279,22 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
+@@ -233,15 +248,22 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
      ComPtr<IDXGISwapChain1> swapChain1;
      switch (GetSurface()->GetType()) {
          case Surface::Type::WindowsHWND: {
@@ -82,7 +82,7 @@ index 6dbcdf88a..e98f8721f 100644
                               "Disabling DXGI's alt+enter fullscreen handling"));
              break;
          }
-@@ -323,6 +345,21 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
+@@ -292,6 +314,21 @@ MaybeError SwapChain::InitializeSwapChainFromScratch() {
      return CollectSwapChainBuffers();
  }
  
@@ -101,12 +101,12 @@ index 6dbcdf88a..e98f8721f 100644
 +    return {};
 +}
 +
- void SwapChain::RegisterFrameLatencyHandle() {
-     UnregisterFrameLatencyHandle();
-     if ((mConfig.swapChainFlags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT) == 0 ||
-@@ -382,6 +419,9 @@ MaybeError SwapChain::PresentDXGISwapChain() {
+ MaybeError SwapChain::PresentDXGISwapChain() {
+     // Do the actual present. DXGI_STATUS_OCCLUDED is a valid return value that's just a
+     // message to the application that it could stop rendering.
+@@ -311,6 +348,9 @@ MaybeError SwapChain::PresentDXGISwapChain() {
+ 
  void SwapChain::ReleaseDXGISwapChain() {
-     UnregisterFrameLatencyHandle();
      mDXGISwapChain = nullptr;
 +    mDCompVisual = nullptr;
 +    mDCompTarget = nullptr;
@@ -115,7 +115,7 @@ index 6dbcdf88a..e98f8721f 100644
  
  IDXGISwapChain3* SwapChain::GetDXGISwapChain() const {
 diff --git a/src/dawn/native/d3d/SwapChainD3D.h b/src/dawn/native/d3d/SwapChainD3D.h
-index bc61b1f89..dfb54ee30 100644
+index bc61b1f89..0d1777384 100644
 --- a/src/dawn/native/d3d/SwapChainD3D.h
 +++ b/src/dawn/native/d3d/SwapChainD3D.h
 @@ -29,6 +29,7 @@
@@ -126,10 +126,9 @@ index bc61b1f89..dfb54ee30 100644
  
  #include "src/dawn/native/IntegerTypes.h"
  #include "src/dawn/native/SwapChain.h"
-@@ -79,11 +80,15 @@ class SwapChain : public SwapChainBase {
+@@ -79,10 +80,14 @@ class SwapChain : public SwapChainBase {
+ 
    private:
-     void RegisterFrameLatencyHandle();
-     void UnregisterFrameLatencyHandle();
 +    MaybeError AttachDirectCompositionSwapChain(HWND hwnd, IDXGISwapChain1* swapChain);
      // Does the swapchain initialization steps assuming there is nothing we can reuse.
      MaybeError InitializeSwapChainFromScratch();
@@ -139,6 +138,6 @@ index bc61b1f89..dfb54ee30 100644
 +    ComPtr<IDCompositionDevice> mDCompDevice;
 +    ComPtr<IDCompositionTarget> mDCompTarget;
 +    ComPtr<IDCompositionVisual> mDCompVisual;
-     HANDLE mFrameLatencyHandle = nullptr;
-     void* mFrameLatencyWindow = nullptr;
  };
+ 
+ }  // namespace dawn::native::d3d

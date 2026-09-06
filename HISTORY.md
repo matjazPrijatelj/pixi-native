@@ -2,11 +2,33 @@
 
 ## 2026-09-06
 
-- Regenerated the standalone Dawn DirectComposition transparency patch against
-  the already-patched `0001` through `0004` source state. Clean native setup
-  can now apply all five patches in order without conflicting with the D3D12
-  frame-latency changes in `SwapChainD3D`; repository whitespace checks now
-  preserve required blank context lines in generated patch files.
+- Replaced the patched Dawn Node module with the project-owned
+  `pixi_native_gpu.node` addon. It links Dawn's native and Node interop targets
+  but atomically owns `Instance`, `Adapter`, `Device`, and surface creation, so
+  renderer presentation no longer unwraps Dawn's private `GPUDevice::device_`.
+  CMake injects the addon once through Dawn's project include, resolves its
+  links against Dawn's targets during generation, and defers only the generated
+  N-API symbol dependency; packaging and runtime lookup use the new artifact
+  name.
+- Removed the Dawn SDL adapter, private Node binding, frame-latency, and event
+  scheduler patches. The sole remaining Dawn patch is a clean-base
+  DirectComposition change for premultiplied transparent Windows swapchains.
+  Windows VSync RAF pacing moved to the native window addon and waits on the
+  compositor clock with refresh-rate spacing and timer fallback.
+- Static validation passed: the addon source passes MSVC `/Zs`, the retained
+  Dawn patch applies to the pinned clean index, `pnpm typecheck`, `cargo check`,
+  and 22 focused scheduler/window/platform tests pass. The full test run passed
+  118 tests but cannot load three Pixi 7 suites because the current
+  `node_modules/pixi.js-v7` package is incomplete.
+- Fixed addon injection during Dawn configuration by adding the project target
+  once from `CMAKE_PROJECT_INCLUDE` and deferring only its dependency on Dawn's
+  generated N-API symbols. A complete Windows `pnpm native:build` then passed
+  all 945 Ninja steps and staged a loadable `pixi_native_gpu.node`.
+- Rebuilt the native window addon with its compositor-wait export and made the
+  navigator adapter reuse the context-owned GPU device during Pixi's WebGPU
+  capability probe. A live PixiJS 8 startup selected WebGPU/D3D12, FIFO,
+  `bgra8unorm`, and the NVIDIA Quadro P1000 and remained stable during the smoke
+  interval; visual FIFO/immediate/transparency comparison remains outstanding.
 - Added the lightweight `pixi-native/files` entrypoint for module-relative file
   resolution, existence checks, and asynchronous byte, text, and JSON reads.
   Absolute paths, UNC paths, and file URLs remain unrestricted so displays can

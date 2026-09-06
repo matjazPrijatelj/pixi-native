@@ -112,6 +112,8 @@ const cmakeArgs = [
 	'-B',
 	C.dir.build,
 	'-GNinja',
+	`-DCMAKE_PROJECT_INCLUDE=${cmakePath(Path.join(C.dir.root, 'addon', 'bootstrap.cmake'))}`,
+	`-DPIXI_NATIVE_GPU_ADDON_DIR=${cmakePath(Path.join(C.dir.root, 'addon'))}`,
 	`-DCMAKE_MAKE_PROGRAM=${C.dir.ninja}`,
 	'-DCMAKE_BUILD_TYPE=Release',
 	'-DCMAKE_CXX_SCAN_FOR_MODULES=OFF',

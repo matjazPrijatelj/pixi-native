@@ -210,6 +210,38 @@ test("VSync frame scheduler batches callbacks on the native present signal", asy
     assert.deepEqual(timestamps, [123.5, 123.5]);
 });
 
+test("VSync frame scheduler rejects compositor ticks that arrive too early", async () => {
+    const waiters: Array<(signaled: boolean) => void> = [];
+    const timers: Array<{ callback: () => void; delayMS: number }> = [];
+    let now = 100;
+    const scheduler = new VSyncFrameScheduler({
+        now: () => now,
+        waitForPresent: () =>
+            new Promise<boolean>((resolve) => waiters.push(resolve)),
+        fallbackFrameIntervalMS: 10,
+        minimumFrameSpacingRatio: 0.9,
+        setTimer: (callback, delayMS) => {
+            timers.push({ callback, delayMS });
+            return timers.length;
+        },
+    });
+    const timestamps: number[] = [];
+
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    waiters[0](true);
+    await Promise.resolve();
+    scheduler.request((timestamp) => timestamps.push(timestamp));
+    now = 104;
+    waiters[1](true);
+    await Promise.resolve();
+
+    assert.deepEqual(timestamps, [100]);
+    assert.equal(timers[0].delayMS, 5);
+    now = 109;
+    timers[0].callback();
+    assert.deepEqual(timestamps, [100, 109]);
+});
+
 test("VSync frame scheduler falls back to a timer and honors cancellation", async () => {
     const waiters: Array<(signaled: boolean) => void> = [];
     const timers: Array<{ callback: () => void; delayMS: number }> = [];

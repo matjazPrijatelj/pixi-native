@@ -13,8 +13,8 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REQUIRED_NATIVE_ARTIFACTS = [
-    "native/gpu/dist/linux-x64/dawn.node",
-    "native/gpu/dist/win32-x64/dawn.node",
+    "native/gpu/dist/linux-x64/pixi_native_gpu.node",
+    "native/gpu/dist/win32-x64/pixi_native_gpu.node",
     "native/gpu/dist/win32-x64/d3dcompiler_47.dll",
     "native/window/dist/win32-x64/native_window.node",
     "native/audio/dist/win32-x64/native_audio.node",

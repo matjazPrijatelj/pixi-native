@@ -228,7 +228,7 @@ export class NodeDOMAdapter {
     this.frameScheduler = scheduler;
     console.log({
       animationFrameSource: this.waitForPresent
-        ? "DXGI frame-latency signal"
+        ? "Windows compositor clock"
         : "deadline timer",
       frameRateHz: this.frameRateHz,
     });

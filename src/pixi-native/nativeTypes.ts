@@ -29,14 +29,18 @@ export interface NodeRendererOptions {
 }
 
 export interface NodeGPUApi {
-  create(flags: string[]): NodeGPUInstance;
-  renderGPUDeviceToWindow(options: {
-    device: GPUDevice;
+  createWindowContext(options: {
+    flags: string[];
     window: unknown;
     presentMode?: string;
     alphaMode?: "opaque" | "premultiplied";
-  }): NodeWindowRenderer;
-  destroy(instance: NodeGPUInstance): void;
+  }): {
+    gpu: NodeGPUInstance;
+    adapter: GPUAdapter;
+    device: GPUDevice;
+    renderer: NodeWindowRenderer;
+  };
+  destroy(context: object): void;
 }
 
 export interface NodeWindowRenderer {
@@ -44,7 +48,6 @@ export interface NodeWindowRenderer {
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap(): void;
-  waitForPresent?(): Promise<boolean>;
   resize(): void;
   destroy(): void;
 }

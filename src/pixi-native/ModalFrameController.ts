@@ -8,11 +8,24 @@ export interface ModalFrameController {
 
 interface NativeWindowApi {
   setTransparent(nativeData: Uint8Array, transparent: boolean): void;
+  waitForCompositorFrame?(timeoutMs?: number): Promise<boolean>;
   create(
     nativeData: Uint8Array,
     onFrame: () => void,
     onState: (active: boolean) => void,
   ): ModalFrameController;
+}
+
+/** Uses the Windows compositor clock when the installed native addon provides it. */
+export function createCompositorFrameWaiter(
+  platform: NodeJS.Platform = process.platform,
+  nativeWindowOverride?: Pick<NativeWindowApi, "waitForCompositorFrame">,
+): (() => Promise<boolean>) | undefined {
+  if (platform !== "win32") return undefined;
+  const nativeWindow = nativeWindowOverride ??
+    require("../../native/window") as NativeWindowApi;
+  if (!nativeWindow.waitForCompositorFrame) return undefined;
+  return () => nativeWindow.waitForCompositorFrame!(1_000);
 }
 
 /** Configures compositor transparency before the WebGPU surface is created. */

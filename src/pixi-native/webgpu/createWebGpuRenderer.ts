@@ -24,6 +24,7 @@ import * as sdl from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "../gpuCompatibility.ts";
 import { setNativeVideoModalState } from "../video/NativeVideo.ts";
 import {
+  createCompositorFrameWaiter,
   createModalFrameController,
   setNativeWindowTransparent,
 } from "../ModalFrameController.ts";
@@ -69,12 +70,17 @@ export async function createWebGpuRenderer(
 
   const gpu = require("../../../native/gpu") as NodeGPUApi;
   const backend = resolveGpuBackend();
-  const instance = gpu.create([`backend=${backend}`, "verbose=1"]);
-  const adapter = await instance.requestAdapter();
-  if (!adapter)
-    throw new Error("native GPU addon could not provide a WebGPU adapter");
-
-  const device = await adapter.requestDevice();
+  const presentMode = windowOptions.vsync ? "fifo" : "immediate";
+  const gpuContext = gpu.createWindowContext({
+    flags: [`backend=${backend}`, "verbose=1"],
+    window,
+    presentMode,
+    alphaMode: windowOptions.transparent ? "premultiplied" : "opaque",
+  });
+  const instance = gpuContext.gpu;
+  const adapter = gpuContext.adapter;
+  const device = gpuContext.device;
+  const renderer = gpuContext.renderer;
 
   const queue = device.queue as any;
   const rgbaUploadBuffers = new Map<number, Uint8Array>();
@@ -179,14 +185,6 @@ export async function createWebGpuRenderer(
     );
   }) as typeof queue.copyExternalImageToTexture;
 
-  const presentMode = windowOptions.vsync ? "fifo" : "immediate";
-  const renderer = gpu.renderGPUDeviceToWindow({
-    device,
-    window,
-    presentMode,
-    alphaMode: windowOptions.transparent ? "premultiplied" : "opaque",
-  });
-
   const canvas = new NodeGPUCanvas(
     renderer,
     window.pixelWidth,
@@ -194,12 +192,9 @@ export async function createWebGpuRenderer(
   );
 
   const refreshRateHz = normalizeRefreshRate(window.display.frequency);
-  const waitForPresent =
-    windowOptions.vsync &&
-    process.platform === "win32" &&
-    renderer.waitForPresent
-      ? renderer.waitForPresent.bind(renderer)
-      : undefined;
+  const waitForPresent = windowOptions.vsync
+    ? createCompositorFrameWaiter()
+    : undefined;
   const domAdapter = new NodeDOMAdapter(
     instance,
     resolveAnimationFrameRate(windowOptions, refreshRateHz),
@@ -310,7 +305,7 @@ export async function createWebGpuRenderer(
       window.destroy();
     }
 
-    gpu.destroy(instance);
+    gpu.destroy(gpuContext);
   };
 
   return {
