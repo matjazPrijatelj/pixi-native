@@ -153,6 +153,14 @@ export interface NativeVideoDependencies {
     ): NativeVideoAudioLike;
 }
 
+interface NativeVideoInternalDependencies extends NativeVideoDependencies {
+    probeMetadata?(
+        source: string,
+        ffmpegPath: string,
+        inputArgs: readonly string[],
+    ): Promise<ProbedMetadata | null>;
+}
+
 export interface NativeVideoAudioLike {
     readonly currentTime: number;
     readonly ended: boolean;
@@ -416,10 +424,11 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
     }
 }
 
-const DEFAULT_DEPENDENCIES: NativeVideoDependencies = {
+const DEFAULT_DEPENDENCIES: NativeVideoInternalDependencies = {
     createDecoder: (options) => new NativeVideoDecoder(options),
     createAudio: (source, startTime, volume, muted, playbackRate, inputArgs, outputArgs, endTime) =>
         new HowlVideoAudio(source, startTime, volume, muted, playbackRate, inputArgs, outputArgs, endTime),
+    probeMetadata: probeMedia,
 };
 
 class HowlVideoAudio implements NativeVideoAudioLike {
@@ -508,6 +517,7 @@ class HowlVideoAudio implements NativeVideoAudioLike {
 }
 
 export type NativeVideoEventType =
+    | "emptied"
     | "loadedmetadata"
     | "loadeddata"
     | "canplay"
@@ -539,6 +549,7 @@ export class NativeVideo extends EventTarget {
     public videoWidth: number;
     public videoHeight: number;
 
+    public onemptied: NativeVideoEventHandler = null;
     public onloadedmetadata: NativeVideoEventHandler = null;
     public onloadeddata: NativeVideoEventHandler = null;
     public oncanplay: NativeVideoEventHandler = null;
@@ -552,7 +563,7 @@ export class NativeVideo extends EventTarget {
     public onerror: NativeVideoEventHandler = null;
 
     private readonly options: NativeVideoOptions;
-    private readonly dependencies: NativeVideoDependencies;
+    private readonly dependencies: NativeVideoInternalDependencies;
     private decoder?: NativeVideoDecoderLike;
     private positionSeconds = 0;
     private isPaused = true;
@@ -594,6 +605,7 @@ export class NativeVideo extends EventTarget {
     private frameAwaitingPresentation = false;
     private readonly registryReference: WeakRef<NativeVideo>;
     private metadataPromise?: Promise<void>;
+    private sourceGeneration = 0;
 
     public constructor(
         src: string,
@@ -619,7 +631,7 @@ export class NativeVideo extends EventTarget {
         this.videoHeight = options.height;
         this.fps = fps;
         this.options = options;
-        this.dependencies = dependencies;
+        this.dependencies = dependencies as NativeVideoInternalDependencies;
         this.audioVolume = options.volume ?? 1;
         this.audioMuted = options.muted ?? false;
         this.playbackRateValue = options.playbackRate ?? 1;
@@ -643,19 +655,28 @@ export class NativeVideo extends EventTarget {
     }
 
     public set src(value: string) {
+        this.replaceSource(value, !this.isPaused);
+    }
+
+    private replaceSource(value: string, resumePlayback: boolean): void {
         this.assertUsable();
         if (!value) throw new Error("Video source must not be empty");
         const parsed = parseMediaSource(value);
-        this.pauseInternal(false);
+        this.playbackGeneration++;
+        this.stopDecoder();
+        this.stopAudio();
+        this.isPaused = true;
         this.sourceValue = value;
         this.decodedSource = parsed.source;
         this.segmentStart = parsed.startTime;
         this.segmentEnd = parsed.endTime;
-        this.positionSeconds = parsed.startTime;
-        this.durationValue = this.options.mediaType === "live"
-            ? Number.POSITIVE_INFINITY
-            : (parsed.endTime ?? Number.NaN);
-        this.resetReadiness();
+        this.resetSourceState();
+        this.emit("emptied");
+        if (resumePlayback) {
+            void this.play().catch(() => undefined);
+        } else {
+            this.loadMetadataInBackground();
+        }
     }
 
     public get currentSrc(): string {
@@ -838,12 +859,7 @@ export class NativeVideo extends EventTarget {
     }
 
     public load(): void {
-        this.assertUsable();
-        this.pauseInternal(false);
-        this.positionSeconds = this.segmentStart;
-        this.hasEnded = false;
-        this.resetReadiness();
-        void this.ensureMetadata();
+        this.replaceSource(this.sourceValue, false);
     }
 
     public takeLatestFrame(): NativeVideoFrame | null {
@@ -1214,20 +1230,56 @@ export class NativeVideo extends EventTarget {
         this.metadataPromise = undefined;
     }
 
+    private resetSourceState(): void {
+        this.sourceGeneration++;
+        this.positionSeconds = this.segmentStart;
+        this.hasEnded = false;
+        this.lastBackend = "not started";
+        this.lastError = null;
+        this.lastAudioError = null;
+        this.decodedFrameBase = 0;
+        this.droppedFrameBase = 0;
+        this.skippedFrameBase = 0;
+        this.presentedFrameCount = 0;
+        this.skippedFrameCount = 0;
+        this.syncOffsetMilliseconds = 0;
+        this.reconnectAttempt = 0;
+        this.reconnectAtMs = 0;
+        this.sourcePixelFormat = undefined;
+        this.videoWidth = this.width;
+        this.videoHeight = this.height;
+        this.durationValue = this.options.mediaType === "live"
+            ? Number.POSITIVE_INFINITY
+            : (this.segmentEnd ?? Number.NaN);
+        this.lastTimeUpdateMs = Number.NEGATIVE_INFINITY;
+        this.resetReadiness();
+    }
+
+    private loadMetadataInBackground(): void {
+        const sourceGeneration = this.sourceGeneration;
+        void this.ensureMetadata().catch((error: unknown) => {
+            if (this.destroyed || sourceGeneration !== this.sourceGeneration) return;
+            this.lastError = asError(error);
+            this.emit("error");
+        });
+    }
+
     private ensureMetadata(): Promise<void> {
         if (this.metadataPromise) return this.metadataPromise;
+        const sourceGeneration = this.sourceGeneration;
+        const source = this.decodedSource;
         this.metadataPromise = (async () => {
             if (
                 this.options.mediaType !== "live" &&
-                this.dependencies === DEFAULT_DEPENDENCIES
+                this.dependencies.probeMetadata
             ) {
                 const ffmpegPath = resolveFfmpegPath({ explicitPath: this.options.ffmpegPath });
-                const metadata = await probeMedia(
-                    this.decodedSource,
+                const metadata = await this.dependencies.probeMetadata(
+                    source,
                     ffmpegPath,
                     this.options.ffmpeg?.inputArgs ?? [],
                 );
-                if (this.destroyed) return;
+                if (this.destroyed || sourceGeneration !== this.sourceGeneration) return;
                 if (metadata?.width) this.videoWidth = metadata.width;
                 if (metadata?.height) this.videoHeight = metadata.height;
                 this.sourcePixelFormat = metadata?.pixelFormat;
@@ -1237,7 +1289,11 @@ export class NativeVideo extends EventTarget {
                     this.durationValue = metadata.duration;
                 }
             }
-            if (!this.metadataDispatched && !this.destroyed) {
+            if (
+                !this.metadataDispatched &&
+                !this.destroyed &&
+                sourceGeneration === this.sourceGeneration
+            ) {
                 this.readyStateValue = 1;
                 this.metadataDispatched = true;
                 this.emit("loadedmetadata");

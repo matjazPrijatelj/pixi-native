@@ -86,6 +86,27 @@ test("NativeVideoSprite destroys its owned planes and geometry buffers", () => {
     assert.equal(buffers.every((buffer) => buffer.destroyed), true);
 });
 
+test("NativeVideoSprite observes source resets without being recreated", () => {
+    const video = new NativeVideo("first.mp4", {
+        width: 2,
+        height: 2,
+        audio: false,
+    }, {
+        createDecoder: () => {
+            throw new Error("decoder must not start while paused");
+        },
+    });
+    const sprite = new NativeVideoSprite(video);
+    const state = sprite as unknown as { needsClear: boolean };
+
+    assert.equal(state.needsClear, false);
+    video.src = "second.mp4";
+    assert.equal(state.needsClear, true);
+
+    sprite.destroy();
+    video.destroy();
+});
+
 test("WebGL NV12 upload uses separate texture units and restores unpack alignment", () => {
     const calls: Array<[string, ...unknown[]]> = [];
     const ySource = {} as never;

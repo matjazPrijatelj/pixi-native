@@ -114,6 +114,11 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     private readonly ownedTexture: Texture;
     private readonly ownedGeometry: MeshGeometry;
     private readonly ownedShader: Shader;
+    private readonly emptyFrame: NativeVideoFrame;
+    private needsClear = false;
+    private readonly handleVideoEmptied = (): void => {
+        this.needsClear = true;
+    };
 
     public constructor(video: NativeVideo) {
         const initialY = new Uint8Array(video.width * video.height).fill(16);
@@ -179,11 +184,23 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
         this.ownedTexture = texture;
         this.ownedGeometry = geometry;
         this.ownedShader = shader;
+        this.emptyFrame = {
+            width: video.width,
+            height: video.height,
+            timestampUs: 0,
+            y: initialY,
+            uv: initialUv,
+            yStride: video.width,
+            uvStride: video.width,
+            pixelFormat: "nv12",
+        };
+        video.addEventListener("emptied", this.handleVideoEmptied);
         this.onRender = (renderer) => this.uploadLatestFrame(renderer);
     }
 
     public override destroy(): void {
         if (this.destroyed) return;
+        this.video.removeEventListener("emptied", this.handleVideoEmptied);
         this.onRender = null;
         super.destroy();
         this.ownedShader.destroy(false);
@@ -193,7 +210,8 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     }
 
     private uploadLatestFrame(renderer: Renderer): void {
-        const frame = this.video.takeLatestFrame();
+        const isClear = this.needsClear;
+        const frame = isClear ? this.emptyFrame : this.video.takeLatestFrame();
         if (!frame) return;
 
         if (renderer.name === "webgpu") {
@@ -214,7 +232,8 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
         } else {
             throw new Error("NativeVideoSprite requires WebGPU or WebGL");
         }
-        this.video.markFramePresented();
+        if (isClear) this.needsClear = false;
+        else this.video.markFramePresented();
     }
 }
 

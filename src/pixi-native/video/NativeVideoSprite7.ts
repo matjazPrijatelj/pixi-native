@@ -57,6 +57,10 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
     private readonly yTexture: Texture;
     private readonly uvTexture: Texture;
     private destroyedVideo = false;
+    private needsClear = false;
+    private readonly handleVideoEmptied = (): void => {
+        this.needsClear = true;
+    };
 
     public constructor(video: NativeVideo) {
         const yData = new Uint8Array(video.width * video.height).fill(16);
@@ -86,6 +90,7 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
         this.uvPlane = { data: uvData, baseTexture: uvBaseTexture };
         this.yTexture = yTexture;
         this.uvTexture = uvTexture;
+        video.addEventListener("emptied", this.handleVideoEmptied);
     }
 
     public override render(renderer: Renderer): void {
@@ -94,6 +99,14 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
     }
 
     public updateFrame(): boolean {
+        if (this.needsClear) {
+            this.needsClear = false;
+            this.yPlane.data.fill(16);
+            this.uvPlane.data.fill(128);
+            this.yPlane.baseTexture.update();
+            this.uvPlane.baseTexture.update();
+            return true;
+        }
         const frame = this.video.takeLatestFrame();
         if (!frame) return false;
         copyPlane(this.yPlane.data, frame.y, frame.yStride, frame.width, frame.height);
@@ -107,6 +120,7 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
     public override destroy(options?: boolean | { children?: boolean; texture?: boolean; baseTexture?: boolean }): void {
         if (this.destroyedVideo) return;
         this.destroyedVideo = true;
+        this.video.removeEventListener("emptied", this.handleVideoEmptied);
         this.yTexture.destroy(true);
         this.uvTexture.destroy(true);
         this.video.destroy();

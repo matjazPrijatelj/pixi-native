@@ -12,6 +12,10 @@
   addon is pending. The package excludes the incompatible legacy `dawn.node`,
   keeps Linux WebGL/video support, and reports Linux WebGPU as unsupported when
   its project-owned `pixi_native_gpu.node` binding is absent.
+- Made `NativeVideo.src` perform a complete source reset: active playback now
+  continues on the replacement source, stale metadata cannot overwrite the new
+  state, and existing Pixi 7/8 `VideoSprite` instances clear the previous frame
+  before presenting frames from the new decoder.
 - Replaced the patched Dawn Node module with the project-owned
   `pixi_native_gpu.node` addon. It links Dawn's native and Node interop targets
   but atomically owns `Instance`, `Adapter`, `Device`, and surface creation, so

@@ -120,6 +120,77 @@ test("NativeVideo restarts at currentTime for pause, resume, and seek", async ()
     await assert.rejects(video.play(), /destroyed/);
 });
 
+test("changing src resets state and continues active playback on the new source", async () => {
+    const factory = new FakeDecoderFactory();
+    const video = new NativeVideo(
+        "first.mp4",
+        { width: 2, height: 2, audio: false, loop: true, playbackRate: 1.25 },
+        factory,
+    );
+    let emptied = 0;
+    video.onemptied = () => emptied++;
+
+    await video.play();
+    factory.decoders[0].decoded = 4;
+    factory.decoders[0].frame = createFrame(0);
+    video.takeLatestFrame();
+    video.markFramePresented();
+
+    video.src = "second.mp4#t=2,5";
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(emptied, 1);
+    assert.equal(factory.decoders[0].closed, true);
+    assert.equal(factory.decoders.length, 2);
+    assert.equal(factory.decoders[1].source, "second.mp4");
+    assert.equal(factory.options[1].startTime, 2);
+    assert.equal(factory.options[1].endTime, 5);
+    assert.equal(video.src, "second.mp4#t=2,5");
+    assert.equal(video.currentSrc, "second.mp4");
+    assert.ok(Math.abs(video.currentTime - 2) < 0.1);
+    assert.equal(video.paused, false);
+    assert.equal(video.loop, true);
+    assert.equal(video.playbackRate, 1.25);
+    assert.equal(video.error, null);
+    assert.equal(video.stats.decodedFrames, 0);
+    assert.equal(video.stats.presentedFrames, 0);
+    video.destroy();
+});
+
+test("changing src while paused loads only current-source metadata", async () => {
+    const factory = new FakeDecoderFactory();
+    const metadataResolvers = new Map<
+        string,
+        (metadata: { width: number; height: number; duration: number }) => void
+    >();
+    const dependencies = {
+        createDecoder: (options) => factory.createDecoder(options),
+        probeMetadata: (source) => new Promise((resolve) => {
+            metadataResolvers.set(source, resolve);
+        }),
+    };
+    const video = new NativeVideo(
+        "first.mp4",
+        { width: 2, height: 2, audio: false },
+        dependencies,
+    );
+
+    video.load();
+    video.src = "second.mp4";
+    metadataResolvers.get("first.mp4")?.({ width: 10, height: 12, duration: 20 });
+    metadataResolvers.get("second.mp4")?.({ width: 20, height: 24, duration: 40 });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    assert.equal(video.paused, true);
+    assert.equal(factory.decoders.length, 0);
+    assert.equal(video.currentSrc, "second.mp4");
+    assert.equal(video.videoWidth, 20);
+    assert.equal(video.videoHeight, 24);
+    assert.equal(video.duration, 40);
+    assert.equal(video.readyState, 1);
+    video.destroy();
+});
+
 test("NativeVideo records end and latest-frame decoder statistics", async () => {
     const factory = new FakeDecoderFactory();
     const video = new NativeVideo(
@@ -529,9 +600,12 @@ class FakeDecoder implements NativeVideoDecoderLike {
     public finished = false;
     public closed = false;
     public ready = true;
+    public source: string | null = null;
     public readonly catchUpTargets: number[] = [];
 
-    public open(_source: string): void {}
+    public open(source: string): void {
+        this.source = source;
+    }
 
     public get frame(): NativeVideoFrame | null {
         return this.frames[0] ?? null;

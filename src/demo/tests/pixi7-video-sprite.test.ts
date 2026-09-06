@@ -19,12 +19,15 @@ test("NativeVideoSprite7 uploads an NV12 frame through a Pixi 7 canvas resource"
     };
     let presented = 0;
     let destroyed = 0;
+    const events = new EventTarget();
     const video = {
         width: 2,
         height: 2,
         takeLatestFrame: () => frame,
         markFramePresented: () => presented++,
         destroy: () => destroyed++,
+        addEventListener: events.addEventListener.bind(events),
+        removeEventListener: events.removeEventListener.bind(events),
     } as never;
 
     const sprite = new NativeVideoSprite7(video);
@@ -35,6 +38,16 @@ test("NativeVideoSprite7 uploads an NV12 frame through a Pixi 7 canvas resource"
     assert.deepEqual(Array.from(planes.uvPlane.data), [128, 128]);
     assert.doesNotThrow(() => sprite.updateFrame());
     assert.equal(presented, 2);
+
+    events.dispatchEvent(new Event("emptied"));
+    assert.equal(sprite.updateFrame(), true);
+    assert.equal(presented, 2);
+    assert.deepEqual(Array.from(planes.yPlane.data), [16, 16, 16, 16]);
+    assert.deepEqual(Array.from(planes.uvPlane.data), [128, 128]);
+
+    assert.equal(sprite.updateFrame(), true);
+    assert.equal(presented, 3);
+    assert.deepEqual(Array.from(planes.yPlane.data), [128, 128, 128, 128]);
     sprite.destroy();
     assert.equal(destroyed, 1);
 });
