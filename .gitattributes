@@ -1,3 +1,4 @@
 src/demo/assets/*.mp4 filter=lfs diff=lfs merge=lfs -text
 native/video/dist/win32-x64/ffmpeg.exe filter=lfs diff=lfs merge=lfs -text
 native/video/dist/win32-x64/ffprobe.exe filter=lfs diff=lfs merge=lfs -text
+native/gpu/patches/*.patch whitespace=-blank-at-eol

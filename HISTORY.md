@@ -2,6 +2,11 @@
 
 ## 2026-09-06
 
+- Regenerated the standalone Dawn DirectComposition transparency patch against
+  the already-patched `0001` through `0004` source state. Clean native setup
+  can now apply all five patches in order without conflicting with the D3D12
+  frame-latency changes in `SwapChainD3D`; repository whitespace checks now
+  preserve required blank context lines in generated patch files.
 - Added the lightweight `pixi-native/files` entrypoint for module-relative file
   resolution, existence checks, and asynchronous byte, text, and JSON reads.
   Absolute paths, UNC paths, and file URLs remain unrestricted so displays can
