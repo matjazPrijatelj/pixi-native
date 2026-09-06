@@ -6,6 +6,7 @@ import {
     Assets,
     BitmapFont,
     BitmapText,
+    DOMAdapter,
     bitmapFontTextParser,
 } from "pixi.js";
 import {
@@ -36,7 +37,7 @@ test("the generated text descriptor is valid BMFont data", async () => {
 });
 
 test("BitmapText scene supports generated and external atlases", async () => {
-    new NodeDOMAdapter({} as never).install();
+    new NodeDOMAdapter({} as never).installPixi8(DOMAdapter);
     const fontPath = fileURLToPath(FONT_URL);
     let externalFontLoaded = false;
     let dynamicFontInstalled = false;

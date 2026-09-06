@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { Assets, Container, Texture } from "pixi.js-v7";
-import { createNativePixiApplication } from "../../pixi-native/webgl-v7/index.ts";
+import { Assets, Container, Texture, createApp } from "../../pixi-native/v7.ts";
 import { createGraphicsTest } from "./scenes/GraphicsTest.ts";
 import { createTextTest } from "./scenes/TextTest.ts";
 import { createBitmapTextTest } from "./scenes/BitmapTextTest.ts";
@@ -18,7 +17,7 @@ import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 
 type Pixi7Scene = Container & { update?: (deltaMS: number, now: number) => void; dispose?: () => void; resize?: (width: number, height: number) => void; handleKey?: (key: string | null, repeat?: number) => boolean; addRandomSprites?: (count?: number) => number; removeRandomSprites?: (count?: number) => number };
 type Pixi7SceneFactory = () => Pixi7Scene;
-const { app, native, addDestroyListener } = await createNativePixiApplication({
+const { app, native, addDestroyListener } = await createApp({
     ...DEMO_WINDOW_OPTIONS,
     title: "PixiJS 7 Native Node WebGL",
 });

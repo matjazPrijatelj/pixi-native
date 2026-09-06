@@ -1,9 +1,9 @@
 import { Container, Graphics, Text } from "pixi.js";
 import {
   NativeVideo,
-  NativeVideoSprite,
   VideoFpsMeter,
 } from "../../../pixi-native/video/index.ts";
+import { NativeVideoSprite } from "../../../pixi-native/video/NativeVideoSprite.ts";
 import { fitVideoRect } from "../videoLayout.ts";
 import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 import { createMetricBitmapText } from "../bitmapFonts.ts";

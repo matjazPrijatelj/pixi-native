@@ -1,5 +1,5 @@
 import { Image as CanvasImage } from "@napi-rs/canvas";
-import { Application, VERSION } from "pixi.js";
+import { Application, DOMAdapter, VERSION } from "pixi.js";
 
 import { NodeCanvas } from "../NodeCanvas.ts";
 import { NodeDOMAdapter, normalizeRefreshRate } from "../NodeDOMAdapter.ts";
@@ -323,7 +323,7 @@ export async function createWebGlRenderer(
       webglRenderingContextConstructor,
     );
 
-    domAdapter.install();
+    domAdapter.installPixi8(DOMAdapter);
 
     const app = new Application();
     const modalFrameListeners = new Set<() => void>();

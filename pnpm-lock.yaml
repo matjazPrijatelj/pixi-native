@@ -26,6 +26,9 @@ importers:
       native-gles:
         specifier: 0.6.1
         version: 0.6.1
+      pixi.js-v7:
+        specifier: npm:pixi.js@7.4.3
+        version: pixi.js@7.4.3
       webgl-node:
         specifier: 1.5.1
         version: 1.5.1
@@ -39,9 +42,6 @@ importers:
       pixi.js:
         specifier: 8.20.0
         version: 8.20.0
-      pixi.js-v7:
-        specifier: npm:pixi.js@7.4.3
-        version: pixi.js@7.4.3
       prettier:
         specifier: 3.2.5
         version: 3.2.5

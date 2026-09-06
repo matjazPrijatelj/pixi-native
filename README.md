@@ -1,13 +1,13 @@
-# PixiJS 8 + Node Native WebGPU
+# Pixi Native
 
-Native PixiJS runtime for rendering directly into a native window from Node.js, without a browser DOM, WebView, or CEF. PixiJS 8 is the primary runtime; the package is `pixi-native` with `pixi-native/webgpu` and `pixi-native/webgl` entrypoints.
+Native PixiJS runtime for rendering directly into a native window from Node.js, without a browser DOM, WebView, or CEF. The package exposes explicit `pixi-native/v7` and `pixi-native/v8` entrypoints so each display process selects one Pixi major.
 
 ## Stack
 
 - Node.js 24.13 or newer from the Node.js 24 LTS line
 - pnpm 9.15.9
 - PixiJS 8.20.0
-- Separate PixiJS 7.4.3 WebGL proof-of-concept entrypoint (`pixi-native/webgl-pixi7`)
+- PixiJS 7.4.3 WebGL through `pixi-native/v7`
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
 - Windows WebGL2 through SDL plus `webgl-node`/`native-gles` ANGLE/EGL
@@ -22,13 +22,12 @@ The project-owned native addon creates the Dawn adapter/device and connects it t
 
 The demo selects its renderer explicitly: use `pnpm dev:webgpu`, `pnpm dev:webgl`, or `pnpm dev:webgl7`. The commands open the interactive scene demo; use number keys or left/right to switch between Graphics, Sprite, Text, BitmapText, audio, video, rain-sprite, and particle scenes. WebGPU and Windows WebGL share SDL window behavior while owning separate Dawn and ANGLE presentation surfaces.
 
-For library use, install the package and Pixi peer dependency with `pnpm add pixi-native pixi.js`. The managed initializer creates the Pixi application and owns native event polling, Pixi rendering, presentation, input, resize, and shutdown:
+For Pixi 8 library use, install the package and Pixi peer dependency with `pnpm add pixi-native pixi.js@8.20.0`. Pixi 7 is an internal package dependency. The versioned entrypoint exports both the matching Pixi API and the managed native factories:
 
 ```ts
-import { Sprite } from "pixi.js";
-import { createNativePixiApplication } from "pixi-native";
+import { Sprite, createApp } from "pixi-native/v8";
 
-const { app, native, destroy } = await createNativePixiApplication({
+const { app, native, destroy } = await createApp({
   backend: "webgpu", // or "webgl"
   width: 1280,
   height: 720,
@@ -57,11 +56,11 @@ for application-owned native resources. The initializer intentionally provides
 only the browser surface Pixi needs: it does not emulate HTML/CSS layout,
 browser media elements, navigation, or arbitrary DOM applications.
 
-The low-level `createPixiWebGPU` and `createPixiWebGL` factories remain
-available from `pixi-native/webgpu` and `pixi-native/webgl` for callers that
-need to own polling, rendering, presentation, and teardown themselves. The
-package declares PixiJS 8 as a peer dependency so applications can update Pixi
-within the supported major version.
+Use `createRenderer()` from the same versioned entrypoint when the caller needs
+to own polling, rendering, presentation, and teardown. Pixi 8 accepts
+`backend: "webgpu" | "webgl"`; Pixi 7 is WebGL-only. The package declares
+PixiJS 8 as a peer dependency so applications can update it within the
+supported major version.
 
 Display code can resolve and read its own packaged files without depending on
 the launcher's working directory through the lightweight `pixi-native/files`
@@ -109,14 +108,15 @@ WebGL falls back to the highest supported lower value, while GLFW WebGL reports
 the sample count provided by the platform. PixiJS WebGPU supports only 0x or 4x,
 so explicit 2x and 8x requests use 4x with a warning.
 
-PixiJS 7 can be tested through the separate `pixi.js-v7` dependency and
-`pixi-native/webgl-pixi7` export. Run the isolated scene demo with
+PixiJS 7 is available through `pixi-native/v7`; application code never imports
+the internal `pixi.js-v7` alias. Run the isolated scene demo with
 `pnpm dev:webgl7`; it contains the same nine scene slots as the Pixi 8 demo,
 with Pixi 7-specific Graphics, text, sprite, particle, and native media
 adaptations. Use number keys `1`–`9` or left/right to navigate.
-That entrypoint exports the same `createNativePixiApplication()` name for a
-managed PixiJS 7 WebGL application; its existing `createPixiWebGL7()` low-level
-factory is unchanged.
+Both versioned entrypoints expose the compact `createApp()`, `createRenderer()`,
+`App`, `AppOptions`, `RendererResult`, `RendererOptions`, and `VideoSprite`
+names. Low-level Node/native implementation types are not part of these
+facades.
 
 ## Requirements
 
@@ -172,10 +172,12 @@ Install the tarball together with the PixiJS 8 peer dependency:
 pnpm add ./artifacts/pixi-native-0.1.0.tgz pixi.js@8.20.0
 ```
 
-The single x64 package contains Windows and Linux GPU/video bindings plus the
-Windows modal-window and native-audio bindings. Runtime loader selection is
-platform-specific. PixiJS 7 is installed under the separate `pixi.js-v7`
-alias for the `pixi-native/webgl-pixi7` entrypoint. Windows includes the staged
+The x64 package currently contains the Windows GPU binding, Windows and Linux
+video bindings, and the Windows modal-window and native-audio bindings. Linux
+WebGPU reports an explicit unsupported-platform error until its new
+`pixi_native_gpu.node` addon is built and added to the distribution. Linux
+WebGL remains available. The package owns its internal PixiJS 7 alias for the
+`pixi-native/v7` entrypoint. Windows includes the staged
 minimal LGPL FFmpeg and FFprobe runtime. Linux FFmpeg is not bundled yet; set
 `FFMPEG_PATH` or make `ffmpeg` and `ffprobe` available in `PATH` there.
 
@@ -301,4 +303,4 @@ Scenes are selected with `1`–`8`: Graphics, Sprite, Text, BitmapText, Video, A
 
 ## Current limitations
 
-The checked-in GPU addon targets Linux x64 and Vulkan. Windows x64 builds its own ignored D3D12 addon from the pinned source. Native video currently supports Windows x64 and Linux x64 through WebGPU and WebGL2. Video output is normalized SDR BT.709 limited NV12; source color metadata, HDR, direct D3D11/VA-API surface import, Howler spatial audio, and native compressed-audio decoding are not implemented. Audio decoding and pitch-preserving video rate changes currently require FFmpeg. Live video is non-seekable, has infinite duration, and intentionally supports only playback rate 1. The native window, renderer, ticker, Sprite, Graphics, Text, BitmapText, video, and audio paths are isolated from the desktop host runtime; there is no WebView fallback.
+The distributed GPU addon currently targets Windows x64 and D3D12. Linux x64 WebGPU is temporarily unsupported until the project-owned Vulkan addon is built; the legacy checked-in `dawn.node` is not packaged because it does not implement the new native context API. Native video currently supports Windows x64 and Linux x64, including the WebGL2 path on Linux. Video output is normalized SDR BT.709 limited NV12; source color metadata, HDR, direct D3D11/VA-API surface import, Howler spatial audio, and native compressed-audio decoding are not implemented. Audio decoding and pitch-preserving video rate changes currently require FFmpeg. Live video is non-seekable, has infinite duration, and intentionally supports only playback rate 1. The native window, renderer, ticker, Sprite, Graphics, Text, BitmapText, video, and audio paths are isolated from the desktop host runtime; there is no WebView fallback.

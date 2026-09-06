@@ -28,7 +28,11 @@ import {
 } from "../ManagedNativeApplication.ts";
 import { installWebGlImageUploadAdapter } from "../webglImageUpload.ts";
 
-export interface PixiWebGL7Result {
+export type RendererOptions = NodeRendererOptions;
+
+export type AppOptions = RendererOptions;
+
+export interface RendererResult {
   readonly app: Application;
   readonly native: {
     readonly window: NodeWindowHandle;
@@ -40,14 +44,14 @@ export interface PixiWebGL7Result {
   };
 }
 
-export type NativePixiApplication7 = ManagedNativeApplication<
+export type App = ManagedNativeApplication<
   Application,
-  PixiWebGL7Result["native"]
+  RendererResult["native"]
 >;
 
-export async function createPixiWebGL7(
-  options: NodeRendererOptions = {},
-): Promise<PixiWebGL7Result> {
+export async function createRenderer(
+  options: RendererOptions = {},
+): Promise<RendererResult> {
   const windowOptions = resolveNodeRendererOptions(
     options,
     "PixiJS 7 Native Node WebGL",
@@ -312,10 +316,8 @@ export async function createPixiWebGL7(
 }
 
 /** Creates a self-running Pixi 7 application on the native WebGL surface. */
-export async function createNativePixiApplication(
-  options: NodeRendererOptions = {},
-): Promise<NativePixiApplication7> {
-  const { app, native } = await createPixiWebGL7(options);
+export async function createApp(options: AppOptions = {}): Promise<App> {
+  const { app, native } = await createRenderer(options);
   return manageNativeApplication({
     app,
     native,

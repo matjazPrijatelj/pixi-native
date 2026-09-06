@@ -2,6 +2,16 @@
 
 ## 2026-09-06
 
+- Replaced the mixed unversioned renderer exports with explicit
+  `pixi-native/v7` and `pixi-native/v8` facades. Both expose the matching Pixi
+  API through compact `createApp`, `createRenderer`, and `VideoSprite` names;
+  the former root, WebGPU, WebGL, and WebGL7 package paths are intentionally
+  removed. PixiJS 7 is now an internal dependency, and its adapter no longer
+  loads PixiJS 8 while installing the native environment.
+- Allowed distribution packaging to proceed while the replacement Linux GPU
+  addon is pending. The package excludes the incompatible legacy `dawn.node`,
+  keeps Linux WebGL/video support, and reports Linux WebGPU as unsupported when
+  its project-owned `pixi_native_gpu.node` binding is absent.
 - Replaced the patched Dawn Node module with the project-owned
   `pixi_native_gpu.node` addon. It links Dawn's native and Node interop targets
   but atomically owns `Instance`, `Adapter`, `Device`, and surface creation, so

@@ -34,13 +34,13 @@
     "@node-3d/core": "6.3.0",
     "@node-3d/glfw": "7.3.1",
     "native-gles": "0.6.1",
+    "pixi.js-v7": "npm:pixi.js@7.4.3",
     "webgl-node": "1.5.1"
   },
   "devDependencies": {
     "@types/node": "22.15.21",
     "gsap": "^3.15.0",
     "pixi.js": "8.20.0",
-    "pixi.js-v7": "npm:pixi.js@7.4.3",
     "prettier": "3.2.5",
     "typescript": "7.0.2"
   },
@@ -66,7 +66,6 @@
     "native/gpu/package.json",
     "native/gpu/src/*.js",
     "native/gpu/src/*.d.ts",
-    "native/gpu/dist/linux-x64",
     "native/gpu/dist/win32-x64",
     "native/window/package.json",
     "native/window/binding-path.js",
@@ -88,24 +87,14 @@
     "HISTORY.md",
     "THIRD_PARTY_NOTICES.md"
   ],
-  "main": "./dist/pixi-native/index.js",
-  "types": "./dist/pixi-native/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/pixi-native/index.d.ts",
-      "default": "./dist/pixi-native/index.js"
+    "./v7": {
+      "types": "./dist/pixi-native/v7.d.ts",
+      "default": "./dist/pixi-native/v7.js"
     },
-    "./webgpu": {
-      "types": "./dist/pixi-native/webgpu/index.d.ts",
-      "default": "./dist/pixi-native/webgpu/index.js"
-    },
-    "./webgl": {
-      "types": "./dist/pixi-native/webgl/index.d.ts",
-      "default": "./dist/pixi-native/webgl/index.js"
-    },
-    "./webgl-pixi7": {
-      "types": "./dist/pixi-native/webgl-v7/index.d.ts",
-      "default": "./dist/pixi-native/webgl-v7/index.js"
+    "./v8": {
+      "types": "./dist/pixi-native/v8.d.ts",
+      "default": "./dist/pixi-native/v8.js"
     },
     "./audio": {
       "types": "./dist/pixi-native/audio/index.d.ts",
@@ -121,14 +110,10 @@
     }
   },
   "peerDependencies": {
-    "pixi.js": ">=8.20.0 <9",
-    "pixi.js-v7": "npm:pixi.js@7.4.3"
+    "pixi.js": ">=8.20.0 <9"
   },
   "peerDependenciesMeta": {
     "pixi.js": {
-      "optional": true
-    },
-    "pixi.js-v7": {
       "optional": true
     }
   }

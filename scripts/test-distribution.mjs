@@ -29,12 +29,8 @@ try {
     packageManager: "pnpm@9.15.9",
     dependencies: {
       "pixi-native": toFileSpecifier(archivePath),
-      "pixi.js": toFileSpecifier(
-        resolve(repositoryRoot, "node_modules/pixi.js"),
-      ),
-      typescript: toFileSpecifier(
-        resolve(repositoryRoot, "node_modules/typescript"),
-      ),
+      "pixi.js": "8.20.0",
+      typescript: "7.0.2",
     },
   };
   await writeFile(
@@ -49,16 +45,15 @@ try {
       'import { createRequire } from "node:module";',
       'import { basename, dirname, join } from "node:path";',
       "const entrypoints = [",
-      '    "pixi-native",',
-      '    "pixi-native/webgpu",',
-      '    "pixi-native/webgl",',
-      '    "pixi-native/webgl-pixi7",',
       '    "pixi-native/audio",',
       '    "pixi-native/video",',
       '    "pixi-native/files",',
       "];",
       "for (const entrypoint of entrypoints) await import(entrypoint);",
-      'const packageRequire = createRequire(import.meta.resolve("pixi-native"));',
+      'for (const removed of ["pixi-native", "pixi-native/webgpu", "pixi-native/webgl", "pixi-native/webgl-pixi7"]) {',
+      "    await assert.rejects(import(removed), (error) => error?.code === \"ERR_PACKAGE_PATH_NOT_EXPORTED\");",
+      "}",
+      'const packageRequire = createRequire(import.meta.resolve("pixi-native/files"));',
       'const nativeGlesDirectory = join(dirname(packageRequire.resolve("native-gles")), "dist");',
       'for (const file of ["gles.node", "libEGL.dll", "libGLESv2.dll"]) {',
       "    assert.equal(existsSync(join(nativeGlesDirectory, file)), true, `Missing ANGLE runtime ${file}`);",
@@ -71,6 +66,32 @@ try {
       "}",
       "console.log(`Imported ${entrypoints.length} package entrypoints.`);",
       'if (process.platform === "win32") console.log(bundledFfmpeg);',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(testDirectory, "smoke-v7.mjs"),
+    [
+      'import assert from "node:assert/strict";',
+      'import { VERSION, VideoSprite, createApp, createRenderer } from "pixi-native/v7";',
+      'assert.match(VERSION, /^7\\./);',
+      'assert.equal(typeof VideoSprite, "function");',
+      'assert.equal(typeof createApp, "function");',
+      'assert.equal(typeof createRenderer, "function");',
+      'console.log(`Imported Pixi ${VERSION} through pixi-native/v7.`);',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(testDirectory, "smoke-v8.mjs"),
+    [
+      'import assert from "node:assert/strict";',
+      'import { VERSION, VideoSprite, createApp, createRenderer } from "pixi-native/v8";',
+      'assert.match(VERSION, /^8\\./);',
+      'assert.equal(typeof VideoSprite, "function");',
+      'assert.equal(typeof createApp, "function");',
+      'assert.equal(typeof createRenderer, "function");',
+      'console.log(`Imported Pixi ${VERSION} through pixi-native/v8.`);',
       "",
     ].join("\n"),
   );
@@ -95,14 +116,12 @@ try {
   await writeFile(
     join(testDirectory, "smoke.ts"),
     [
-      'import { createPixiRenderer } from "pixi-native";',
-      'import { createPixiWebGPU } from "pixi-native/webgpu";',
-      'import { createPixiWebGL } from "pixi-native/webgl";',
-      'import { createPixiWebGL7 } from "pixi-native/webgl-pixi7";',
+      'import { Container as Container7, VideoSprite as VideoSprite7, createApp as createApp7, createRenderer as createRenderer7 } from "pixi-native/v7";',
+      'import { Container as Container8, VideoSprite as VideoSprite8, createApp as createApp8, createRenderer as createRenderer8 } from "pixi-native/v8";',
       'import { Howl } from "pixi-native/audio";',
       'import { NativeVideo } from "pixi-native/video";',
       'import { createModuleFileAccess } from "pixi-native/files";',
-      "void [createPixiRenderer, createPixiWebGPU, createPixiWebGL, createPixiWebGL7, Howl, NativeVideo, createModuleFileAccess];",
+      "void [Container7, VideoSprite7, createApp7, createRenderer7, Container8, VideoSprite8, createApp8, createRenderer8, Howl, NativeVideo, createModuleFileAccess];",
       "",
     ].join("\n"),
   );
@@ -133,6 +152,8 @@ try {
     encoding: "utf8",
   });
   process.stdout.write(smokeOutput);
+  execSync("node smoke-v7.mjs", { cwd: testDirectory, stdio: "inherit" });
+  execSync("node smoke-v8.mjs", { cwd: testDirectory, stdio: "inherit" });
   execSync("node displays/example/dist/file-smoke.mjs", {
     cwd: testDirectory,
     stdio: "inherit",

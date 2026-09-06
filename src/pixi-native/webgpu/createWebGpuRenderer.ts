@@ -1,4 +1,4 @@
-import { Application, VERSION } from "pixi.js";
+import { Application, DOMAdapter, VERSION } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
 import { NodeDOMAdapter, normalizeRefreshRate } from "../NodeDOMAdapter.ts";
@@ -200,7 +200,7 @@ export async function createWebGpuRenderer(
     resolveAnimationFrameRate(windowOptions, refreshRateHz),
     waitForPresent,
   );
-  domAdapter.install();
+  domAdapter.installPixi8(DOMAdapter);
   const modalController = createModalFrameController(
     (window as any)._native.gpu,
     () => {

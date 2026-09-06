@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { BitmapFont, Sprite, Texture } from "pixi.js";
+import { BitmapFont, DOMAdapter, Sprite, Texture } from "pixi.js";
 import { gsap } from "gsap";
 import {
     DYNAMIC_BITMAP_FONT_NAME,
@@ -13,7 +13,7 @@ import { disposeDemoScene } from "../v8/sceneLifecycle.ts";
 import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
 
 test("Sprite scene adds and removes animated batches without leaking tweens", () => {
-    new NodeDOMAdapter({} as never).install();
+    new NodeDOMAdapter({} as never).installPixi8(DOMAdapter);
     installDynamicBitmapTextFont();
     const baselineTweens = gsap.globalTimeline.getChildren(true, true, true).length;
     try {

@@ -12,16 +12,15 @@ if (!(globalThis as any).navigator) {
     configurable: true,
   });
 }
-const { Assets, BitmapFont, Texture } = await import("pixi.js");
+const { Assets, BitmapFont, Texture, createApp } = await import(
+  "../../pixi-native/v8.ts"
+);
 const backend = process.argv[2];
 if (backend !== "webgpu" && backend !== "webgl") {
   throw new Error("Choose a renderer with `pnpm dev:webgpu` or `pnpm dev:webgl`");
 }
-const { createNativePixiApplication } = await import(
-  "../../pixi-native/createPixiRenderer.ts"
-);
 const { app, native, destroy, addDestroyListener } =
-  await createNativePixiApplication({
+  await createApp({
     ...DEMO_WINDOW_OPTIONS,
     backend,
   });

@@ -1,4 +1,3 @@
-import { DOMAdapter } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
@@ -13,6 +12,10 @@ type NativeImageConstructor = new () => {
 };
 
 type NativeWebGLRenderingContextConstructor = { prototype: object };
+
+type Pixi8DomAdapterRegistry = {
+  set(adapter: unknown): void;
+};
 
 export interface NativeMouseEventData {
   readonly type: string;
@@ -262,10 +265,9 @@ export class NodeDOMAdapter {
     }
   }
 
-  public install(): void {
+  private installEnvironment(): void {
     const canvas2d = new NodeCanvas().getContext("2d");
     if (!canvas2d) throw new Error("Native Canvas2D backend is unavailable");
-    DOMAdapter.set(this as never);
     const globalObject = globalThis as any;
     // Pixi 7's Assets image parser constructs `new Image()` directly
     // instead of going through the adapter. Keep that constructor aligned
@@ -385,10 +387,16 @@ export class NodeDOMAdapter {
     this.installFrameScheduler();
   }
 
+  /** Installs this adapter through Pixi 8's DOM adapter registry. */
+  public installPixi8(registry: Pixi8DomAdapterRegistry): void {
+    this.installEnvironment();
+    registry.set(this);
+  }
+
   /** Installs this adapter for Pixi 7's settings-based environment API. */
   public installPixi7(settings: { ADAPTER: unknown }): void {
     this.usePixi7CanvasAdapter = true;
-    this.install();
+    this.installEnvironment();
     this.patchPixi7Document();
     settings.ADAPTER = this;
   }

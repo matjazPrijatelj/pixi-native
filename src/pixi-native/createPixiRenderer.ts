@@ -30,39 +30,38 @@ export interface NodeRendererContext {
 
 export type RendererBackend = "webgpu" | "webgl";
 
-export interface PixiRendererResult {
+export interface RendererResult {
     readonly app: Application;
     readonly native: NodeRendererContext;
 }
 
-export interface NativePixiApplicationOptions extends NodeRendererOptions {
+export interface RendererOptions extends NodeRendererOptions {
     readonly backend?: RendererBackend;
 }
 
-export type NativePixiApplication = ManagedNativeApplication<
+export type AppOptions = RendererOptions;
+
+export type App = ManagedNativeApplication<
     Application,
     NodeRendererContext
 >;
 
 /** Selects one explicit backend; backend implementations own their startup details. */
-export async function createPixiRenderer(
-    backend: RendererBackend = "webgpu",
-    options: NodeRendererOptions = {},
-): Promise<PixiRendererResult> {
+export async function createRenderer(
+    options: RendererOptions = {},
+): Promise<RendererResult> {
+    const { backend = "webgpu", ...rendererOptions } = options;
     switch (backend) {
         case "webgpu":
-            return createWebGpuRenderer(options);
+            return createWebGpuRenderer(rendererOptions);
         case "webgl":
-            return createWebGlRenderer(options);
+            return createWebGlRenderer(rendererOptions);
     }
 }
 
 /** Creates a self-running Pixi 8 application on one native renderer backend. */
-export async function createNativePixiApplication(
-    options: NativePixiApplicationOptions = {},
-): Promise<NativePixiApplication> {
-    const { backend = "webgpu", ...rendererOptions } = options;
-    const { app, native } = await createPixiRenderer(backend, rendererOptions);
+export async function createApp(options: AppOptions = {}): Promise<App> {
+    const { app, native } = await createRenderer(options);
 
     return manageNativeApplication({
         app,

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { DOMAdapter } from "pixi.js";
 import {
   createNativeKeyboardEvent,
   createNativeMouseEvent,
@@ -794,7 +795,7 @@ test("NodeDOMAdapter installs a file location for Pixi 7 image loading", () => {
     const previousLocation = globalObject.location;
     delete globalObject.location;
     const adapter = new NodeDOMAdapter({} as never);
-    adapter.install();
+    adapter.installPixi8(DOMAdapter);
     const installedLocation = (globalThis as unknown as {
         location?: { protocol: string };
     }).location;
@@ -875,7 +876,7 @@ test("NodeGPUCanvas dispatches native mouse events to registered listeners", () 
 
 test("NodeDOMAdapter dispatches native keyboard events to global listeners", () => {
   const adapter = new NodeDOMAdapter({} as never);
-  adapter.install();
+  adapter.installPixi8(DOMAdapter);
   let received: Event | undefined;
   const listener = (event: Event): void => {
     received = event;
@@ -901,7 +902,7 @@ test("NodeDOMAdapter dispatches native keyboard events to global listeners", () 
 
 test("NodeDOMAdapter disposal clears native global event listeners", () => {
   const adapter = new NodeDOMAdapter({} as never);
-  adapter.install();
+  adapter.installPixi8(DOMAdapter);
   let calls = 0;
   globalThis.addEventListener("keydown", () => calls++);
 

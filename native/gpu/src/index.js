@@ -3,7 +3,10 @@ const { getBindingPath } = require('./binding-path.js')
 
 const bindingPath = getBindingPath()
 if (!Fs.existsSync(bindingPath)) {
-	throw new Error(`Native GPU addon not found for ${process.platform}-${process.arch}. Run pnpm native:build.`)
+	throw new Error(
+		`Native WebGPU is not supported by this pixi-native distribution for ${process.platform}-${process.arch}: ` +
+		'pixi_native_gpu.node is not included.',
+	)
 }
 const binding = require(bindingPath)
 
