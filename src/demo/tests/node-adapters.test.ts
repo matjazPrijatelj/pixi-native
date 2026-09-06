@@ -13,6 +13,7 @@ import { NodeGLCanvas } from "../../pixi-native/NodeGLCanvas.ts";
 import { NodeGLWindow } from "../../pixi-native/NodeGLWindow.ts";
 import { copyRgbaRowsFlippedY } from "../../pixi-native/rgbaUpload.ts";
 import { sliceWebGlBufferData } from "../../pixi-native/webglBufferUpload.ts";
+import { installWebGlMultisampleScreen } from "../../pixi-native/webglMultisampleScreen.ts";
 import {
   installWebGlImageUploadAdapter,
   type WebGlImageUploadContext,
@@ -225,6 +226,131 @@ test("WebGL buffer upload copies are compact and independent", () => {
 
   data[1] = 99;
   assert.deepEqual([...sliced], [1, 2, 3]);
+});
+
+test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () => {
+  const FRAMEBUFFER = 0x8d40;
+  const DRAW_FRAMEBUFFER = 0x8ca9;
+  const READ_FRAMEBUFFER = 0x8ca8;
+  const FRAMEBUFFER_BINDING = 0x8ca6;
+  const DRAW_FRAMEBUFFER_BINDING = 0x8ca6;
+  const READ_FRAMEBUFFER_BINDING = 0x8caa;
+  const RENDERBUFFER_BINDING = 0x8ca7;
+  const MAX_SAMPLES = 0x8d57;
+  const FRAMEBUFFER_COMPLETE = 0x8cd5;
+  const framebuffers = [{ name: "first" }, { name: "resized" }];
+  const renderbuffers = [
+    { name: "first-color" },
+    { name: "first-depth" },
+    { name: "resized-color" },
+    { name: "resized-depth" },
+  ];
+  const storageCalls: Array<[number, number, number]> = [];
+  const blits: number[][] = [];
+  const deletedFramebuffers: unknown[] = [];
+  const deletedRenderbuffers: unknown[] = [];
+  let drawFramebuffer: unknown = null;
+  let readFramebuffer: unknown = null;
+  let renderbuffer: unknown = null;
+
+  const context = {
+    FRAMEBUFFER,
+    DRAW_FRAMEBUFFER,
+    READ_FRAMEBUFFER,
+    FRAMEBUFFER_BINDING,
+    DRAW_FRAMEBUFFER_BINDING,
+    READ_FRAMEBUFFER_BINDING,
+    RENDERBUFFER_BINDING,
+    RENDERBUFFER: 0x8d41,
+    MAX_SAMPLES,
+    RGBA8: 0x8058,
+    DEPTH24_STENCIL8: 0x88f0,
+    COLOR_ATTACHMENT0: 0x8ce0,
+    DEPTH_STENCIL_ATTACHMENT: 0x821a,
+    FRAMEBUFFER_COMPLETE,
+    COLOR_BUFFER_BIT: 0x4000,
+    NEAREST: 0x2600,
+    createFramebuffer: () => framebuffers.shift() ?? null,
+    deleteFramebuffer: (value: unknown) => deletedFramebuffers.push(value),
+    createRenderbuffer: () => renderbuffers.shift() ?? null,
+    deleteRenderbuffer: (value: unknown) => deletedRenderbuffers.push(value),
+    bindFramebuffer(target: number, value: unknown) {
+      if (target === FRAMEBUFFER || target === DRAW_FRAMEBUFFER) {
+        drawFramebuffer = value;
+      }
+      if (target === FRAMEBUFFER || target === READ_FRAMEBUFFER) {
+        readFramebuffer = value;
+      }
+    },
+    bindRenderbuffer: (_target: number, value: unknown) => {
+      renderbuffer = value;
+    },
+    getParameter(parameter: number) {
+      if (parameter === MAX_SAMPLES) return 8;
+      if (
+        parameter === FRAMEBUFFER_BINDING ||
+        parameter === DRAW_FRAMEBUFFER_BINDING
+      ) {
+        return drawFramebuffer;
+      }
+      if (parameter === READ_FRAMEBUFFER_BINDING) return readFramebuffer;
+      if (parameter === RENDERBUFFER_BINDING) return renderbuffer;
+      return null;
+    },
+    getContextAttributes: () => ({ antialias: false }),
+    renderbufferStorageMultisample(
+      _target: number,
+      samples: number,
+      _format: number,
+      width: number,
+      height: number,
+    ) {
+      storageCalls.push([samples, width, height]);
+    },
+    framebufferRenderbuffer() {},
+    checkFramebufferStatus() {
+      return FRAMEBUFFER_COMPLETE;
+    },
+    blitFramebuffer(...args: number[]) {
+      blits.push(args);
+    },
+  } as unknown as WebGL2RenderingContext;
+
+  const screen = installWebGlMultisampleScreen(context, 320, 180);
+  assert.equal(context.getContextAttributes()?.antialias, true);
+  assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
+  assert.deepEqual(storageCalls, [
+    [4, 320, 180],
+    [4, 320, 180],
+  ]);
+
+  const customFramebuffer = { name: "custom" } as unknown as WebGLFramebuffer;
+  context.bindFramebuffer(context.FRAMEBUFFER, customFramebuffer);
+  assert.equal(
+    context.getParameter(context.FRAMEBUFFER_BINDING),
+    customFramebuffer,
+  );
+  context.bindFramebuffer(context.FRAMEBUFFER, null);
+
+  screen.resolve();
+  assert.deepEqual(blits, [
+    [0, 0, 320, 180, 0, 0, 320, 180, context.COLOR_BUFFER_BIT, context.NEAREST],
+  ]);
+  assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
+
+  screen.resize(640, 360);
+  assert.deepEqual(storageCalls.slice(2), [
+    [4, 640, 360],
+    [4, 640, 360],
+  ]);
+  assert.equal(deletedFramebuffers.length, 1);
+  assert.equal(deletedRenderbuffers.length, 2);
+  assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
+
+  screen.destroy();
+  assert.equal(context.getContextAttributes()?.antialias, false);
+  assert.equal(deletedFramebuffers.length, 2);
+  assert.equal(deletedRenderbuffers.length, 4);
 });
 
 test("ANGLE adapter converts Pixi image-source uploads to premultiplied RGBA", () => {

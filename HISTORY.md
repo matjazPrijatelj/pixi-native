@@ -427,3 +427,7 @@
 - Added a modal-frame listener for the independent GSAP ticker so Sprite animations advance with Graphics during WebGL window dragging and resizing.
 - Connected the native Windows modal-frame controller to PixiJS 8 WebGL and PixiJS 7 WebGL7, keeping RAF-driven animations running while the window is moved or resized.
 - Added animated stencil masks to the PixiJS 7 video test and fixed PixiJS 8 mask toggling so the ellipse remains mask-only and is never rendered as a white shape.
+
+## 2026-09-06
+
+- Added a shared 4x MSAA screen framebuffer and resolve step to the Windows ANGLE surface used by PixiJS 7 and PixiJS 8 WebGL, replacing the non-multisampled default framebuffer that left Graphics edges visibly jagged.

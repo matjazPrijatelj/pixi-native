@@ -4,6 +4,7 @@ import type { NodeRenderSurface, NodeWindowHandle } from "./nativeTypes.ts";
 import { NodeGLCanvas } from "./NodeGLCanvas.ts";
 import { setNativeWindowTransparent } from "./ModalFrameController.ts";
 import type { ResolvedNodeRendererOptions } from "./windowOptions.ts";
+import { installWebGlMultisampleScreen } from "./webglMultisampleScreen.ts";
 
 class WebGLRenderingContext {}
 
@@ -64,6 +65,12 @@ export async function createWindowsAngleWebGLSurface(
       throw new Error("ANGLE could not configure the EGL swap interval");
     }
 
+    const multisampleScreen = installWebGlMultisampleScreen(
+      context.gl as WebGL2RenderingContext,
+      window.pixelWidth,
+      window.pixelHeight,
+    );
+
     const canvas = new NodeGLCanvas(
       context.gl,
       window.pixelWidth,
@@ -71,6 +78,7 @@ export async function createWindowsAngleWebGLSurface(
       (width, height) => {
         context.makeCurrent?.();
         context.resize(width, height);
+        multisampleScreen.resize(width, height);
       },
     );
     context.gl.canvas = canvas as unknown as HTMLCanvasElement;
@@ -105,6 +113,7 @@ export async function createWindowsAngleWebGLSurface(
       resize: (width, height) => canvas.resize(width, height),
       swap: () => {
         context.makeCurrent?.();
+        multisampleScreen.resolve();
         if (!context.swapBuffers?.()) {
           throw new Error("ANGLE eglSwapBuffers failed");
         }
@@ -113,6 +122,7 @@ export async function createWindowsAngleWebGLSurface(
         if (destroyed) return;
         destroyed = true;
         context.makeCurrent?.();
+        multisampleScreen.destroy();
         context.destroy();
       },
     };
