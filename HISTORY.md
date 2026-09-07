@@ -1,5 +1,12 @@
 # Development history
 
+## 2026-09-07
+
+- Fixed video-only playback running too quickly during Windows window dragging
+  and resizing. Modal rendering now starts the monotonic file clock as soon as
+  the decoder has a frame, without resetting it when asynchronous prebuffering
+  completes.
+
 ## 2026-09-06
 
 - Added right-side packed-alpha NV12 rendering to the public PixiJS 7 and 8

@@ -886,6 +886,9 @@ export class NativeVideo extends EventTarget {
             return null;
         }
 
+        if (!this.shouldUseAudio() && this.decoder.isReady()) {
+            this.ensureFilePlaybackClock(this.positionSeconds);
+        }
         const synchronizationTime = this.audio && !this.audio.ended
             ? this.audio.currentTime
             : this.filePlaybackClockTime();
@@ -1007,7 +1010,7 @@ export class NativeVideo extends EventTarget {
         if (!ready) return;
         if (this.shouldUseAudio()) await this.startAudio(startTime, generation);
         if (!this.audio && this.isPlaybackGenerationActive(generation)) {
-            this.startFilePlaybackClock(startTime);
+            this.ensureFilePlaybackClock(startTime);
         }
     }
 
@@ -1036,7 +1039,8 @@ export class NativeVideo extends EventTarget {
         return generation === this.playbackGeneration && !this.destroyed && !this.isPaused;
     }
 
-    private startFilePlaybackClock(startTime: number): void {
+    private ensureFilePlaybackClock(startTime: number): void {
+        if (this.playbackClockStartedAtMs !== undefined) return;
         this.playbackClockStartSeconds = startTime;
         this.playbackClockStartedAtMs = performance.now();
     }

@@ -410,6 +410,28 @@ test("NativeVideo without audio presents file frames on its monotonic clock", as
   assert.equal(video.stats.queuedFrames, 0);
 });
 
+test("video-only modal rendering starts the clock before decoder-ready polling completes", async () => {
+  const factory = new FakeDecoderFactory();
+  factory.decoderReady = false;
+  const video = new NativeVideo(
+    "video.mp4",
+    { width: 2, height: 2, audio: false },
+    factory,
+  );
+
+  const playback = video.play();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const decoder = factory.decoders[0];
+  decoder.ready = true;
+  decoder.enqueue(createFrame(0), createFrame(10_000_000));
+
+  assert.equal(video.takeLatestFrame()?.timestampUs, 0);
+  assert.ok(video.currentTime < 1);
+  await playback;
+  assert.ok(video.currentTime < 1);
+  video.destroy();
+});
+
 test("NativeVideo dispatches Electron-compatible events and loops without ended", async () => {
   const factory = new FakeDecoderFactory();
   const video = new NativeVideo(
@@ -598,10 +620,12 @@ test("VideoFpsMeter reports measured FPS after its sample window", () => {
 class FakeDecoderFactory implements NativeVideoDependencies {
   public readonly options: NativeVideoDecoderOptions[] = [];
   public readonly decoders: FakeDecoder[] = [];
+  public decoderReady = true;
 
   public createDecoder(options: NativeVideoDecoderOptions): FakeDecoder {
     this.options.push(options);
     const decoder = new FakeDecoder();
+    decoder.ready = this.decoderReady;
     this.decoders.push(decoder);
     return decoder;
   }
@@ -610,15 +634,6 @@ class FakeDecoderFactory implements NativeVideoDependencies {
 class FakeAudioVideoFactory extends FakeDecoderFactory {
   public readonly audios: FakeAudio[] = [];
   public readonly audioPlaybackRates: number[] = [];
-  public decoderReady = true;
-
-  public override createDecoder(
-    options: NativeVideoDecoderOptions,
-  ): FakeDecoder {
-    const decoder = super.createDecoder(options);
-    decoder.ready = this.decoderReady;
-    return decoder;
-  }
 
   public createAudio(
     _source: string,
