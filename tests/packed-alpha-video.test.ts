@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getPackedAlphaVideoLayout } from "../src/pixi-native/video/packedAlpha.ts";
+import { getPackedAlphaVideoLayout } from "@pixi-native/core/video/packedAlpha.js";
 
 test("packed alpha layout resolves the reference 1280 plus 640 frame", () => {
     assert.deepEqual(getPackedAlphaVideoLayout(1920, 768, 0.5), {

@@ -1,21 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import * as canvas from "../src/pixi-native/canvas.ts";
-import * as runtime from "../src/pixi-native/runtime.ts";
-import * as v7 from "../src/pixi-native/v7.ts";
-import * as v8 from "../src/pixi-native/v8.ts";
+import * as canvas from "@pixi-native/pixi8/canvas";
+import * as runtime from "@pixi-native/pixi8/runtime";
+import * as v7 from "@pixi-native/pixi7";
+import * as v8 from "@pixi-native/pixi8";
 
-test("versioned facades expose compact APIs for the matching Pixi major", () => {
+test("version packages expose compact APIs for their matching Pixi major", () => {
   assert.match(v7.VERSION, /^7\./);
   assert.match(v8.VERSION, /^8\./);
-
   for (const facade of [v7, v8]) {
     assert.equal(typeof facade.createApp, "function");
     assert.equal(typeof facade.createRenderer, "function");
     assert.equal(typeof facade.VideoSprite, "function");
-    assert.equal("createNativePixiApplication" in facade, false);
-    assert.equal("createPixiRenderer" in facade, false);
+    assert.equal(typeof facade.NativeVideo, "function");
+    assert.equal(typeof facade.VideoFpsMeter, "function");
   }
 });
 
@@ -28,18 +27,20 @@ test("runtime and canvas expose their public compatibility adapters", () => {
   assert.equal(typeof canvas.prepareRgbaPixelsForUpload, "function");
 });
 
-test("package exports only supported public entrypoints", async () => {
-  const packageJson = JSON.parse(
-    await readFile(new URL("../package.json", import.meta.url), "utf8"),
-  ) as { exports: Record<string, unknown> };
-
-  assert.deepEqual(Object.keys(packageJson.exports), [
-    "./v7",
-    "./v8",
-    "./audio",
-    "./video",
-    "./files",
-    "./runtime",
-    "./canvas",
-  ]);
+test("version packages expose the same supported public entrypoints", async () => {
+  for (const packageName of ["pixi7", "pixi8"]) {
+    const packageJson = JSON.parse(
+      await readFile(
+        new URL(`../packages/${packageName}/package.json`, import.meta.url),
+        "utf8",
+      ),
+    ) as { exports: Record<string, unknown> };
+    assert.deepEqual(Object.keys(packageJson.exports), [
+      ".",
+      "./audio",
+      "./files",
+      "./runtime",
+      "./canvas",
+    ]);
+  }
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { manageNativeApplication } from "../src/pixi-native/application/ManagedNativeApplication.ts";
+import { manageNativeApplication } from "@pixi-native/core/application/ManagedNativeApplication.js";
 
 type Callback = () => void;
 type FrameCallback = (timestamp: number) => void;

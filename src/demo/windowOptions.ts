@@ -1,4 +1,4 @@
-import type { NodeRendererOptions } from "../pixi-native/runtime/nativeTypes.ts";
+import type { NodeRendererOptions } from "@pixi-native/core/runtime/nativeTypes.js";
 
 export const DEMO_WINDOW_OPTIONS = {
   width: 1280,

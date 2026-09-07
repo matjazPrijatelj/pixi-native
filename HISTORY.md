@@ -1,5 +1,17 @@
 # Development history
 
+## 2026-09-08
+
+- Split the distribution into `@pixi-native/pixi7`, `@pixi-native/pixi8`,
+  `@pixi-native/core`, and `@pixi-native/native-win32-x64` workspace packages.
+  Each version package exposes its matching Pixi API with compact `createApp`,
+  `createRenderer`, and `VideoSprite` names while both share one neutral runtime
+  and one platform-native package in the launcher's `node_modules`.
+- Replaced repository-relative native addon and FFmpeg lookup with a validated
+  platform-package resolver. Distribution packing now produces and fresh-tests
+  four checksummed tarballs together, leaving a future Linux package independent
+  from the Pixi major packages.
+
 ## 2026-09-07
 
 - Added deliberate `pixi-native/runtime` and `pixi-native/canvas` public barrels,

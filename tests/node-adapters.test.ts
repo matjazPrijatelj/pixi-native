@@ -7,13 +7,13 @@ import {
   createNativeMouseEvent,
   NodeDOMAdapter,
   normalizeRefreshRate,
-} from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
-import { NodeGPUCanvas } from "../src/pixi-native/canvas/NodeGPUCanvas.ts";
-import { NodeCanvas } from "../src/pixi-native/canvas/NodeCanvas.ts";
-import { NodeGLCanvas } from "../src/pixi-native/canvas/NodeGLCanvas.ts";
-import { NodeGLWindow } from "../src/pixi-native/renderers/webgl/NodeGLWindow.ts";
-import { copyRgbaRowsFlippedY } from "../src/pixi-native/canvas/rgbaUpload.ts";
-import { sliceWebGlBufferData } from "../src/pixi-native/renderers/webgl/webglBufferUpload.ts";
+} from "@pixi-native/core/runtime/NodeDOMAdapter.js";
+import { NodeGPUCanvas } from "@pixi-native/core/canvas/NodeGPUCanvas.js";
+import { NodeCanvas } from "@pixi-native/core/canvas/NodeCanvas.js";
+import { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
+import { NodeGLWindow } from "@pixi-native/core/renderers/webgl/NodeGLWindow.js";
+import { copyRgbaRowsFlippedY } from "@pixi-native/core/canvas/rgbaUpload.js";
+import { sliceWebGlBufferData } from "@pixi-native/core/renderers/webgl/webglBufferUpload.js";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -22,12 +22,12 @@ import {
   resolveNodeRendererOptions,
   resolveWebGpuAntialiasSamples,
   warnAntialiasSampleFallback,
-} from "../src/pixi-native/runtime/windowOptions.ts";
+} from "@pixi-native/core/runtime/windowOptions.js";
 import { DEMO_WINDOW_OPTIONS } from "../src/demo/windowOptions.ts";
 import {
   assertGlfwTransparency,
   requestGlfwTransparency,
-} from "../src/pixi-native/renderers/webgl/glfwTransparency.ts";
+} from "@pixi-native/core/renderers/webgl/glfwTransparency.js";
 
 test("native window options normalize transparency and desktop position", () => {
   assert.deepEqual(resolveNodeRendererOptions({}, "Default title", "win32"), {

@@ -12,8 +12,9 @@ if (!(globalThis as any).navigator) {
     configurable: true,
   });
 }
-const { Assets, BitmapFont, Texture, createApp } = await import(
-  "../../pixi-native/v8.ts"
+const { Assets, BitmapFont, Texture } = await import("pixi.js");
+const { createApp } = await import(
+  "@pixi-native/pixi8"
 );
 const backend = process.argv[2];
 if (backend !== "webgpu" && backend !== "webgl") {
@@ -30,9 +31,9 @@ const [{ gsap }, { installGsapModalBridge }] = await Promise.all([
   import("../gsapModalBridge.ts"),
 ]);
 installGsapModalBridge(native, gsap.ticker, addDestroyListener);
-const { NodeCanvas } = await import("../../pixi-native/canvas/NodeCanvas.ts");
+const { NodeCanvas } = await import("@pixi-native/core/canvas/NodeCanvas.js");
 const { supportsNativeVideo } = await import(
-  "../../pixi-native/runtime/platform.ts"
+  "@pixi-native/core/runtime/platform.js"
 );
 const {
   animateDemoScene,
@@ -52,9 +53,9 @@ const {
 
 const { FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
-const { Howler } = await import("../../pixi-native/audio/index.ts");
+const { Howler } = await import("@pixi-native/core/audio");
 const { copyRgbaRowsFlippedY } = await import(
-  "../../pixi-native/canvas/rgbaUpload.ts"
+  "@pixi-native/core/canvas/rgbaUpload.js"
 );
 const {
   getSceneIndexForKey,

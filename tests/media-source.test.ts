@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseMediaSource, redactMediaSource } from "../src/pixi-native/video/mediaSource.ts";
+import { parseMediaSource, redactMediaSource } from "@pixi-native/core/video/mediaSource.js";
 
 test("media fragments are removed and converted to bounded playback times", () => {
     assert.deepEqual(parseMediaSource("video.mp4#t=1.5,8"), {

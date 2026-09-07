@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, normalize } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { createModuleFileAccess } from "../src/pixi-native/files.ts";
+import { createModuleFileAccess } from "@pixi-native/core/files";
 
 test("module file access resolves relative, absolute, and file URL sources", async () => {
   const root = await mkdtemp(join(tmpdir(), "pixi-native-files-"));

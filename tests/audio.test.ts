@@ -70,7 +70,7 @@ test("drum MP3 atlas maps eight keys to valid sprites and transparent hit region
 test("Howler-compatible sprites overlap and fade through the native mixer", async () => {
     process.env.SDL_AUDIODRIVER = "dummy";
     const { Howl, Howler, nativeAudioEngine } = await import(
-        "../src/pixi-native/audio/index.ts"
+        "@pixi-native/core/audio"
     );
     const howl = new Howl({
         src: [source],
@@ -158,7 +158,7 @@ test("Howler-compatible sprites overlap and fade through the native mixer", asyn
 test("Windows native audio advances while JS is blocked and batches audible events once", {
     skip: process.platform !== "win32" || process.arch !== "x64",
 }, async () => {
-    const { Howl, Howler } = await import("../src/pixi-native/audio/index.ts");
+    const { Howl, Howler } = await import("@pixi-native/core/audio");
     const howl = new Howl({
         src: [source],
         sprite: { blocked: [0, 350] },
@@ -200,7 +200,7 @@ test("Windows streaming audio keeps pace for fifteen seconds without underruns",
     timeout: 25_000,
 }, async () => {
     const { Howl, Howler, nativeAudioEngine } = await import(
-        "../src/pixi-native/audio/index.ts"
+        "@pixi-native/core/audio"
     );
     const videoSource = fileURLToPath(
         new URL("../src/demo/assets/Big_Buck_Bunny_1080_30s.mp4", import.meta.url),
@@ -235,7 +235,7 @@ test("Windows streaming audio keeps pace for fifteen seconds without underruns",
 
 test("Windows native audio binding preflight is platform-specific", async () => {
     const { resolveWindowsNativeAudioBindingPath } = await import(
-        "../src/pixi-native/audio/NativeAudioEngine.ts"
+        "@pixi-native/core/audio/NativeAudioEngine.js"
     );
     assert.throws(
         () => resolveWindowsNativeAudioBindingPath("linux", "x64"),

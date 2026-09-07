@@ -5,6 +5,9 @@ node_modules/
 # Generated build output
 build/
 /dist/
+/packages/*/dist/
+/packages/native-win32-x64/native/
+/packages/native-win32-x64/THIRD_PARTY_NOTICES.md
 /artifacts/
 
 # Coverage and temporary caches

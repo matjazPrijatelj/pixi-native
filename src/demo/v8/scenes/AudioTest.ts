@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { Container, Graphics, Sprite, Text, type Texture } from "pixi.js";
-import { Howl, Howler, nativeAudioEngine } from "../../../pixi-native/audio/index.ts";
+import { Howl, Howler, nativeAudioEngine } from "@pixi-native/core/audio";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 import {
     DRUM_ATLAS,
@@ -223,4 +223,3 @@ export function createAudioTest(
     };
     return scene;
 }
-

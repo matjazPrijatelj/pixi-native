@@ -5,9 +5,9 @@ import {
     disposeDemoScene,
     type DisposableDemoScene,
 } from "../src/demo/v8/sceneLifecycle.ts";
-import { NativeVideo } from "../src/pixi-native/video/index.ts";
-import { NativeVideoSprite } from "../src/pixi-native/video/NativeVideoSprite.ts";
-import { uploadNv12FrameWebGl } from "../src/pixi-native/video/NativeVideoSprite.ts";
+import { NativeVideo } from "@pixi-native/core";
+import { VideoSprite as NativeVideoSprite } from "@pixi-native/pixi8";
+import { uploadNv12FrameWebGl } from "../packages/pixi8/src/VideoSprite.ts";
 
 test("disposing a demo scene releases children and calls dispose once", () => {
     const stage = new Container();

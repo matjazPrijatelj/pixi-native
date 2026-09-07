@@ -8,91 +8,78 @@ import {
   validateFfmpegIdentity,
 } from "./ffmpeg-distribution.mjs";
 
-const archiveArgument = process.argv[2];
-if (!archiveArgument) throw new Error("Expected the packed .tgz path");
+const archiveArguments = process.argv.slice(2);
+if (archiveArguments.length !== 4) {
+  throw new Error("Expected core, pixi7, pixi8, and native package archives");
+}
 
-const archivePath = resolve(archiveArgument);
+const archives = new Map(
+  archiveArguments.map((argument) => {
+    const path = resolve(argument);
+    const filename = basename(path);
+    const key = filename.includes("native-win32-x64")
+      ? "native"
+      : filename.includes("pixi7")
+        ? "pixi7"
+        : filename.includes("pixi8")
+          ? "pixi8"
+          : "core";
+    return [key, path];
+  }),
+);
+for (const key of ["core", "pixi7", "pixi8", "native"]) {
+  if (!archives.has(key)) throw new Error(`Missing ${key} archive`);
+}
+
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryRoot = resolve(repositoryRoot, ".tmp");
 await mkdir(temporaryRoot, { recursive: true });
 const testDirectory = await mkdtemp(
-  join(temporaryRoot, "pixi-native-package-"),
+  join(temporaryRoot, "pixi-native-packages-"),
 );
 const toFileSpecifier = (path) =>
   `file:${relative(testDirectory, path).replaceAll("\\", "/")}`;
 
 try {
   const packageJson = {
-    name: "pixi-native-package-smoke",
+    name: "pixi-native-launcher-smoke",
     private: true,
     type: "module",
     packageManager: "pnpm@9.15.9",
     dependencies: {
-      "pixi-native": toFileSpecifier(archivePath),
-      "pixi.js": "8.20.0",
+      "@pixi-native/core": toFileSpecifier(archives.get("core")),
+      "@pixi-native/pixi7": toFileSpecifier(archives.get("pixi7")),
+      "@pixi-native/pixi8": toFileSpecifier(archives.get("pixi8")),
+      "@pixi-native/native-win32-x64": toFileSpecifier(archives.get("native")),
     },
-    devDependencies: {
-      typescript: "7.0.2",
-    },
+    devDependencies: { typescript: "7.0.2" },
   };
   await writeFile(
     join(testDirectory, "package.json"),
     `${JSON.stringify(packageJson, null, 2)}\n`,
   );
-  await writeFile(
-    join(testDirectory, "smoke.mjs"),
-    [
-      'import assert from "node:assert/strict";',
-      'import { existsSync } from "node:fs";',
-      'import { basename } from "node:path";',
-      "const entrypoints = [",
-      '    "pixi-native/audio",',
-      '    "pixi-native/video",',
-      '    "pixi-native/files",',
-      '    "pixi-native/runtime",',
-      '    "pixi-native/canvas",',
-      "];",
-      "for (const entrypoint of entrypoints) await import(entrypoint);",
-      'for (const removed of ["pixi-native", "pixi-native/webgpu", "pixi-native/webgl", "pixi-native/webgl-pixi7"]) {',
-      "    await assert.rejects(import(removed), (error) => error?.code === \"ERR_PACKAGE_PATH_NOT_EXPORTED\");",
-      "}",
-      'const { resolveFfmpegPath } = await import("pixi-native/video");',
-      "const bundledFfmpeg = resolveFfmpegPath({ environment: {} });",
-      'if (process.platform === "win32") {',
-      '    assert.equal(basename(bundledFfmpeg), "ffmpeg.exe");',
-      "    assert.equal(existsSync(bundledFfmpeg), true);",
-      "}",
-      "console.log(`Imported ${entrypoints.length} package entrypoints.`);",
-      'if (process.platform === "win32") console.log(bundledFfmpeg);',
-      "",
-    ].join("\n"),
-  );
+
   await writeFile(
     join(testDirectory, "smoke-v7.mjs"),
-    [
-      'import assert from "node:assert/strict";',
-      'import { VERSION, VideoSprite, createApp, createRenderer } from "pixi-native/v7";',
-      'assert.match(VERSION, /^7\\./);',
-      'assert.equal(typeof VideoSprite, "function");',
-      'assert.equal(typeof createApp, "function");',
-      'assert.equal(typeof createRenderer, "function");',
-      'console.log(`Imported Pixi ${VERSION} through pixi-native/v7.`);',
-      "",
-    ].join("\n"),
+    createRuntimeSmoke("@pixi-native/pixi7", 7),
   );
   await writeFile(
     join(testDirectory, "smoke-v8.mjs"),
+    createRuntimeSmoke("@pixi-native/pixi8", 8),
+  );
+  await writeFile(
+    join(testDirectory, "smoke-native.mjs"),
     [
       'import assert from "node:assert/strict";',
-      'import { VERSION, VideoSprite, createApp, createRenderer } from "pixi-native/v8";',
-      'assert.match(VERSION, /^8\\./);',
-      'assert.equal(typeof VideoSprite, "function");',
-      'assert.equal(typeof createApp, "function");',
-      'assert.equal(typeof createRenderer, "function");',
-      'console.log(`Imported Pixi ${VERSION} through pixi-native/v8.`);',
+      'import { existsSync } from "node:fs";',
+      'import native from "@pixi-native/native-win32-x64";',
+      'assert.equal(native.target, "win32-x64");',
+      "for (const path of [native.gpuModule, native.windowModule, native.videoModule, native.audioBinding, native.ffmpeg, native.ffprobe]) assert.equal(existsSync(path), true, path);",
+      "console.log(native.ffmpeg);",
       "",
     ].join("\n"),
   );
+
   const displayDirectory = join(testDirectory, "displays", "example");
   await mkdir(join(displayDirectory, "dist"), { recursive: true });
   await mkdir(join(displayDirectory, "assets"), { recursive: true });
@@ -104,24 +91,23 @@ try {
     join(displayDirectory, "dist", "file-smoke.mjs"),
     [
       'import assert from "node:assert/strict";',
-      'import { createModuleFileAccess } from "pixi-native/files";',
+      'import { createModuleFileAccess } from "@pixi-native/pixi8/files";',
       "const files = createModuleFileAccess(import.meta.url);",
       'assert.equal(await files.readText("../assets/config.json"), \'{"renderer":"webgpu"}\\n\');',
-      'assert.deepEqual(await files.readJson("../assets/config.json"), { renderer: "webgpu" });',
       "",
     ].join("\n"),
   );
   await writeFile(
     join(testDirectory, "smoke.ts"),
     [
-      'import { Container as Container7, VideoSprite as VideoSprite7, createApp as createApp7, createRenderer as createRenderer7 } from "pixi-native/v7";',
-      'import { Container as Container8, VideoSprite as VideoSprite8, createApp as createApp8, createRenderer as createRenderer8 } from "pixi-native/v8";',
-      'import { Howl } from "pixi-native/audio";',
-      'import { NativeVideo } from "pixi-native/video";',
-      'import { createModuleFileAccess } from "pixi-native/files";',
-      'import { FrameScheduler } from "pixi-native/runtime";',
-      'import { NodeCanvas } from "pixi-native/canvas";',
-      "void [Container7, VideoSprite7, createApp7, createRenderer7, Container8, VideoSprite8, createApp8, createRenderer8, Howl, NativeVideo, createModuleFileAccess, FrameScheduler, NodeCanvas];",
+      'import { Container as Container7, NativeVideo as NativeVideo7, VideoSprite as VideoSprite7, createApp as createApp7, createRenderer as createRenderer7, type VideoSpriteOptions } from "@pixi-native/pixi7";',
+      'import { Container as Container8, NativeVideo as NativeVideo8, VideoSprite as VideoSprite8, createApp as createApp8, createRenderer as createRenderer8 } from "@pixi-native/pixi8";',
+      'import { Howl } from "@pixi-native/pixi8/audio";',
+      'import { createModuleFileAccess } from "@pixi-native/pixi8/files";',
+      'import { FrameScheduler } from "@pixi-native/pixi8/runtime";',
+      'import { NodeCanvas } from "@pixi-native/pixi8/canvas";',
+      "const options: VideoSpriteOptions = {};",
+      "void [Container7, NativeVideo7, VideoSprite7, createApp7, createRenderer7, Container8, NativeVideo8, VideoSprite8, createApp8, createRenderer8, Howl, createModuleFileAccess, FrameScheduler, NodeCanvas, options];",
       "",
     ].join("\n"),
   );
@@ -147,29 +133,29 @@ try {
     cwd: testDirectory,
     stdio: "inherit",
   });
-  const smokeOutput = execSync("node smoke.mjs", {
+  execSync("node smoke-v7.mjs", { cwd: testDirectory, stdio: "inherit" });
+  execSync("node smoke-v8.mjs", { cwd: testDirectory, stdio: "inherit" });
+  const nativeOutput = execSync("node smoke-native.mjs", {
     cwd: testDirectory,
     encoding: "utf8",
   });
-  process.stdout.write(smokeOutput);
-  execSync("node smoke-v7.mjs", { cwd: testDirectory, stdio: "inherit" });
-  execSync("node smoke-v8.mjs", { cwd: testDirectory, stdio: "inherit" });
+  process.stdout.write(nativeOutput);
   execSync("node displays/example/dist/file-smoke.mjs", {
     cwd: testDirectory,
     stdio: "inherit",
   });
-  if (process.platform === "win32") {
-    const bundledFfmpeg = smokeOutput.trimEnd().split(/\r?\n/).at(-1);
-    const ffmpegDirectory = dirname(bundledFfmpeg);
-    await validateFfmpegChecksums(ffmpegDirectory);
-    await validateFfmpegIdentity(ffmpegDirectory, true);
-    await runFfmpegSmokeTests(
-      ffmpegDirectory,
-      resolve(repositoryRoot, "src/demo/assets/Big_Buck_Bunny_1080_30s.mp4"),
-      resolve(repositoryRoot, "src/demo/assets/audio/howler-test.wav"),
-      resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
-    );
-  }
+
+  const ffmpegPath = nativeOutput.trimEnd().split(/\r?\n/).at(-1);
+  const ffmpegDirectory = dirname(ffmpegPath);
+  await validateFfmpegChecksums(ffmpegDirectory);
+  await validateFfmpegIdentity(ffmpegDirectory, true);
+  await runFfmpegSmokeTests(
+    ffmpegDirectory,
+    resolve(repositoryRoot, "src/demo/assets/Big_Buck_Bunny_1080_30s.mp4"),
+    resolve(repositoryRoot, "src/demo/assets/audio/howler-test.wav"),
+    resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
+  );
+
   execSync("pnpm install --no-frozen-lockfile --ignore-workspace", {
     cwd: testDirectory,
     stdio: "inherit",
@@ -178,7 +164,18 @@ try {
     cwd: testDirectory,
     stdio: "inherit",
   });
-  console.log(`Verified fresh installation of ${basename(archivePath)}.`);
+  console.log("Verified fresh launcher installation with both Pixi majors.");
 } finally {
   await rm(testDirectory, { recursive: true, force: true });
+}
+
+function createRuntimeSmoke(packageName, major) {
+  return [
+    'import assert from "node:assert/strict";',
+    `import { VERSION, NativeVideo, VideoFpsMeter, VideoSprite, createApp, createRenderer } from "${packageName}";`,
+    `assert.match(VERSION, /^${major}\\./);`,
+    'for (const value of [NativeVideo, VideoFpsMeter, VideoSprite, createApp, createRenderer]) assert.equal(typeof value, "function");',
+    `console.log("Imported ${packageName} with Pixi " + VERSION);`,
+    "",
+  ].join("\n");
 }

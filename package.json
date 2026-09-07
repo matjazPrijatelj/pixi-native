@@ -1,7 +1,7 @@
 {
-  "name": "pixi-native",
+  "name": "pixi-native-workspace",
   "version": "0.1.0",
-  "private": false,
+  "private": true,
   "type": "module",
   "author": {
     "name": "MatjazP",
@@ -20,12 +20,11 @@
     "dev:webgpu": "node --enable-source-maps src/dev-runner.ts webgpu",
     "dev:webgl": "node --enable-source-maps src/dev-runner.ts webgl",
     "dev:webgl7": "node --enable-source-maps src/dev-runner.ts webgl7",
-    "build": "node scripts/build-package.mjs",
+    "build": "node scripts/build-packages.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
     "package:prepare": "pnpm typecheck && pnpm test && pnpm build && node scripts/validate-native-artifacts.mjs",
     "pack:dist": "node scripts/pack-distribution.mjs",
-    "prepack": "pnpm package:prepare",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -38,6 +37,10 @@
     "pixi.js-v7": "npm:pixi.js@7.4.3"
   },
   "devDependencies": {
+    "@pixi-native/core": "workspace:*",
+    "@pixi-native/native-win32-x64": "workspace:*",
+    "@pixi-native/pixi7": "workspace:*",
+    "@pixi-native/pixi8": "workspace:*",
     "@types/node": "22.15.21",
     "prettier": "3.2.5",
     "typescript": "7.0.2"
@@ -45,84 +48,11 @@
   "engines": {
     "node": ">=24.13.0 <25"
   },
-  "os": [
-    "win32"
-  ],
-  "cpu": [
-    "x64"
-  ],
   "license": "UNLICENSED",
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
       "eventemitter3": "5.0.4"
-    }
-  },
-  "files": [
-    "dist",
-    "native/gpu/package.json",
-    "native/gpu/src/*.js",
-    "native/gpu/src/*.d.ts",
-    "native/gpu/dist/win32-x64",
-    "native/window/package.json",
-    "native/window/binding-path.js",
-    "native/window/src/index.js",
-    "native/window/src/index.d.ts",
-    "native/window/dist/win32-x64",
-    "native/audio/package.json",
-    "native/audio/binding-path.js",
-    "native/audio/src/index.js",
-    "native/audio/src/index.d.ts",
-    "native/audio/dist/win32-x64",
-    "native/video/package.json",
-    "native/video/src/binding-path.js",
-    "native/video/src/index.js",
-    "native/video/src/index.d.ts",
-    "native/video/dist/win32-x64",
-    "README.md",
-    "HISTORY.md",
-    "THIRD_PARTY_NOTICES.md"
-  ],
-  "exports": {
-    "./v7": {
-      "types": "./dist/pixi-native/v7.d.ts",
-      "default": "./dist/pixi-native/v7.js"
-    },
-    "./v8": {
-      "types": "./dist/pixi-native/v8.d.ts",
-      "default": "./dist/pixi-native/v8.js"
-    },
-    "./audio": {
-      "types": "./dist/pixi-native/audio/index.d.ts",
-      "default": "./dist/pixi-native/audio/index.js"
-    },
-    "./video": {
-      "types": "./dist/pixi-native/video/index.d.ts",
-      "default": "./dist/pixi-native/video/index.js"
-    },
-    "./files": {
-      "types": "./dist/pixi-native/files.d.ts",
-      "default": "./dist/pixi-native/files.js"
-    },
-    "./runtime": {
-      "types": "./dist/pixi-native/runtime.d.ts",
-      "default": "./dist/pixi-native/runtime.js"
-    },
-    "./canvas": {
-      "types": "./dist/pixi-native/canvas.d.ts",
-      "default": "./dist/pixi-native/canvas.js"
-    }
-  },
-  "peerDependencies": {
-    "pixi.js": ">=8.20.0 <9",
-    "pixi.js-v7": "npm:pixi.js@>=7.2.0 <8"
-  },
-  "peerDependenciesMeta": {
-    "pixi.js": {
-      "optional": true
-    },
-    "pixi.js-v7": {
-      "optional": true
     }
   }
 }

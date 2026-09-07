@@ -1,156 +1,254 @@
 import { execFileSync, execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-    FFMPEG_CHECKSUM_FILE,
-    FFMPEG_PACKAGED_FILES,
-    FFMPEG_TARGET_DIRECTORY,
+  FFMPEG_CHECKSUM_FILE,
+  FFMPEG_PACKAGED_FILES,
+  FFMPEG_TARGET_DIRECTORY,
 } from "./ffmpeg-distribution.mjs";
 import {
-    FFMPEG_SOURCE_ARCHIVE,
-    FFMPEG_SOURCE_REVISION,
+  FFMPEG_SOURCE_ARCHIVE,
+  FFMPEG_SOURCE_REVISION,
 } from "./ffmpeg-build-config.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsDirectory = resolve(root, "artifacts");
+const temporaryRoot = resolve(root, ".tmp");
 const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
 const MAX_UNPACKED_BYTES = 100 * 1024 * 1024;
-const REQUIRED_PACKAGE_FILES = [
-    "package.json",
-    "README.md",
-    "HISTORY.md",
-    "THIRD_PARTY_NOTICES.md",
-    "dist/pixi-native/v7.js",
-    "dist/pixi-native/v7.d.ts",
-    "dist/pixi-native/v8.js",
-    "dist/pixi-native/v8.d.ts",
-    "dist/pixi-native/runtime.js",
-    "dist/pixi-native/runtime.d.ts",
-    "dist/pixi-native/canvas.js",
-    "dist/pixi-native/canvas.d.ts",
-    "native/gpu/dist/win32-x64/pixi_native_gpu.node",
-    "native/gpu/dist/win32-x64/d3dcompiler_47.dll",
-    "native/window/dist/win32-x64/native_window.node",
-    "native/audio/dist/win32-x64/native_audio.node",
-    "native/video/dist/win32-x64/native_video.node",
-    ...FFMPEG_PACKAGED_FILES.map(
-        (filename) => `${FFMPEG_TARGET_DIRECTORY}/${filename}`,
-    ),
-    `${FFMPEG_TARGET_DIRECTORY}/${FFMPEG_CHECKSUM_FILE}`,
+const PACKAGE_NAMES = ["core", "pixi7", "pixi8", "native-win32-x64"];
+const DOCUMENTATION_FILES = [
+  "README.md",
+  "HISTORY.md",
+  "THIRD_PARTY_NOTICES.md",
 ];
 
-await mkdir(artifactsDirectory, { recursive: true });
-const sourceArchivePath = resolve(artifactsDirectory, FFMPEG_SOURCE_ARCHIVE);
-try {
-    await access(sourceArchivePath);
-} catch {
-    throw new Error(
-        `Missing corresponding FFmpeg source archive ${sourceArchivePath}; run pnpm ffmpeg:build first.`,
-    );
+const publishedExports = {
+  core: {
+    ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
+    "./audio": {
+      types: "./dist/audio/index.d.ts",
+      default: "./dist/audio/index.js",
+    },
+    "./files": { types: "./dist/files.d.ts", default: "./dist/files.js" },
+    "./runtime": {
+      types: "./dist/runtime.d.ts",
+      default: "./dist/runtime.js",
+    },
+    "./canvas": {
+      types: "./dist/canvas.d.ts",
+      default: "./dist/canvas.js",
+    },
+    "./application/*.js": {
+      types: "./dist/application/*.d.ts",
+      default: "./dist/application/*.js",
+    },
+    "./audio/*.js": {
+      types: "./dist/audio/*.d.ts",
+      default: "./dist/audio/*.js",
+    },
+    "./canvas/*.js": {
+      types: "./dist/canvas/*.d.ts",
+      default: "./dist/canvas/*.js",
+    },
+    "./renderers/*.js": {
+      types: "./dist/renderers/*.d.ts",
+      default: "./dist/renderers/*.js",
+    },
+    "./runtime/*.js": {
+      types: "./dist/runtime/*.d.ts",
+      default: "./dist/runtime/*.js",
+    },
+    "./video/*.js": {
+      types: "./dist/video/*.d.ts",
+      default: "./dist/video/*.js",
+    },
+  },
+  pixi7: createVersionExports(),
+  pixi8: createVersionExports(),
+};
+
+function createVersionExports() {
+  return {
+    ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
+    "./audio": { types: "./dist/audio.d.ts", default: "./dist/audio.js" },
+    "./files": { types: "./dist/files.d.ts", default: "./dist/files.js" },
+    "./runtime": {
+      types: "./dist/runtime.d.ts",
+      default: "./dist/runtime.js",
+    },
+    "./canvas": { types: "./dist/canvas.d.ts", default: "./dist/canvas.js" },
+  };
 }
-const sourcePrefix = `ffmpeg-${FFMPEG_SOURCE_REVISION}/`;
-const sourceEntries = execFileSync("tar", ["-tf", sourceArchivePath], {
+
+await mkdir(artifactsDirectory, { recursive: true });
+await mkdir(temporaryRoot, { recursive: true });
+await validateFfmpegSourceArchive();
+execSync("pnpm package:prepare", { cwd: root, stdio: "inherit" });
+
+const stageRoot = await mkdtemp(join(temporaryRoot, "pixi-native-pack-"));
+const archives = [];
+try {
+  for (const packageName of PACKAGE_NAMES) {
+    const packageRoot = resolve(root, "packages", packageName);
+    const stagePackageRoot = resolve(stageRoot, packageName);
+    await mkdir(stagePackageRoot, { recursive: true });
+    const manifest = JSON.parse(
+      await readFile(resolve(packageRoot, "package.json"), "utf8"),
+    );
+    delete manifest.devDependencies;
+    if (publishedExports[packageName]) {
+      manifest.exports = publishedExports[packageName];
+      await cp(
+        resolve(packageRoot, "dist"),
+        resolve(stagePackageRoot, "dist"),
+        {
+          recursive: true,
+        },
+      );
+      for (const filename of DOCUMENTATION_FILES) {
+        await cp(resolve(root, filename), resolve(stagePackageRoot, filename));
+      }
+    } else {
+      for (const filename of [
+        "index.cjs",
+        "index.d.ts",
+        "native",
+        "THIRD_PARTY_NOTICES.md",
+      ]) {
+        await cp(
+          resolve(packageRoot, filename),
+          resolve(stagePackageRoot, filename),
+          {
+            recursive: true,
+          },
+        );
+      }
+    }
+    await writeFile(
+      resolve(stagePackageRoot, "package.json"),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+
+    const [packResult] = JSON.parse(
+      execSync("npm pack --ignore-scripts --json", {
+        cwd: stagePackageRoot,
+        encoding: "utf8",
+        env: { ...process.env, npm_config_cache: localNpmCache },
+      }),
+    );
+    if (packResult.unpackedSize > MAX_UNPACKED_BYTES) {
+      throw new Error(
+        `${manifest.name} is too large: ${packResult.unpackedSize} bytes`,
+      );
+    }
+    validatePackedFiles(
+      packageName,
+      packResult.files.map((file) => file.path),
+    );
+    const packedPath = resolve(stagePackageRoot, packResult.filename);
+    const archivePath = resolve(artifactsDirectory, packResult.filename);
+    await cp(packedPath, archivePath);
+    const checksum = createHash("sha256")
+      .update(await readFile(archivePath))
+      .digest("hex");
+    await writeFile(
+      `${archivePath}.sha256`,
+      `${checksum}  ${packResult.filename}\n`,
+    );
+    archives.push(archivePath);
+    console.log(`Created ${archivePath}`);
+    console.log(`SHA-256: ${checksum}`);
+  }
+} finally {
+  await rm(stageRoot, { recursive: true, force: true });
+}
+
+execFileSync(
+  process.execPath,
+  [resolve(root, "scripts/test-distribution.mjs"), ...archives],
+  { cwd: root, stdio: "inherit" },
+);
+
+const sourceArchivePath = resolve(artifactsDirectory, FFMPEG_SOURCE_ARCHIVE);
+const sourceChecksum = createHash("sha256")
+  .update(await readFile(sourceArchivePath))
+  .digest("hex");
+await writeFile(
+  `${sourceArchivePath}.sha256`,
+  `${sourceChecksum}  ${FFMPEG_SOURCE_ARCHIVE}\n`,
+);
+console.log(`FFmpeg source: ${sourceArchivePath}`);
+console.log(`FFmpeg source SHA-256: ${sourceChecksum}`);
+
+function validatePackedFiles(packageName, files) {
+  const fileSet = new Set(files);
+  const required =
+    packageName === "native-win32-x64"
+      ? [
+          "index.cjs",
+          "index.d.ts",
+          "native/gpu/dist/win32-x64/pixi_native_gpu.node",
+          "native/window/dist/win32-x64/native_window.node",
+          "native/audio/dist/win32-x64/native_audio.node",
+          "native/video/dist/win32-x64/native_video.node",
+          ...FFMPEG_PACKAGED_FILES.map(
+            (filename) => `${FFMPEG_TARGET_DIRECTORY}/${filename}`,
+          ),
+          `${FFMPEG_TARGET_DIRECTORY}/${FFMPEG_CHECKSUM_FILE}`,
+        ]
+      : ["dist/index.js", "dist/index.d.ts"];
+  const missing = required.filter((filename) => !fileSet.has(filename));
+  if (missing.length > 0) {
+    throw new Error(
+      `${packageName} tarball is missing:\n- ${missing.join("\n- ")}`,
+    );
+  }
+  const forbidden = files.filter(
+    (filename) =>
+      filename.startsWith("src/") ||
+      (filename.endsWith(".ts") && !filename.endsWith(".d.ts")),
+  );
+  if (forbidden.length > 0) {
+    throw new Error(
+      `${packageName} tarball contains source files:\n- ${forbidden.join("\n- ")}`,
+    );
+  }
+}
+
+async function validateFfmpegSourceArchive() {
+  const sourceArchivePath = resolve(artifactsDirectory, FFMPEG_SOURCE_ARCHIVE);
+  await access(sourceArchivePath);
+  const sourcePrefix = `ffmpeg-${FFMPEG_SOURCE_REVISION}/`;
+  const entries = execFileSync("tar", ["-tf", sourceArchivePath], {
     encoding: "utf8",
-})
+  })
     .trimEnd()
     .split(/\r?\n/);
-if (
-    sourceEntries.some((entry) => !entry.startsWith(sourcePrefix)) ||
-    !sourceEntries.includes(`${sourcePrefix}configure`) ||
-    !sourceEntries.includes(`${sourcePrefix}COPYING.LGPLv2.1`) ||
-    !sourceEntries.includes(`${sourcePrefix}RELEASE`)
-) {
-    throw new Error(
-        `FFmpeg source archive does not contain the expected ${sourcePrefix} source tree.`,
-    );
-}
-const sourceRelease = execFileSync(
+  if (
+    entries.some((entry) => !entry.startsWith(sourcePrefix)) ||
+    !entries.includes(`${sourcePrefix}configure`) ||
+    !entries.includes(`${sourcePrefix}COPYING.LGPLv2.1`) ||
+    !entries.includes(`${sourcePrefix}RELEASE`)
+  ) {
+    throw new Error("FFmpeg source archive has an unexpected structure");
+  }
+  const release = execFileSync(
     "tar",
     ["-xOf", sourceArchivePath, `${sourcePrefix}RELEASE`],
     { encoding: "utf8" },
-).trim();
-if (sourceRelease !== "8.0") {
-    throw new Error(
-        `FFmpeg source archive has unexpected release ${sourceRelease}.`,
-    );
+  ).trim();
+  if (release !== "8.0") {
+    throw new Error(`FFmpeg source archive has unexpected release ${release}`);
+  }
 }
-
-execSync("pnpm package:prepare", { cwd: root, stdio: "inherit" });
-
-const packOutput = execSync(
-    "npm pack --ignore-scripts --json --pack-destination artifacts",
-    {
-        cwd: root,
-        encoding: "utf8",
-        env: { ...process.env, npm_config_cache: localNpmCache },
-    },
-);
-
-const [manifest] = JSON.parse(packOutput);
-const packageFiles = new Set(manifest.files.map((file) => file.path));
-const missing = REQUIRED_PACKAGE_FILES.filter(
-    (file) => !packageFiles.has(file),
-);
-if (missing.length > 0) {
-    throw new Error(
-        `Packed archive is missing required files:\n- ${missing.join("\n- ")}`,
-    );
-}
-
-const forbidden = manifest.files
-    .map((file) => file.path)
-    .filter(
-        (path) =>
-            path.startsWith("src/") ||
-            (path.endsWith(".ts") && !path.endsWith(".d.ts")) ||
-            path.includes("/dawn/") ||
-            path.includes("/depot_tools/") ||
-            path.includes("/build/") ||
-            path.includes("/patches/") ||
-            path.includes("/scripts/") ||
-            path === "native/video/dist/native_video.node" ||
-            (path.startsWith(`${FFMPEG_TARGET_DIRECTORY}/`) &&
-                path.endsWith(".dll")),
-    );
-if (forbidden.length > 0) {
-    throw new Error(
-        `Packed archive contains forbidden files:\n- ${forbidden.join("\n- ")}`,
-    );
-}
-if (manifest.unpackedSize > MAX_UNPACKED_BYTES) {
-    throw new Error(
-        `Packed archive is too large: ${manifest.unpackedSize} bytes exceeds ${MAX_UNPACKED_BYTES}.`,
-    );
-}
-
-const archivePath = resolve(artifactsDirectory, manifest.filename);
-const checksum = createHash("sha256")
-    .update(await readFile(archivePath))
-    .digest("hex");
-await writeFile(`${archivePath}.sha256`, `${checksum}  ${manifest.filename}\n`);
-const sourceChecksum = createHash("sha256")
-    .update(await readFile(sourceArchivePath))
-    .digest("hex");
-await writeFile(
-    `${sourceArchivePath}.sha256`,
-    `${sourceChecksum}  ${FFMPEG_SOURCE_ARCHIVE}\n`,
-);
-
-execFileSync(
-    process.execPath,
-    [resolve(root, "scripts/test-distribution.mjs"), archivePath],
-    {
-        cwd: root,
-        stdio: "inherit",
-    },
-);
-
-console.log(`Created ${archivePath}`);
-console.log(
-    `Package files: ${manifest.entryCount}; unpacked bytes: ${manifest.unpackedSize}`,
-);
-console.log(`SHA-256: ${checksum}`);
-console.log(`FFmpeg source: ${sourceArchivePath}`);
-console.log(`FFmpeg source SHA-256: ${sourceChecksum}`);

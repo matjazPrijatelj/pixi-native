@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { Assets, Container, Texture, createApp } from "../../pixi-native/v7.ts";
+import { Assets, Container, Texture } from "pixi.js-v7";
+import { createApp } from "@pixi-native/pixi7";
 import { createGraphicsTest } from "./scenes/GraphicsTest.ts";
 import { createTextTest } from "./scenes/TextTest.ts";
 import { createBitmapTextTest } from "./scenes/BitmapTextTest.ts";

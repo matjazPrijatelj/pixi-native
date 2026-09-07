@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { Assets, BitmapFont, BitmapText, settings } from "pixi.js-v7";
-import { NodeDOMAdapter } from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
+import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import {
   DYNAMIC_BITMAP_FONT_NAME,
   installDynamicBitmapTextFont,

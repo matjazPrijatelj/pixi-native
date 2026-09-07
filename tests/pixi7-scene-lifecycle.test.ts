@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Container, settings, Sprite, Text, Texture, utils } from "pixi.js-v7";
-import { NodeDOMAdapter } from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
+import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { disposeDemoScene } from "../src/demo/v7/sceneLifecycle.ts";
 
 test("PixiJS 7 scene disposal releases Text textures but preserves shared Sprite textures", () => {

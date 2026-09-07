@@ -2,8 +2,8 @@ import { Container, Text } from "pixi.js";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 import { loadRtpTestConfig } from "../rtpTestConfig.ts";
-import { NativeVideo } from "../../../pixi-native/video/index.ts";
-import { NativeVideoSprite } from "../../../pixi-native/video/NativeVideoSprite.ts";
+import { NativeVideo } from "@pixi-native/core";
+import { VideoSprite as NativeVideoSprite } from "@pixi-native/pixi8";
 
 export function createRtpVideoTest(
     viewport: { width: number; height: number },

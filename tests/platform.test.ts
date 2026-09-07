@@ -6,7 +6,7 @@ import {
   getDefaultGpuBackend,
   resolveGpuBackend,
   supportsNativeVideo,
-} from "../src/pixi-native/runtime/platform.ts";
+} from "@pixi-native/core/runtime/platform.js";
 
 const require = createRequire(import.meta.url);
 const { getBindingPath, getPlatformDirectory } =

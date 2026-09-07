@@ -1,16 +1,15 @@
 # Pixi Native
 
-Native PixiJS runtime for rendering directly into a native window from Node.js, without a browser DOM, WebView, or CEF. The package exposes explicit `pixi-native/v7` and `pixi-native/v8` entrypoints so each display process selects one Pixi major.
+Native PixiJS runtime for rendering directly into a native window from Node.js, without a browser DOM, WebView, or CEF. Separate `@pixi-native/pixi7` and `@pixi-native/pixi8` packages can coexist in one launcher while every display process loads only its matching Pixi major.
 
-Compatibility integrations can import the shared scheduler, platform, DOM, and
-window types from `pixi-native/runtime`, and Canvas/upload adapters from
-`pixi-native/canvas`. Application lifecycle remains owned by the versioned
-facades and is not exposed as a separate package entrypoint.
+Each version package exposes the matching Pixi API, application lifecycle,
+native video, and the shared `/audio`, `/files`, `/runtime`, and `/canvas`
+entrypoints. Both depend on one `@pixi-native/core` installation and one native
+platform package in the launcher's shared `node_modules`.
 
-Internally, `src/pixi-native` is grouped by ownership: managed application
-lifecycle in `application`, Canvas/upload adapters in `canvas`, backend code in
-`renderers`, shared window/DOM/scheduling support in `runtime`, and independent
-`audio` and `video` modules. Public package entrypoints are deliberate facades;
+Internally, Pixi-neutral code lives in `packages/core`, version-specific code in
+`packages/pixi7` and `packages/pixi8`, and Windows binaries in
+`packages/native-win32-x64`. Public package entrypoints are deliberate facades;
 folder layout alone does not make an internal module importable.
 
 ## Stack
@@ -18,7 +17,7 @@ folder layout alone does not make an internal module importable.
 - Node.js 24.13 or newer from the Node.js 24 LTS line
 - pnpm 9.15.9
 - PixiJS 8.20.0
-- PixiJS 7.4.3 WebGL through `pixi-native/v7`
+- PixiJS 7.4.3 WebGL through `@pixi-native/pixi7`
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
 - Windows and Linux WebGL2 through `@node-3d/core` and `@node-3d/glfw`
@@ -32,10 +31,10 @@ The project-owned native addon creates the Dawn adapter/device and connects it t
 
 The demo selects its renderer explicitly: use `pnpm dev:webgpu`, `pnpm dev:webgl`, or `pnpm dev:webgl7`. The commands open the interactive scene demo; use number keys or left/right to switch between Graphics, Sprite, Text, BitmapText, audio, video, rain-sprite, and particle scenes. WebGPU owns its SDL/Dawn presentation surface while PixiJS 7 and 8 WebGL share the GLFW surface.
 
-For Pixi 8 library use, install the package and Pixi peer dependency with `pnpm add pixi-native pixi.js@8.20.0`. Pixi 7 is an internal package dependency. The versioned entrypoint exports both the matching Pixi API and the managed native factories:
+For Pixi 8 library use, import the complete matching API from one package:
 
 ```ts
-import { Sprite, createApp } from "pixi-native/v8";
+import { Sprite, createApp } from "@pixi-native/pixi8";
 
 const { app, native, destroy } = await createApp({
   backend: "webgpu", // or "webgl"
@@ -66,18 +65,17 @@ for application-owned native resources. The initializer intentionally provides
 only the browser surface Pixi needs: it does not emulate HTML/CSS layout,
 browser media elements, navigation, or arbitrary DOM applications.
 
-Use `createRenderer()` from the same versioned entrypoint when the caller needs
+Use `createRenderer()` when the caller needs
 to own polling, rendering, presentation, and teardown. Pixi 8 accepts
-`backend: "webgpu" | "webgl"`; Pixi 7 is WebGL-only. The package declares
-PixiJS 8 as a peer dependency so applications can update it within the
-supported major version.
+`backend: "webgpu" | "webgl"`; the Pixi 7 package is WebGL-only. Each package
+owns its matching Pixi dependency, so both majors can be installed together.
 
 Display code can resolve and read its own packaged files without depending on
-the launcher's working directory through the lightweight `pixi-native/files`
+the launcher's working directory through the lightweight version-package `/files`
 entrypoint:
 
 ```ts
-import { createModuleFileAccess } from "pixi-native/files";
+import { createModuleFileAccess } from "@pixi-native/pixi8/files";
 
 const files = createModuleFileAccess(import.meta.url);
 const config = await files.readJson("../assets/config.json");
@@ -118,17 +116,17 @@ WebGL falls back to the highest supported lower value, while GLFW WebGL reports
 the sample count provided by the platform. PixiJS WebGPU supports only 0x or 4x,
 so explicit 2x and 8x requests use 4x with a warning.
 
-PixiJS 7 is available through `pixi-native/v7`; application code never imports
-the internal `pixi.js-v7` alias. Run the isolated scene demo with
+PixiJS 7 applications import `createApp`, `createRenderer`, `VideoSprite`, and
+the matching display objects from `@pixi-native/pixi7`.
+Run the isolated scene demo with
 `pnpm dev:webgl7`; it contains the same nine scene slots as the Pixi 8 demo,
 with Pixi 7-specific Graphics, text, sprite, particle, and native media
 adaptations. Use number keys `1`–`9` or left/right to navigate.
-Both versioned entrypoints expose the compact `createApp()`, `createRenderer()`,
-`App`, `AppOptions`, `RendererResult`, `RendererOptions`, and `VideoSprite`
-names. Low-level Node/native implementation types are not part of these
-facades.
+Both version packages use the compact names `createApp`, `createRenderer`,
+`App`, and `VideoSprite`. `NativeVideo`, `VideoFpsMeter`, and
+`VideoSpriteOptions` are re-exported from the shared core package.
 
-`VideoSprite` accepts an optional packed-alpha layout for videos that store the
+Both video-sprite classes accept an optional packed-alpha layout for videos that store the
 color image on the left and a grayscale alpha mask on the right. The mask scale
 is its width divided by the color width; a 1920x768 frame containing 1280x768
 color plus a 640x768 mask uses:
@@ -154,7 +152,7 @@ The supported development targets are Linux x64 and Windows 11 x64. The same Nod
 
 ## Distribution package
 
-Create the verified private package with:
+Create the four verified private packages with:
 
 ```sh
 pnpm pack:dist
@@ -190,27 +188,24 @@ installed elsewhere.
 
 The command runs type checking, the complete Node test suite, a production
 TypeScript build, native-artifact validation, and `npm pack`. It writes
-`artifacts/pixi-native-0.1.0.tgz`, the corresponding pinned FFmpeg source
-archive, and SHA-256 files for both. It does not rebuild the native addons or
-FFmpeg.
+`artifacts/pixi-native-core-0.1.0.tgz`, `pixi-native-pixi7-0.1.0.tgz`,
+`pixi-native-pixi8-0.1.0.tgz`, and
+`pixi-native-native-win32-x64-0.1.0.tgz`, plus checksums and the corresponding
+pinned FFmpeg source archive. It does not rebuild native addons or FFmpeg.
 
-Install the tarball together with the PixiJS 8 peer dependency:
+Install all packages once in the launcher's shared dependency root:
 
 ```sh
-pnpm add ./artifacts/pixi-native-0.1.0.tgz pixi.js@8.20.0
+pnpm add ./artifacts/pixi-native-core-0.1.0.tgz ./artifacts/pixi-native-pixi7-0.1.0.tgz ./artifacts/pixi-native-pixi8-0.1.0.tgz ./artifacts/pixi-native-native-win32-x64-0.1.0.tgz
 ```
 
-The package and `pnpm-workspace.yaml` currently target Windows x64. The packed
-archive contains only the Windows GPU, video, modal-window, and native-audio
-bindings; pnpm does not install optional native dependency variants for other
-operating systems or CPU architectures. The repository retains Linux source and
-build support, but Linux is not a production package target until its new
-`pixi_native_gpu.node` addon is available. At that point, add `linux` to
-`supportedArchitectures` and introduce a separately validated Linux package
-target rather than mixing platform binaries into the Windows archive.
+The version and core packages are platform-neutral. The current native package
+targets Windows x64 and contains the GPU, video, modal-window, native-audio, and
+FFmpeg artifacts. Linux support will use a separate
+`@pixi-native/native-linux-x64` package with the same resolver contract; no
+display imports or Pixi package names will change.
 
-The package owns its internal PixiJS 7 alias for the `pixi-native/v7`
-entrypoint. Windows includes the staged
+The Pixi 7 package uses the `pixi.js-v7` alias internally. Windows includes the staged
 minimal LGPL FFmpeg and FFprobe runtime. Linux FFmpeg is not bundled yet; set
 `FFMPEG_PATH` or make `ffmpeg` and `ffprobe` available in `PATH` there.
 
@@ -310,7 +305,7 @@ FFmpeg executable lookup uses this order:
 
 1. `NativeVideoOptions.ffmpegPath`;
 2. `FFMPEG_PATH`;
-3. `native/video/dist/<platform>-<arch>/ffmpeg[.exe]` next to the packaged addon;
+3. FFmpeg from the installed `@pixi-native/native-<platform>-<arch>` package;
 4. `ffmpeg` from `PATH` for development.
 
 The Windows distribution places the verified static LGPL FFmpeg 8.0 runtime
@@ -320,7 +315,7 @@ audio, the filters used by this runtime, D3D11VA, and the raw NV12/f32le output
 paths. Linux continues to use `FFMPEG_PATH` or `PATH` until a Linux bundle is
 added. See `THIRD_PARTY_NOTICES.md` for the exact source commit.
 
-`NativeVideo` provides `load()`, `play()`, `pause()`, writable `src` and `currentTime`, metadata, `loop`, `playbackRate`, volume/mute controls, EventTarget-compatible media events, separate video/audio error state, and decode/presentation/drop statistics. Assigning `src` reloads the source immediately and preserves active playback; an existing Pixi 7 or Pixi 8 `VideoSprite` clears its old frame and consumes the replacement decoder without being recreated. File metadata is probed with `ffprobe` beside the selected FFmpeg executable when available. Embedded audio is decoded as a bounded FFmpeg PCM stream and acts as the master playback clock; video-only files continue without audio. During the Windows move/resize modal loop file video continues silently, then discards stale audio and restarts A/V at the latest presented video time. On the video scene, use Up/Down to cycle through all MP4 files in `src/demo/assets`. Press E for the source-event mode, where Up/Down assigns `src` on one active video, A toggles five-second automatic source changes, and every media event is shown in the scene and logged to the console. Press T to play the packed-alpha fixture over a checkerboard background.
+`NativeVideo` provides `load()`, `play()`, `pause()`, writable `src` and `currentTime`, metadata, `loop`, `playbackRate`, volume/mute controls, EventTarget-compatible media events, separate video/audio error state, and decode/presentation/drop statistics. Assigning `src` reloads the source immediately and preserves active playback; the matching package's `VideoSprite` clears its old frame and consumes the replacement decoder without being recreated. File metadata is probed with `ffprobe` beside the selected FFmpeg executable when available. Embedded audio is decoded as a bounded FFmpeg PCM stream and acts as the master playback clock; video-only files continue without audio. During the Windows move/resize modal loop file video continues silently, then discards stale audio and restarts A/V at the latest presented video time. On the video scene, use Up/Down to cycle through all MP4 files in `src/demo/assets`. Press E for the source-event mode, where Up/Down assigns `src` on one active video, A toggles five-second automatic source changes, and every media event is shown in the scene and logged to the console. Press T to play the packed-alpha fixture over a checkerboard background.
 
 Callers may pass structured `ffmpeg.inputArgs`, `videoOutputArgs`, and `audioOutputArgs`. The module inserts input arguments before its owned `-i`, then appends its mandatory NV12 or PCM pipe output. `mediaType: "live"` and `inputPacing: "source"` disable file-style `-readrate`; bounded latest-frame delivery supplies ffplay-like frame dropping without accepting ffplay-only `-framedrop` or `-sync` flags. Authenticated URL credentials are redacted from surfaced FFmpeg errors.
 

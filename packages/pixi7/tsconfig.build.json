@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "rewriteRelativeImportExtensions": true,
+    "paths": {
+      "@pixi-native/core": ["./../core/dist/index.d.ts"],
+      "@pixi-native/core/*": ["./../core/dist/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

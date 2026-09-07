@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { settings } from "pixi.js-v7";
-import { NodeDOMAdapter } from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
-import { NativeVideoSprite7 } from "../src/pixi-native/video/NativeVideoSprite7.ts";
+import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
+import { VideoSprite as NativeVideoSprite7 } from "@pixi-native/pixi7";
 
 test("NativeVideoSprite7 uploads an NV12 frame through a Pixi 7 canvas resource", () => {
   new NodeDOMAdapter({} as never).installPixi7(settings);

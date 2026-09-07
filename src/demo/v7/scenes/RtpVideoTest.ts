@@ -1,6 +1,6 @@
 import { Container } from "pixi.js-v7";
-import { NativeVideo } from "../../../pixi-native/video/index.ts";
-import { NativeVideoSprite7 } from "../../../pixi-native/video/NativeVideoSprite7.ts";
+import { NativeVideo } from "@pixi-native/core";
+import { VideoSprite as NativeVideoSprite7 } from "@pixi-native/pixi7";
 import { loadRtpTestConfig } from "../rtpTestConfig.ts";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 

@@ -1,13 +1,24 @@
 {
-    "compilerOptions": {
-        "target": "ES2022",
-        "module": "ESNext",
-        "moduleResolution": "Bundler",
-        "strict": true,
-        "skipLibCheck": true,
-        "noEmit": true,
-        "types": ["node"],
-        "allowImportingTsExtensions": true
-    },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts"]
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@pixi-native/core": ["./packages/core/src/index.ts"],
+      "@pixi-native/core/*": ["./packages/core/src/*"],
+      "@pixi-native/pixi7": ["./packages/pixi7/src/index.ts"],
+      "@pixi-native/pixi8": ["./packages/pixi8/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "packages/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

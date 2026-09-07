@@ -1,4 +1,4 @@
-import type { NativeVideoEventType } from "../pixi-native/video/index.ts";
+import type { NativeVideoEventType } from "@pixi-native/core";
 
 const VIDEO_EVENT_TYPES: readonly NativeVideoEventType[] = [
   "emptied",

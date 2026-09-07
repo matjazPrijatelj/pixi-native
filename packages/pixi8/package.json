@@ -1,0 +1,33 @@
+{
+  "name": "@pixi-native/pixi8",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.13.0 <25"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "HISTORY.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./audio": "./src/audio.ts",
+    "./files": "./src/files.ts",
+    "./runtime": "./src/runtime.ts",
+    "./canvas": "./src/canvas.ts"
+  },
+  "dependencies": {
+    "@kmamal/sdl": "0.11.13",
+    "@napi-rs/canvas": "1.0.8",
+    "pixi.js": "8.20.0"
+  },
+  "peerDependencies": {
+    "@pixi-native/core": "0.1.0"
+  },
+  "devDependencies": {
+    "@pixi-native/core": "workspace:*"
+  }
+}

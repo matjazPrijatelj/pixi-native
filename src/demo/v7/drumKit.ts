@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { HowlSprite } from "../../pixi-native/audio/index.ts";
+import type { HowlSprite } from "@pixi-native/core/audio";
 
 export interface DrumHitRegion {
     readonly x: number;
@@ -38,5 +38,4 @@ export function getDrumPadForKey(key: string | null): DrumPadDefinition | undefi
     const normalized = key.toLocaleLowerCase("sl");
     return DRUM_PADS.find((pad) => pad.key === normalized);
 }
-
 

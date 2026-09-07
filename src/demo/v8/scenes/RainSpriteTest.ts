@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { AnimatedSprite, Container, Rectangle, Texture, type Ticker } from "pixi.js";
-import { Howl } from "../../../pixi-native/audio/index.ts";
+import { Howl } from "@pixi-native/core/audio";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 
@@ -199,4 +199,3 @@ export function createRainSpriteTest(
     scene.resize(initialBounds.width, initialBounds.height);
     return scene;
 }
-

@@ -6,7 +6,7 @@ import {
   DYNAMIC_BITMAP_FONT_NAME,
   installDynamicBitmapTextFont,
 } from "../src/demo/v8/bitmapFonts.ts";
-import { NodeDOMAdapter } from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
+import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 
 test("Rain Sprite scene adds and removes drops in pairs", () => {
   new NodeDOMAdapter({} as never).installPixi8(DOMAdapter);

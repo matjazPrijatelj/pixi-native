@@ -12,7 +12,7 @@ import {
   type NativeVideoDependencies,
   type NativeVideoAudioLike,
   type NativeVideoFrame,
-} from "../src/pixi-native/video/NativeVideo.ts";
+} from "@pixi-native/core/video/NativeVideo.js";
 import { VideoEventMonitor } from "../src/demo/VideoEventMonitor.ts";
 
 test("NV12 layout requires positive even dimensions", () => {

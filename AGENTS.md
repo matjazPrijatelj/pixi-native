@@ -2,7 +2,7 @@
 
 ## Project structure
 
-This repository is a TypeScript native runtime for rendering PixiJS 8 directly to a native SDL/Dawn WebGPU or WebGL surface from Node.js. Keep managed application lifecycle under `src/pixi-native/application/`, Canvas and upload adapters under `src/pixi-native/canvas/`, renderer-specific code under `src/pixi-native/renderers/`, shared native runtime integration under `src/pixi-native/runtime/`, and media under `src/pixi-native/audio/` and `src/pixi-native/video/`. Keep the public version facades at `src/pixi-native/v7.ts` and `src/pixi-native/v8.ts`, PixiJS 7 demo startup/scenes under `src/demo/v7/`, PixiJS 8 demo startup/scenes under `src/demo/v8/`, shared assets under `src/demo/assets/`, tests under `tests/`, and the development runner in `src/dev-runner.ts`.
+This repository is a TypeScript native runtime for rendering PixiJS directly to a native SDL/Dawn WebGPU or WebGL surface from Node.js. Keep Pixi-neutral lifecycle, Canvas, runtime, audio, video, and shared WebGL integration under `packages/core/`; keep the PixiJS 7 and 8 facades and renderers under `packages/pixi7/` and `packages/pixi8/`; and keep packaged Windows binaries under `packages/native-win32-x64/`. Keep PixiJS 7 demo startup/scenes under `src/demo/v7/`, PixiJS 8 demo startup/scenes under `src/demo/v8/`, shared assets under `src/demo/assets/`, tests under `tests/`, and the development runner in `src/dev-runner.ts`.
 
 ## Commands
 

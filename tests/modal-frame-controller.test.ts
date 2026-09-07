@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   createCompositorFrameWaiter,
   createModalFrameController,
-} from "../src/pixi-native/runtime/ModalFrameController.ts";
+} from "@pixi-native/core/runtime/ModalFrameController.js";
 
 test("non-Windows renderers do not load the Win32 modal-frame addon", () => {
   const controller = createModalFrameController(

@@ -1,11 +1,11 @@
 import { Container, Graphics } from "pixi.js-v7";
-import { nativeAudioEngine } from "../../../pixi-native/audio/index.ts";
+import { nativeAudioEngine } from "@pixi-native/core/audio";
 import {
   NativeVideo,
   VideoFpsMeter,
   type VideoSpriteOptions,
-} from "../../../pixi-native/video/index.ts";
-import { NativeVideoSprite7 } from "../../../pixi-native/video/NativeVideoSprite7.ts";
+} from "@pixi-native/core";
+import { VideoSprite as NativeVideoSprite7 } from "@pixi-native/pixi7";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 import {
   VideoEventMonitor,

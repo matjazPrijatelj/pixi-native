@@ -3,12 +3,12 @@ import {
   NativeVideo,
   VideoFpsMeter,
   type VideoSpriteOptions,
-} from "../../../pixi-native/video/index.ts";
-import { NativeVideoSprite } from "../../../pixi-native/video/NativeVideoSprite.ts";
+} from "@pixi-native/core";
+import { VideoSprite as NativeVideoSprite } from "@pixi-native/pixi8";
 import { fitVideoRect } from "../videoLayout.ts";
 import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
-import { nativeAudioEngine } from "../../../pixi-native/audio/index.ts";
+import { nativeAudioEngine } from "@pixi-native/core/audio";
 import {
   VideoEventMonitor,
   type VideoEventMonitorSnapshot,

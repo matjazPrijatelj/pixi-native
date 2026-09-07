@@ -10,7 +10,7 @@ import {
 } from "../src/demo/v8/bitmapFonts.ts";
 import { createSpriteTest } from "../src/demo/v8/scenes/SpriteTest.ts";
 import { disposeDemoScene } from "../src/demo/v8/sceneLifecycle.ts";
-import { NodeDOMAdapter } from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
+import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 
 test("Sprite scene adds and removes animated batches without leaking tweens", () => {
   new NodeDOMAdapter({} as never).installPixi8(DOMAdapter);

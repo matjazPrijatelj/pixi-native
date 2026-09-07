@@ -17,7 +17,7 @@ import {
 } from "../src/demo/v8/bitmapFonts.ts";
 import { FpsOverlay } from "../src/demo/v8/FpsOverlay.ts";
 import { disposeDemoScene } from "../src/demo/v8/sceneLifecycle.ts";
-import { NodeDOMAdapter } from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
+import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 
 const FONT_URL = new URL(
   "../src/demo/assets/bitmap-font/native-pixel.fnt",

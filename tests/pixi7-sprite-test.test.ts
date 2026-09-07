@@ -7,7 +7,7 @@ import {
   installDynamicBitmapTextFont,
 } from "../src/demo/v7/bitmapFonts.ts";
 import { createSpriteTest } from "../src/demo/v7/scenes/SpriteTest.ts";
-import { NodeDOMAdapter } from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
+import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 
 test("PixiJS 7 Sprite timelines survive resize and keep advancing", () => {
   new NodeDOMAdapter({} as never).installPixi7(settings);

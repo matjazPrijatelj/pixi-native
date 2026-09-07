@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { Container, Ellipse, Graphics, Sprite, Text, Texture } from "pixi.js-v7";
-import { Howl, Howler, nativeAudioEngine } from "../../../pixi-native/audio/index.ts";
+import { Howl, Howler, nativeAudioEngine } from "@pixi-native/core/audio";
 import { DRUM_ATLAS, DRUM_PADS, DRUM_SOURCE_PATH, getDrumPadForKey, type DrumPadDefinition } from "../drumKit.ts";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 

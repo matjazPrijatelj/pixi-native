@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import {
   FrameScheduler,
   VSyncFrameScheduler,
-} from "../src/pixi-native/runtime/FrameScheduler.ts";
+} from "@pixi-native/core/runtime/FrameScheduler.js";
 import {
   getReusableUploadBuffer,
   prepareRgbaPixelsForUpload,
-} from "../src/pixi-native/canvas/rgbaUpload.ts";
-import { normalizeGpuBindGroupIndex } from "../src/pixi-native/renderers/webgpu/gpuCompatibility.ts";
+} from "@pixi-native/core/canvas/rgbaUpload.js";
+import { normalizeGpuBindGroupIndex } from "../packages/pixi8/src/renderers/webgpu/gpuCompatibility.ts";
 
 test("Canvas RGBA pixels are reordered for BGRA textures", () => {
   const source = new Uint8ClampedArray([255, 32, 64, 255]);

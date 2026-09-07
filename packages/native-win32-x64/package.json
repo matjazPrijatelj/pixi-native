@@ -1,0 +1,26 @@
+{
+  "name": "@pixi-native/native-win32-x64",
+  "version": "0.1.0",
+  "type": "commonjs",
+  "license": "UNLICENSED",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "index.cjs",
+    "index.d.ts",
+    "native",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "main": "./index.cjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.cjs"
+    }
+  }
+}

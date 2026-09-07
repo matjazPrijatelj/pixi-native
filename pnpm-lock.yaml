@@ -33,6 +33,18 @@ importers:
         specifier: npm:pixi.js@7.4.3
         version: pixi.js@7.4.3
     devDependencies:
+      '@pixi-native/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@pixi-native/native-win32-x64':
+        specifier: workspace:*
+        version: link:packages/native-win32-x64
+      '@pixi-native/pixi7':
+        specifier: workspace:*
+        version: link:packages/pixi7
+      '@pixi-native/pixi8':
+        specifier: workspace:*
+        version: link:packages/pixi8
       '@types/node':
         specifier: 22.15.21
         version: 22.15.21
@@ -42,6 +54,56 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+
+  packages/core:
+    dependencies:
+      '@kmamal/sdl':
+        specifier: 0.11.13
+        version: 0.11.13
+      '@napi-rs/canvas':
+        specifier: 1.0.8
+        version: 1.0.8
+      '@node-3d/core':
+        specifier: 6.3.0
+        version: 6.3.0(three@0.185.1)
+      '@node-3d/glfw':
+        specifier: 7.3.1
+        version: 7.3.1
+    devDependencies:
+      '@pixi-native/native-win32-x64':
+        specifier: workspace:*
+        version: link:../native-win32-x64
+
+  packages/native-win32-x64: {}
+
+  packages/pixi7:
+    dependencies:
+      '@napi-rs/canvas':
+        specifier: 1.0.8
+        version: 1.0.8
+      pixi.js-v7:
+        specifier: npm:pixi.js@7.4.3
+        version: pixi.js@7.4.3
+    devDependencies:
+      '@pixi-native/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/pixi8:
+    dependencies:
+      '@kmamal/sdl':
+        specifier: 0.11.13
+        version: 0.11.13
+      '@napi-rs/canvas':
+        specifier: 1.0.8
+        version: 1.0.8
+      pixi.js:
+        specifier: 8.20.0
+        version: 8.20.0
+    devDependencies:
+      '@pixi-native/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 
