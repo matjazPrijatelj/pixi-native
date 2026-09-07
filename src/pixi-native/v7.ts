@@ -8,3 +8,4 @@ export {
     type RendererResult,
 } from "./webgl-v7/index.ts";
 export { NativeVideoSprite7 as VideoSprite } from "./video/NativeVideoSprite7.ts";
+export type { VideoSpriteOptions } from "./video/packedAlpha.ts";

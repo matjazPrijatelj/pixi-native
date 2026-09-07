@@ -2,6 +2,14 @@
 
 ## 2026-09-06
 
+- Added right-side packed-alpha NV12 rendering to the public PixiJS 7 and 8
+  `VideoSprite` APIs. The GPU shaders sample the left color image and right
+  grayscale mask without an RGBA conversion, clamp both regions at texel
+  centers, and render the bundled 1280+640 fixture in video scene 5 with `T`.
+- Added a PixiJS 7/8 source-event mode to video scene 5. It changes `src` on a
+  single active `NativeVideo`, validates the replacement playback event order,
+  displays recent events and PASS/FAIL state, logs every media event to the
+  console, and supports manual or five-second automatic source cycling.
 - Replaced the mixed unversioned renderer exports with explicit
   `pixi-native/v7` and `pixi-native/v8` facades. Both expose the matching Pixi
   API through compact `createApp`, `createRenderer`, and `VideoSprite` names;

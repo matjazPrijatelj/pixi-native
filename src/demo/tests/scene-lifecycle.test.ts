@@ -59,7 +59,10 @@ test("disposing a render-group scene returns its instruction buffers for reuse",
     secondScene.enableRenderGroup();
 
     assert.equal(secondScene.renderGroup, pooledRenderGroup);
-    assert.equal(secondScene.renderGroup?.instructionSet.uid, instructionSetUid);
+    assert.equal(
+        secondScene.renderGroup?.instructionSet.uid,
+        instructionSetUid,
+    );
 
     disposeDemoScene(secondScene);
 });
@@ -83,25 +86,56 @@ test("NativeVideoSprite destroys its owned planes and geometry buffers", () => {
 
     assert.equal(owned.ySource.destroyed, true);
     assert.equal(owned.uvSource.destroyed, true);
-    assert.equal(buffers.every((buffer) => buffer.destroyed), true);
+    assert.equal(
+        buffers.every((buffer) => buffer.destroyed),
+        true,
+    );
 });
 
 test("NativeVideoSprite observes source resets without being recreated", () => {
-    const video = new NativeVideo("first.mp4", {
-        width: 2,
-        height: 2,
-        audio: false,
-    }, {
-        createDecoder: () => {
-            throw new Error("decoder must not start while paused");
+    const video = new NativeVideo(
+        "first.mp4",
+        {
+            width: 2,
+            height: 2,
+            audio: false,
         },
-    });
+        {
+            createDecoder: () => {
+                throw new Error("decoder must not start while paused");
+            },
+        },
+    );
     const sprite = new NativeVideoSprite(video);
     const state = sprite as unknown as { needsClear: boolean };
 
     assert.equal(state.needsClear, false);
     video.src = "second.mp4";
     assert.equal(state.needsClear, true);
+
+    sprite.destroy();
+    video.destroy();
+});
+
+test("NativeVideoSprite renders packed alpha at the color-region width", () => {
+    const video = new NativeVideo("unused-alpha.mp4", {
+        width: 1920,
+        height: 768,
+        fps: 30,
+        audio: false,
+    });
+    const sprite = new NativeVideoSprite(video, { alphaMaskScale: 0.5 });
+    const owned = sprite as unknown as {
+        ySource: { alphaMode: string };
+        ownedGeometry: { positions: Float32Array };
+    };
+
+    assert.equal(sprite.width, 1280);
+    assert.deepEqual(
+        Array.from(owned.ownedGeometry.positions),
+        [0, 0, 1280, 0, 1280, 768, 0, 768],
+    );
+    assert.equal(owned.ySource.alphaMode, "premultiply-alpha-on-upload");
 
     sprite.destroy();
     video.destroy();
@@ -122,14 +156,24 @@ test("WebGL NV12 upload uses separate texture units and restores unpack alignmen
             RG: 33319,
             UNSIGNED_BYTE: 5121,
             UNPACK_ALIGNMENT: 3317,
-            activeTexture: (value: number) => calls.push(["activeTexture", value]),
-            bindTexture: (target: number, texture: unknown) => calls.push(["bindTexture", target, texture]),
-            pixelStorei: (parameter: number, value: number) => calls.push(["pixelStorei", parameter, value]),
-            texSubImage2D: (...args: unknown[]) => calls.push(["texSubImage2D", ...args]),
+            activeTexture: (value: number) =>
+                calls.push(["activeTexture", value]),
+            bindTexture: (target: number, texture: unknown) =>
+                calls.push(["bindTexture", target, texture]),
+            pixelStorei: (parameter: number, value: number) =>
+                calls.push(["pixelStorei", parameter, value]),
+            texSubImage2D: (...args: unknown[]) =>
+                calls.push(["texSubImage2D", ...args]),
         },
         texture: {
-            bindSource: (source: never, location?: number) => calls.push(["bindSource", source === ySource ? "y" : "uv", location ?? 0]),
-            getGlSource: (source: never) => source === ySource ? yTexture : uvTexture,
+            bindSource: (source: never, location?: number) =>
+                calls.push([
+                    "bindSource",
+                    source === ySource ? "y" : "uv",
+                    location ?? 0,
+                ]),
+            getGlSource: (source: never) =>
+                source === ySource ? yTexture : uvTexture,
         },
     };
     const frame = {
@@ -145,14 +189,20 @@ test("WebGL NV12 upload uses separate texture units and restores unpack alignmen
 
     uploadNv12FrameWebGl(renderer, ySource, uvSource, frame);
 
-    assert.deepEqual(calls.filter(([name]) => name === "bindSource"), [
-        ["bindSource", "y", 0],
-        ["bindSource", "uv", 1],
-    ]);
-    assert.deepEqual(calls.filter(([name]) => name === "pixelStorei"), [
-        ["pixelStorei", 3317, 1],
-        ["pixelStorei", 3317, 4],
-    ]);
+    assert.deepEqual(
+        calls.filter(([name]) => name === "bindSource"),
+        [
+            ["bindSource", "y", 0],
+            ["bindSource", "uv", 1],
+        ],
+    );
+    assert.deepEqual(
+        calls.filter(([name]) => name === "pixelStorei"),
+        [
+            ["pixelStorei", 3317, 1],
+            ["pixelStorei", 3317, 4],
+        ],
+    );
     assert.deepEqual(calls.at(-1), ["activeTexture", 33984]);
     assert.equal(calls.filter(([name]) => name === "texSubImage2D").length, 2);
 });

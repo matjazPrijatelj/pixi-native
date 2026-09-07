@@ -33,7 +33,10 @@ test("NativeVideoSprite7 uploads an NV12 frame through a Pixi 7 canvas resource"
     const sprite = new NativeVideoSprite7(video);
     assert.doesNotThrow(() => sprite.updateFrame());
     assert.equal(presented, 1);
-    const planes = sprite as unknown as { yPlane: { data: Uint8Array }; uvPlane: { data: Uint8Array } };
+    const planes = sprite as unknown as {
+        yPlane: { data: Uint8Array };
+        uvPlane: { data: Uint8Array };
+    };
     assert.deepEqual(Array.from(planes.yPlane.data), [128, 128, 128, 128]);
     assert.deepEqual(Array.from(planes.uvPlane.data), [128, 128]);
     assert.doesNotThrow(() => sprite.updateFrame());
@@ -48,6 +51,30 @@ test("NativeVideoSprite7 uploads an NV12 frame through a Pixi 7 canvas resource"
     assert.equal(sprite.updateFrame(), true);
     assert.equal(presented, 3);
     assert.deepEqual(Array.from(planes.yPlane.data), [128, 128, 128, 128]);
+    sprite.destroy();
+    assert.equal(destroyed, 1);
+});
+
+test("NativeVideoSprite7 renders packed alpha at the color-region width", () => {
+    new NodeDOMAdapter({} as never).installPixi7(settings);
+    let destroyed = 0;
+    const events = new EventTarget();
+    const video = {
+        width: 1920,
+        height: 768,
+        takeLatestFrame: () => null,
+        markFramePresented: () => undefined,
+        destroy: () => destroyed++,
+        addEventListener: events.addEventListener.bind(events),
+        removeEventListener: events.removeEventListener.bind(events),
+    } as never;
+
+    const sprite = new NativeVideoSprite7(video, { alphaMaskScale: 0.5 });
+    const positions = sprite.geometry.getBuffer("aVertexPosition").data;
+
+    assert.equal(sprite.width, 1280);
+    assert.deepEqual(Array.from(positions), [0, 0, 1280, 0, 1280, 768, 0, 768]);
+
     sprite.destroy();
     assert.equal(destroyed, 1);
 });

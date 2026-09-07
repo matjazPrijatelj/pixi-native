@@ -9,3 +9,4 @@ export {
     type RendererResult,
 } from "./createPixiRenderer.ts";
 export { NativeVideoSprite as VideoSprite } from "./video/NativeVideoSprite.ts";
+export type { VideoSpriteOptions } from "./video/packedAlpha.ts";

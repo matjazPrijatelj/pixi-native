@@ -17,13 +17,14 @@ const { Assets, BitmapFont, Texture, createApp } = await import(
 );
 const backend = process.argv[2];
 if (backend !== "webgpu" && backend !== "webgl") {
-  throw new Error("Choose a renderer with `pnpm dev:webgpu` or `pnpm dev:webgl`");
+  throw new Error(
+    "Choose a renderer with `pnpm dev:webgpu` or `pnpm dev:webgl`",
+  );
 }
-const { app, native, destroy, addDestroyListener } =
-  await createApp({
-    ...DEMO_WINDOW_OPTIONS,
-    backend,
-  });
+const { app, native, destroy, addDestroyListener } = await createApp({
+  ...DEMO_WINDOW_OPTIONS,
+  backend,
+});
 const { NodeCanvas } = await import("../../pixi-native/NodeCanvas.ts");
 const { supportsNativeVideo } = await import("../../pixi-native/platform.ts");
 const {
@@ -45,14 +46,15 @@ const {
 const { FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
 const { Howler } = await import("../../pixi-native/audio/index.ts");
-const { copyRgbaRowsFlippedY } = await import("../../pixi-native/rgbaUpload.ts");
+const { copyRgbaRowsFlippedY } = await import(
+  "../../pixi-native/rgbaUpload.ts"
+);
 const {
   getSceneIndexForKey,
   getSpriteCountDeltaForKey,
   getVideoIndexForKey,
   isReloadShortcut,
-} =
-  await import("./sceneNavigation.ts");
+} = await import("./sceneNavigation.ts");
 
 const supportsVideo =
   (native.backend === "webgpu" || native.backend === "webgl") &&
@@ -69,6 +71,12 @@ const drumTexturePath = fileURLToPath(
 );
 const rainDropTexturePath = fileURLToPath(
   new URL("../assets/rain-drop-30.png", import.meta.url),
+);
+const transparentVideoPath = fileURLToPath(
+  new URL(
+    "../assets/transparent-video/video_combined_0.5.mp4",
+    import.meta.url,
+  ),
 );
 
 await Assets.init({
@@ -133,6 +141,9 @@ const videos = [
 const videoPaths = videos.map(({ file }) =>
   fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
 );
+const eventVideoSources = videos
+  .map(({ file, fps }, index) => ({ file, fps, source: videoPaths[index] }))
+  .filter(({ fps }) => Math.abs(fps - 30) < 0.001);
 
 let videoIndex = 0;
 
@@ -147,9 +158,7 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createBitmapTextTest(),
 ];
 
-const videoSceneIndex = supportsVideo
-  ? scenes.length
-  : null;
+const videoSceneIndex = supportsVideo ? scenes.length : null;
 
 if (videoSceneIndex !== null) {
   scenes.push(() =>
@@ -158,6 +167,8 @@ if (videoSceneIndex !== null) {
       { width: native.canvas.width, height: native.canvas.height },
       videos[videoIndex].file,
       videos[videoIndex].fps,
+      eventVideoSources,
+      transparentVideoPath,
     ),
   );
 }

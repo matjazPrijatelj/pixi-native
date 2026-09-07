@@ -118,6 +118,18 @@ Both versioned entrypoints expose the compact `createApp()`, `createRenderer()`,
 names. Low-level Node/native implementation types are not part of these
 facades.
 
+`VideoSprite` accepts an optional packed-alpha layout for videos that store the
+color image on the left and a grayscale alpha mask on the right. The mask scale
+is its width divided by the color width; a 1920x768 frame containing 1280x768
+color plus a 640x768 mask uses:
+
+```ts
+const sprite = new VideoSprite(video, { alphaMaskScale: 0.5 });
+```
+
+The split must produce positive, even pixel widths so both NV12 chroma regions
+remain aligned. Omitting the option retains normal opaque video rendering.
+
 ## Requirements
 
 The supported development targets are Linux x64 and Windows 11 x64. The same Node.js and pnpm versions should be used on both platforms:
@@ -287,7 +299,7 @@ audio, the filters used by this runtime, D3D11VA, and the raw NV12/f32le output
 paths. Linux continues to use `FFMPEG_PATH` or `PATH` until a Linux bundle is
 added. See `THIRD_PARTY_NOTICES.md` for the exact source commit.
 
-`NativeVideo` provides `load()`, `play()`, `pause()`, writable `src` and `currentTime`, metadata, `loop`, `playbackRate`, volume/mute controls, EventTarget-compatible media events, separate video/audio error state, and decode/presentation/drop statistics. Assigning `src` reloads the source immediately and preserves active playback; an existing Pixi 7 or Pixi 8 `VideoSprite` clears its old frame and consumes the replacement decoder without being recreated. File metadata is probed with `ffprobe` beside the selected FFmpeg executable when available. Embedded audio is decoded as a bounded FFmpeg PCM stream and acts as the master playback clock; video-only files continue without audio. During the Windows move/resize modal loop file video continues silently, then discards stale audio and restarts A/V at the latest presented video time. On the video scene, use Up/Down to cycle through all MP4 files in `src/demo/assets`.
+`NativeVideo` provides `load()`, `play()`, `pause()`, writable `src` and `currentTime`, metadata, `loop`, `playbackRate`, volume/mute controls, EventTarget-compatible media events, separate video/audio error state, and decode/presentation/drop statistics. Assigning `src` reloads the source immediately and preserves active playback; an existing Pixi 7 or Pixi 8 `VideoSprite` clears its old frame and consumes the replacement decoder without being recreated. File metadata is probed with `ffprobe` beside the selected FFmpeg executable when available. Embedded audio is decoded as a bounded FFmpeg PCM stream and acts as the master playback clock; video-only files continue without audio. During the Windows move/resize modal loop file video continues silently, then discards stale audio and restarts A/V at the latest presented video time. On the video scene, use Up/Down to cycle through all MP4 files in `src/demo/assets`. Press E for the source-event mode, where Up/Down assigns `src` on one active video, A toggles five-second automatic source changes, and every media event is shown in the scene and logged to the console. Press T to play the packed-alpha fixture over a checkerboard background.
 
 Callers may pass structured `ffmpeg.inputArgs`, `videoOutputArgs`, and `audioOutputArgs`. The module inserts input arguments before its owned `-i`, then appends its mandatory NV12 or PCM pipe output. `mediaType: "live"` and `inputPacing: "source"` disable file-style `-readrate`; bounded latest-frame delivery supplies ffplay-like frame dropping without accepting ffplay-only `-framedrop` or `-sync` flags. Authenticated URL credentials are redacted from surfaced FFmpeg errors.
 
@@ -299,7 +311,7 @@ Scene `6` exercises two sound sprites, looping music, and a generated MP3 drum a
 
 Demo scene transitions use strict ownership rather than caching: the outgoing scene recursively destroys its Pixi renderables, Text GPU data, and owned Graphics contexts. Video scenes additionally close FFmpeg and release both NV12 texture planes, shader bind groups, geometry, and vertex/index buffers. Shared application textures are retained until application shutdown.
 
-Scenes are selected with `1`–`8`: Graphics, Sprite, Text, BitmapText, Video, Audio, dual RTP Video, and Rain Sprite. Use the left and right arrow keys to move between scenes. In the Sprite scene, Up adds ten randomly placed and animated sprites and Down removes the latest ten; in the Rain Sprite scene, Up adds two falling `AnimatedSprite` drops and Down removes two, M toggles rain sound, and each drop plays a sound when it reaches the bottom while unmuted. In the Video scene, Up and Down continue to select the video. In the Audio scene, A/S play overlapping sprites, M starts or repeats the looping-music fade-in, F fades it out, and Space toggles global mute. The drum mapping is U crash, I closed hi-hat, O ride, P high tom, J snare, K kick, L floor tom, and Č open hi-hat. Key-repeat events are ignored.
+Scenes are selected with `1`–`9`: Graphics, Sprite, Text, BitmapText, Video, Audio, dual RTP Video, Rain Sprite, and Particle. Use the left and right arrow keys to move between scenes. In the Sprite scene, Up adds ten randomly placed and animated sprites and Down removes the latest ten; in the Rain Sprite scene, Up adds two falling `AnimatedSprite` drops and Down removes two, M toggles rain sound, and each drop plays a sound when it reaches the bottom while unmuted. In the Video scene, Up and Down select the video, M toggles the mask, E toggles the source-event mode, and T toggles the packed-alpha fixture. In the Audio scene, A/S play overlapping sprites, M starts or repeats the looping-music fade-in, F fades it out, and Space toggles global mute. The drum mapping is U crash, I closed hi-hat, O ride, P high tom, J snare, K kick, L floor tom, and Č open hi-hat. Key-repeat events are ignored.
 
 ## Current limitations
 
