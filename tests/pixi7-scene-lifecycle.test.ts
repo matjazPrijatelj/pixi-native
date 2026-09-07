@@ -8,8 +8,8 @@ import {
     Texture,
     utils,
 } from "pixi.js-v7";
-import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
-import { disposeDemoScene } from "../v7/sceneLifecycle.ts";
+import { NodeDOMAdapter } from "../src/pixi-native/NodeDOMAdapter.ts";
+import { disposeDemoScene } from "../src/demo/v7/sceneLifecycle.ts";
 
 test("PixiJS 7 scene disposal releases Text textures but preserves shared Sprite textures", () => {
     new NodeDOMAdapter({} as never).installPixi7(settings);

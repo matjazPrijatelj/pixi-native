@@ -7,10 +7,10 @@ import { gsap } from "gsap";
 import {
     DYNAMIC_BITMAP_FONT_NAME,
     installDynamicBitmapTextFont,
-} from "../v8/bitmapFonts.ts";
-import { createSpriteTest } from "../v8/scenes/SpriteTest.ts";
-import { disposeDemoScene } from "../v8/sceneLifecycle.ts";
-import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
+} from "../src/demo/v8/bitmapFonts.ts";
+import { createSpriteTest } from "../src/demo/v8/scenes/SpriteTest.ts";
+import { disposeDemoScene } from "../src/demo/v8/sceneLifecycle.ts";
+import { NodeDOMAdapter } from "../src/pixi-native/NodeDOMAdapter.ts";
 
 test("Sprite scene adds and removes animated batches without leaking tweens", () => {
     new NodeDOMAdapter({} as never).installPixi8(DOMAdapter);
@@ -71,7 +71,7 @@ for (const [file, expectedSize] of [
     ["mario.png", 256],
 ] as const) {
     test(`${file} is a square RGBA sprite with transparency`, async () => {
-        const path = fileURLToPath(new URL(`../assets/${file}`, import.meta.url));
+        const path = fileURLToPath(new URL(`../src/demo/assets/${file}`, import.meta.url));
         const image = await loadImage(path);
         assert.equal(image.width, expectedSize);
         assert.equal(image.height, expectedSize);

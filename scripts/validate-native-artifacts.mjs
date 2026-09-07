@@ -52,7 +52,7 @@ if (process.platform === "win32") {
         ffmpegDirectory,
         resolve(root, "src/demo/assets/Big_Buck_Bunny_1080_30s.mp4"),
         resolve(root, "src/demo/assets/audio/howler-test.wav"),
-        resolve(root, "src/demo/tests/fixtures/hevc-one-frame.mp4"),
+        resolve(root, "tests/fixtures/hevc-one-frame.mp4"),
     );
 }
 

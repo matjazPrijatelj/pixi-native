@@ -22,7 +22,7 @@
     "dev:webgl7": "node --enable-source-maps src/dev-runner.ts webgl7",
     "build": "node scripts/build-package.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/demo/tests/*.test.ts",
+    "test": "node --test tests/*.test.ts",
     "package:prepare": "pnpm typecheck && pnpm test && pnpm build && node scripts/validate-native-artifacts.mjs",
     "pack:dist": "node scripts/pack-distribution.mjs",
     "prepack": "pnpm package:prepare",

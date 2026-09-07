@@ -2,6 +2,10 @@
 
 ## 2026-09-07
 
+- Expanded WebGPU, PixiJS 8 WebGL, and PixiJS 7 WebGL startup diagnostics
+  with resolved window configuration and actual desktop position.
+- Moved the demo test suite and its HEVC fixture from `src/demo/tests` to the
+  repository-level `tests` directory.
 - Fixed video-only playback running too quickly during Windows window dragging
   and resizing. Modal rendering now starts the monotonic file clock as soon as
   the decoder has a frame, without resetting it when asynchronous prebuffering

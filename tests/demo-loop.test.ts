@@ -4,7 +4,7 @@ import {
     createDemoLoop,
     getNextLoopSceneIndex,
     isLoopDemoShortcut,
-} from "../DemoLoop.ts";
+} from "../src/demo/DemoLoop.ts";
 
 test("plus toggles the demo loop only on the initial key press", () => {
     assert.equal(isLoopDemoShortcut("+"), true);

@@ -167,7 +167,7 @@ try {
       ffmpegDirectory,
       resolve(repositoryRoot, "src/demo/assets/Big_Buck_Bunny_1080_30s.mp4"),
       resolve(repositoryRoot, "src/demo/assets/audio/howler-test.wav"),
-      resolve(repositoryRoot, "src/demo/tests/fixtures/hevc-one-frame.mp4"),
+      resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
     );
   }
   execSync("pnpm exec tsc -p tsconfig.json", {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { manageNativeApplication } from "../../pixi-native/ManagedNativeApplication.ts";
+import { manageNativeApplication } from "../src/pixi-native/ManagedNativeApplication.ts";
 
 type Callback = () => void;
 

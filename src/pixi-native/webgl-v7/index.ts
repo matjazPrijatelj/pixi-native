@@ -13,6 +13,7 @@ import type {
 } from "../nativeTypes.ts";
 import { createModalFrameController } from "../ModalFrameController.ts";
 import {
+  getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
@@ -137,7 +138,7 @@ export async function createRenderer(
     CanvasImage as unknown as new () => { src: string },
     webglRenderingContextConstructor,
   );
-  const { Application, settings } = await import("pixi.js-v7");
+  const { Application, settings, VERSION } = await import("pixi.js-v7");
   adapter.installPixi7(settings);
   if (!usesWindowsAngle && legacyImage) {
     const nativeBufferData = webgl.bufferData.bind(webgl) as (
@@ -275,6 +276,14 @@ export async function createRenderer(
   window.on("resize", () => {
     canvas.resize(window.pixelWidth, window.pixelHeight);
     app.renderer.resize(window.pixelWidth, window.pixelHeight);
+  });
+
+  console.log({
+    pixi: VERSION,
+    renderer: "webgl",
+    backend: "webgl",
+    size: [canvas.width, canvas.height],
+    ...getWindowOptionsDiagnostics(windowOptions, window),
   });
 
   let destroyed = false;

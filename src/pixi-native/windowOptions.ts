@@ -1,6 +1,7 @@
 import type {
   AntialiasSamples,
   NodeRendererOptions,
+  NodeWindowHandle,
 } from "./nativeTypes.ts";
 import { DEFAULT_ANTIALIAS_SAMPLES } from "./nativeTypes.ts";
 
@@ -116,6 +117,24 @@ export function resolveNodeRendererOptions(
     antialiasSamples,
     x: options.x,
     y: options.y,
+  };
+}
+
+/** Returns the resolved window settings shared by renderer startup logs. */
+export function getWindowOptionsDiagnostics(
+  options: ResolvedNodeRendererOptions,
+  window: Pick<NodeWindowHandle, "x" | "y">,
+) {
+  return {
+    title: options.title,
+    position: [window.x, window.y] as const,
+    resizable: options.resizable,
+    vsync: options.vsync,
+    maxFps: options.maxFps,
+    borderless: options.borderless,
+    transparent: options.transparent,
+    backgroundAlpha: options.backgroundAlpha,
+    antialiasSamples: options.antialiasSamples,
   };
 }
 

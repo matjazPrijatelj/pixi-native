@@ -29,6 +29,7 @@ import {
   setNativeWindowTransparent,
 } from "../ModalFrameController.ts";
 import {
+  getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
@@ -289,6 +290,7 @@ export async function createWebGpuRenderer(
     devicePixelRatio: 1,
     refreshRateHz,
     adapter: adapter.info?.device ?? adapter.info?.description ?? "unknown",
+    ...getWindowOptionsDiagnostics(windowOptions, window),
   });
 
   let destroyed = false;

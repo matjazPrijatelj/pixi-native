@@ -12,8 +12,8 @@ import {
   type NativeVideoDependencies,
   type NativeVideoAudioLike,
   type NativeVideoFrame,
-} from "../../pixi-native/video/NativeVideo.ts";
-import { VideoEventMonitor } from "../VideoEventMonitor.ts";
+} from "../src/pixi-native/video/NativeVideo.ts";
+import { VideoEventMonitor } from "../src/demo/VideoEventMonitor.ts";
 
 test("NV12 layout requires positive even dimensions", () => {
   assert.deepEqual(getNv12FrameLayout(1280, 720), {

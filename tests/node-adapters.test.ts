@@ -7,31 +7,32 @@ import {
   createNativeMouseEvent,
   NodeDOMAdapter,
   normalizeRefreshRate,
-} from "../../pixi-native/NodeDOMAdapter.ts";
-import { NodeGPUCanvas } from "../../pixi-native/NodeGPUCanvas.ts";
-import { NodeCanvas } from "../../pixi-native/NodeCanvas.ts";
-import { NodeGLCanvas } from "../../pixi-native/NodeGLCanvas.ts";
-import { NodeGLWindow } from "../../pixi-native/NodeGLWindow.ts";
-import { copyRgbaRowsFlippedY } from "../../pixi-native/rgbaUpload.ts";
-import { sliceWebGlBufferData } from "../../pixi-native/webglBufferUpload.ts";
-import { installWebGlMultisampleScreen } from "../../pixi-native/webglMultisampleScreen.ts";
+} from "../src/pixi-native/NodeDOMAdapter.ts";
+import { NodeGPUCanvas } from "../src/pixi-native/NodeGPUCanvas.ts";
+import { NodeCanvas } from "../src/pixi-native/NodeCanvas.ts";
+import { NodeGLCanvas } from "../src/pixi-native/NodeGLCanvas.ts";
+import { NodeGLWindow } from "../src/pixi-native/NodeGLWindow.ts";
+import { copyRgbaRowsFlippedY } from "../src/pixi-native/rgbaUpload.ts";
+import { sliceWebGlBufferData } from "../src/pixi-native/webglBufferUpload.ts";
+import { installWebGlMultisampleScreen } from "../src/pixi-native/webglMultisampleScreen.ts";
 import {
   installWebGlImageUploadAdapter,
   type WebGlImageUploadContext,
-} from "../../pixi-native/webglImageUpload.ts";
+} from "../src/pixi-native/webglImageUpload.ts";
 import {
+  getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
   resolveWebGpuAntialiasSamples,
   warnAntialiasSampleFallback,
-} from "../../pixi-native/windowOptions.ts";
-import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
+} from "../src/pixi-native/windowOptions.ts";
+import { DEMO_WINDOW_OPTIONS } from "../src/demo/windowOptions.ts";
 import {
   assertGlfwTransparency,
   requestGlfwTransparency,
-} from "../../pixi-native/glfwTransparency.ts";
+} from "../src/pixi-native/glfwTransparency.ts";
 
 test("native window options normalize transparency and desktop position", () => {
   assert.deepEqual(resolveNodeRendererOptions({}, "Default title", "win32"), {
@@ -139,6 +140,39 @@ test("native window options normalize transparency and desktop position", () => 
   );
 });
 
+test("window diagnostics expose resolved options and actual position", () => {
+  const options = resolveNodeRendererOptions(
+    {
+      title: "Diagnostics",
+      width: 1280,
+      height: 720,
+      resizable: false,
+      vsync: false,
+      maxFps: 120,
+      borderless: true,
+      transparent: true,
+      backgroundAlpha: 0.5,
+      antialiasSamples: 0,
+      x: 10,
+      y: 20,
+    },
+    "Default title",
+    "win32",
+  );
+
+  assert.deepEqual(getWindowOptionsDiagnostics(options, { x: 30, y: 40 }), {
+    title: "Diagnostics",
+    position: [30, 40],
+    resizable: false,
+    vsync: false,
+    maxFps: 120,
+    borderless: true,
+    transparent: true,
+    backgroundAlpha: 0.5,
+    antialiasSamples: 0,
+  });
+});
+
 test("MSAA fallback warnings report only changed sample counts", () => {
   const originalWarn = console.warn;
   const warnings: unknown[][] = [];
@@ -216,6 +250,7 @@ test("native demos expose explicit decorated window defaults", () => {
     backgroundAlpha: 0.5,
     x: 50,
     y: 50,
+    antialiasSamples: 0,
   });
 });
 
@@ -497,7 +532,7 @@ test("ANGLE adapter decodes native Image texture uploads through Canvas2D", asyn
     image.onload = (): void => resolve();
     image.onerror = reject;
     image.src = fileURLToPath(
-      new URL("../assets/bitmap-font/native-pixel.png", import.meta.url),
+      new URL("../src/demo/assets/bitmap-font/native-pixel.png", import.meta.url),
     );
   });
 
@@ -535,7 +570,7 @@ test("ANGLE adapter removes transparent matte colors from the drum atlas", async
     image.onload = (): void => resolve();
     image.onerror = reject;
     image.src = fileURLToPath(
-      new URL("../assets/drum-kit.png", import.meta.url),
+      new URL("../src/demo/assets/drum-kit.png", import.meta.url),
     );
   });
   gl.texImage2D(1, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
@@ -971,7 +1006,7 @@ test("NodeDOMAdapter loads a local image into a Canvas2D context", async () => {
     };
     image.onerror = reject;
     image.src = fileURLToPath(
-      new URL("../assets/test-texture.png", import.meta.url),
+      new URL("../src/demo/assets/test-texture.png", import.meta.url),
     );
   });
 
@@ -990,7 +1025,7 @@ test("NodeDOMAdapter loads file URLs into a native image", async () => {
     image.onload = (): void => resolve();
     image.onerror = reject;
     image.src = new URL(
-      "../assets/bitmap-font/native-pixel.png",
+      "../src/demo/assets/bitmap-font/native-pixel.png",
       import.meta.url,
     ).href;
   });
@@ -1002,7 +1037,7 @@ test("NodeDOMAdapter loads file URLs into a native image", async () => {
 test("NodeDOMAdapter fetches absolute paths and file URLs without HTTP", async () => {
   const adapter = new NodeDOMAdapter({} as never);
   const fontUrl = new URL(
-    "../assets/bitmap-font/native-pixel.fnt",
+    "../src/demo/assets/bitmap-font/native-pixel.fnt",
     import.meta.url,
   );
 

@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import * as v7 from "../../pixi-native/v7.ts";
-import * as v8 from "../../pixi-native/v8.ts";
+import * as v7 from "../src/pixi-native/v7.ts";
+import * as v8 from "../src/pixi-native/v8.ts";
 
 test("versioned facades expose compact APIs for the matching Pixi major", () => {
     assert.match(v7.VERSION, /^7\./);
@@ -19,7 +19,7 @@ test("versioned facades expose compact APIs for the matching Pixi major", () => 
 
 test("package exports only the versioned Pixi facades", async () => {
     const packageJson = JSON.parse(
-        await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
+        await readFile(new URL("../package.json", import.meta.url), "utf8"),
     ) as { exports: Record<string, unknown> };
 
     assert.deepEqual(Object.keys(packageJson.exports), [

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fitVideoRect } from "../v8/videoLayout.ts";
+import { fitVideoRect } from "../src/demo/v8/videoLayout.ts";
 
 test("fitVideoRect fits 1080p video into a 16:9 window", () => {
     const rect = fitVideoRect(1920, 1080, 1280, 720);

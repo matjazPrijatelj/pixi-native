@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { getDefaultGpuBackend, resolveGpuBackend, supportsNativeVideo } from "../../pixi-native/platform.ts";
+import { getDefaultGpuBackend, resolveGpuBackend, supportsNativeVideo } from "../src/pixi-native/platform.ts";
 
 const require = createRequire(import.meta.url);
-const { getBindingPath, getPlatformDirectory } = require("../../../native/gpu/src/binding-path.js") as {
+const { getBindingPath, getPlatformDirectory } = require("../native/gpu/src/binding-path.js") as {
     getBindingPath(platform?: string, arch?: string): string;
     getPlatformDirectory(platform?: string, arch?: string): string;
 };

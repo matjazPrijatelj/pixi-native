@@ -4,10 +4,10 @@ import { Container, Sprite, Texture } from "pixi.js";
 import {
     disposeDemoScene,
     type DisposableDemoScene,
-} from "../v8/sceneLifecycle.ts";
-import { NativeVideo } from "../../pixi-native/video/index.ts";
-import { NativeVideoSprite } from "../../pixi-native/video/NativeVideoSprite.ts";
-import { uploadNv12FrameWebGl } from "../../pixi-native/video/NativeVideoSprite.ts";
+} from "../src/demo/v8/sceneLifecycle.ts";
+import { NativeVideo } from "../src/pixi-native/video/index.ts";
+import { NativeVideoSprite } from "../src/pixi-native/video/NativeVideoSprite.ts";
+import { uploadNv12FrameWebGl } from "../src/pixi-native/video/NativeVideoSprite.ts";
 
 test("disposing a demo scene releases children and calls dispose once", () => {
     const stage = new Container();

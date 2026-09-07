@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Texture } from "pixi.js";
-import { ParticleEmitter } from "../v8/ParticleEmitter.ts";
+import { ParticleEmitter } from "../src/demo/v8/ParticleEmitter.ts";
 
 test("particle emitter is disabled by default and stays bounded while recycling", () => {
     const texture = Texture.WHITE;

@@ -2,11 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { Assets, BitmapFont, BitmapText, settings } from "pixi.js-v7";
-import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
+import { NodeDOMAdapter } from "../src/pixi-native/NodeDOMAdapter.ts";
 import {
     DYNAMIC_BITMAP_FONT_NAME,
     installDynamicBitmapTextFont,
-} from "../v7/bitmapFonts.ts";
+} from "../src/demo/v7/bitmapFonts.ts";
 
 test("PixiJS 7 dynamic BitmapFont contains every scene glyph", () => {
     new NodeDOMAdapter({} as never).installPixi7(settings);
@@ -37,7 +37,7 @@ test("PixiJS 7 Assets loader resolves real dimensions before scene setup", async
     (globalThis as unknown as { location?: Location }).location ??= new URL(
         "file:///",
     ) as unknown as Location;
-    const path = fileURLToPath(new URL("../assets/drum-kit.png", import.meta.url));
+    const path = fileURLToPath(new URL("../src/demo/assets/drum-kit.png", import.meta.url));
     const texture = await Assets.load(path);
 
     assert.ok(texture.width > 1);

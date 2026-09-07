@@ -17,6 +17,7 @@ import { sliceWebGlBufferData } from "../webglBufferUpload.ts";
 import { installWebGlImageUploadAdapter } from "../webglImageUpload.ts";
 import { createModalFrameController } from "../ModalFrameController.ts";
 import {
+  getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
@@ -371,6 +372,7 @@ export async function createWebGlRenderer(
       renderer: app.renderer.name,
       backend: selectedBackend,
       size: [canvas.width, canvas.height],
+      ...getWindowOptionsDiagnostics(windowOptions, window),
     });
 
     let destroyed = false;

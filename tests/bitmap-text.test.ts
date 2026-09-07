@@ -11,18 +11,18 @@ import {
 } from "pixi.js";
 import {
     createBitmapTextTest,
-} from "../v8/scenes/BitmapTextTest.ts";
+} from "../src/demo/v8/scenes/BitmapTextTest.ts";
 import {
     createMetricBitmapText,
     DYNAMIC_BITMAP_FONT_NAME,
     installDynamicBitmapTextFont,
-} from "../v8/bitmapFonts.ts";
-import { FpsOverlay } from "../v8/FpsOverlay.ts";
-import { disposeDemoScene } from "../v8/sceneLifecycle.ts";
-import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
+} from "../src/demo/v8/bitmapFonts.ts";
+import { FpsOverlay } from "../src/demo/v8/FpsOverlay.ts";
+import { disposeDemoScene } from "../src/demo/v8/sceneLifecycle.ts";
+import { NodeDOMAdapter } from "../src/pixi-native/NodeDOMAdapter.ts";
 
 const FONT_URL = new URL(
-    "../assets/bitmap-font/native-pixel.fnt",
+    "../src/demo/assets/bitmap-font/native-pixel.fnt",
     import.meta.url,
 );
 

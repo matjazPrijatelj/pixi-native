@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BitmapFont, DOMAdapter, Texture } from "pixi.js";
-import { createRainSpriteTest } from "../v8/scenes/RainSpriteTest.ts";
+import { createRainSpriteTest } from "../src/demo/v8/scenes/RainSpriteTest.ts";
 import {
     DYNAMIC_BITMAP_FONT_NAME,
     installDynamicBitmapTextFont,
-} from "../v8/bitmapFonts.ts";
-import { NodeDOMAdapter } from "../../pixi-native/NodeDOMAdapter.ts";
+} from "../src/demo/v8/bitmapFonts.ts";
+import { NodeDOMAdapter } from "../src/pixi-native/NodeDOMAdapter.ts";
 
 test("Rain Sprite scene adds and removes drops in pairs", () => {
     new NodeDOMAdapter({} as never).installPixi8(DOMAdapter);

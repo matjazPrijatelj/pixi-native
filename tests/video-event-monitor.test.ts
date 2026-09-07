@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { VideoEventMonitor } from "../VideoEventMonitor.ts";
+import { VideoEventMonitor } from "../src/demo/VideoEventMonitor.ts";
 
 class FakeVideo extends EventTarget {
   public currentTime = 0;
