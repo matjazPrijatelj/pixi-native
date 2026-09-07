@@ -1,0 +1,1 @@
+export const DEFAULT_ANTIALIAS_SAMPLES = 4;

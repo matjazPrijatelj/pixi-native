@@ -8,7 +8,7 @@ build/
 /packages/*/dist/
 /packages/native-win32-x64/native/
 /packages/native-win32-x64/THIRD_PARTY_NOTICES.md
-/artifacts/
+/artifacts/.npm-cache
 
 # Coverage and temporary caches
 coverage/
@@ -48,5 +48,4 @@ native/ffmpeg/out/
 
 
 # Crash dumps
-core
 core.*

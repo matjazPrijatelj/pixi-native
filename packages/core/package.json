@@ -1,0 +1,38 @@
+{
+    "name": "@pixi-native/core",
+    "version": "0.1.0",
+    "type": "module",
+    "license": "UNLICENSED",
+    "engines": {
+        "node": ">=24.13.0 <25"
+    },
+    "files": ["dist", "README.md", "HISTORY.md", "THIRD_PARTY_NOTICES.md"],
+    "exports": {
+        ".": "./src/index.ts",
+        "./audio": "./src/audio/index.ts",
+        "./files": "./src/files.ts",
+        "./runtime": "./src/runtime.ts",
+        "./canvas": "./src/canvas.ts",
+        "./application/*.js": "./src/application/*.ts",
+        "./audio/*.js": "./src/audio/*.ts",
+        "./canvas/*.js": "./src/canvas/*.ts",
+        "./renderers/*.js": "./src/renderers/*.ts",
+        "./runtime/*.js": "./src/runtime/*.ts",
+        "./video/*.js": "./src/video/*.ts"
+    },
+    "dependencies": {
+        "@kmamal/sdl": "0.11.13",
+        "@napi-rs/canvas": "1.0.8",
+        "@node-3d/core": "6.3.0",
+        "@node-3d/glfw": "7.3.1"
+    },
+    "peerDependencies": {
+        "@pixi-native/native-win32-x64": "0.1.0"
+    },
+    "peerDependenciesMeta": {
+        "@pixi-native/native-win32-x64": { "optional": true }
+    },
+    "devDependencies": {
+        "@pixi-native/native-win32-x64": "workspace:*"
+    }
+}
