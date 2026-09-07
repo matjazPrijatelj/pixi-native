@@ -17,7 +17,6 @@ const REQUIRED_NATIVE_ARTIFACTS = [
     "native/gpu/dist/win32-x64/d3dcompiler_47.dll",
     "native/window/dist/win32-x64/native_window.node",
     "native/audio/dist/win32-x64/native_audio.node",
-    "native/video/dist/linux-x64/native_video.node",
     "native/video/dist/win32-x64/native_video.node",
 ];
 const REQUIRED_FFMPEG_ARTIFACTS = [

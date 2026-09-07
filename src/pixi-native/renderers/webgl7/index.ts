@@ -1,26 +1,26 @@
 import type { Application } from "pixi.js-v7";
 import { Image as CanvasImage } from "@napi-rs/canvas";
-import { NodeDOMAdapter } from "../NodeDOMAdapter.ts";
-import { NodeGLCanvas } from "../NodeGLCanvas.ts";
-import { createNodeGlfwWebGLSurface } from "../NodeGlfwWebGLSurface.ts";
-import { NodeCanvas } from "../NodeCanvas.ts";
-import { copyRgbaRowsFlippedY } from "../rgbaUpload.ts";
+import { NodeDOMAdapter } from "../../runtime/NodeDOMAdapter.ts";
+import { NodeGLCanvas } from "../../canvas/NodeGLCanvas.ts";
+import { createNodeGlfwWebGLSurface } from "../webgl/NodeGlfwWebGLSurface.ts";
+import { NodeCanvas } from "../../canvas/NodeCanvas.ts";
+import { copyRgbaRowsFlippedY } from "../../canvas/rgbaUpload.ts";
 import type {
   NodeNativeInput,
   NodeRendererOptions,
   NodeWindowHandle,
-} from "../nativeTypes.ts";
-import { createModalFrameController } from "../ModalFrameController.ts";
+} from "../../runtime/nativeTypes.ts";
+import { createModalFrameController } from "../../runtime/ModalFrameController.ts";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
-} from "../windowOptions.ts";
+} from "../../runtime/windowOptions.ts";
 import {
   manageNativeApplication,
   type ManagedNativeApplication,
-} from "../ManagedNativeApplication.ts";
+} from "../../application/ManagedNativeApplication.ts";
 
 export type RendererOptions = NodeRendererOptions;
 

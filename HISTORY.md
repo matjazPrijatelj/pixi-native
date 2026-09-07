@@ -2,6 +2,23 @@
 
 ## 2026-09-07
 
+- Added deliberate `pixi-native/runtime` and `pixi-native/canvas` public barrels,
+  package targets, packed-file validation, runtime import smoke coverage, and
+  declaration checks. Removed the incomplete `pixi-native/application` export
+  because no matching public barrel exists.
+- Reorganized `src/pixi-native` by ownership into `application`, `canvas`,
+  `renderers`, and `runtime` while preserving the existing `/v7`, `/v8`,
+  `/audio`, `/video`, and `/files` package entrypoints. Updated internal, demo,
+  and test imports and corrected the deeper WebGPU renderer path to the native
+  GPU addon.
+- Kept distribution builds in the full development checkout while making the
+  packed-install proof production-first: runtime imports and FFmpeg checks now
+  run after `pnpm install --prod`, and TypeScript is added only afterward for
+  declaration validation. A repository-local npm cache makes packing independent
+  of the user's npm cache permissions. Documented the `pnpm-workspace.yaml`
+  Windows x64 optional-native dependency target and Linux x64 opt-in. The fresh
+  package fixture explicitly ignores the parent workspace so pnpm installs it as
+  an independent consumer project.
 - Routed PixiJS 8 and PixiJS 7 WebGL through one shared
   `@node-3d/core`/`@node-3d/glfw` OpenGL ES surface on Windows and Linux,
   explicitly requesting an 8-bit transparent framebuffer and allowing Linux

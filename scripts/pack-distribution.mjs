@@ -15,6 +15,7 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsDirectory = resolve(root, "artifacts");
+const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
 const MAX_UNPACKED_BYTES = 100 * 1024 * 1024;
 const REQUIRED_PACKAGE_FILES = [
     "package.json",
@@ -25,11 +26,14 @@ const REQUIRED_PACKAGE_FILES = [
     "dist/pixi-native/v7.d.ts",
     "dist/pixi-native/v8.js",
     "dist/pixi-native/v8.d.ts",
+    "dist/pixi-native/runtime.js",
+    "dist/pixi-native/runtime.d.ts",
+    "dist/pixi-native/canvas.js",
+    "dist/pixi-native/canvas.d.ts",
     "native/gpu/dist/win32-x64/pixi_native_gpu.node",
     "native/gpu/dist/win32-x64/d3dcompiler_47.dll",
     "native/window/dist/win32-x64/native_window.node",
     "native/audio/dist/win32-x64/native_audio.node",
-    "native/video/dist/linux-x64/native_video.node",
     "native/video/dist/win32-x64/native_video.node",
     ...FFMPEG_PACKAGED_FILES.map(
         (filename) => `${FFMPEG_TARGET_DIRECTORY}/${filename}`,
@@ -72,11 +76,16 @@ if (sourceRelease !== "8.0") {
         `FFmpeg source archive has unexpected release ${sourceRelease}.`,
     );
 }
+
 execSync("pnpm package:prepare", { cwd: root, stdio: "inherit" });
 
 const packOutput = execSync(
     "npm pack --ignore-scripts --json --pack-destination artifacts",
-    { cwd: root, encoding: "utf8" },
+    {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, npm_config_cache: localNpmCache },
+    },
 );
 
 const [manifest] = JSON.parse(packOutput);

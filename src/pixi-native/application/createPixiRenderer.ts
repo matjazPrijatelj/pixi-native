@@ -1,8 +1,8 @@
 import type { Application } from "pixi.js";
-import type { NodeGLCanvas } from "./NodeGLCanvas.ts";
-import type { NodeGPUCanvas } from "./NodeGPUCanvas.ts";
-import { createWebGlRenderer } from "./webgl/createWebGlRenderer.ts";
-import { createWebGpuRenderer } from "./webgpu/createWebGpuRenderer.ts";
+import type { NodeGLCanvas } from "../canvas/NodeGLCanvas.ts";
+import type { NodeGPUCanvas } from "../canvas/NodeGPUCanvas.ts";
+import { createWebGlRenderer } from "../renderers/webgl/createWebGlRenderer.ts";
+import { createWebGpuRenderer } from "../renderers/webgpu/createWebGpuRenderer.ts";
 import {
     manageNativeApplication,
     type ManagedNativeApplication,
@@ -13,7 +13,7 @@ import type {
     NodeRenderSurface,
     NodeWindowHandle,
     NodeGPUInstance,
-} from "./nativeTypes.ts";
+} from "../runtime/nativeTypes.ts";
 
 export interface NodeRendererContext {
     readonly gpu: NodeGPUInstance | null;

@@ -7,13 +7,13 @@ import {
   createNativeMouseEvent,
   NodeDOMAdapter,
   normalizeRefreshRate,
-} from "../src/pixi-native/NodeDOMAdapter.ts";
-import { NodeGPUCanvas } from "../src/pixi-native/NodeGPUCanvas.ts";
-import { NodeCanvas } from "../src/pixi-native/NodeCanvas.ts";
-import { NodeGLCanvas } from "../src/pixi-native/NodeGLCanvas.ts";
-import { NodeGLWindow } from "../src/pixi-native/NodeGLWindow.ts";
-import { copyRgbaRowsFlippedY } from "../src/pixi-native/rgbaUpload.ts";
-import { sliceWebGlBufferData } from "../src/pixi-native/webglBufferUpload.ts";
+} from "../src/pixi-native/runtime/NodeDOMAdapter.ts";
+import { NodeGPUCanvas } from "../src/pixi-native/canvas/NodeGPUCanvas.ts";
+import { NodeCanvas } from "../src/pixi-native/canvas/NodeCanvas.ts";
+import { NodeGLCanvas } from "../src/pixi-native/canvas/NodeGLCanvas.ts";
+import { NodeGLWindow } from "../src/pixi-native/renderers/webgl/NodeGLWindow.ts";
+import { copyRgbaRowsFlippedY } from "../src/pixi-native/canvas/rgbaUpload.ts";
+import { sliceWebGlBufferData } from "../src/pixi-native/renderers/webgl/webglBufferUpload.ts";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -22,12 +22,12 @@ import {
   resolveNodeRendererOptions,
   resolveWebGpuAntialiasSamples,
   warnAntialiasSampleFallback,
-} from "../src/pixi-native/windowOptions.ts";
+} from "../src/pixi-native/runtime/windowOptions.ts";
 import { DEMO_WINDOW_OPTIONS } from "../src/demo/windowOptions.ts";
 import {
   assertGlfwTransparency,
   requestGlfwTransparency,
-} from "../src/pixi-native/glfwTransparency.ts";
+} from "../src/pixi-native/renderers/webgl/glfwTransparency.ts";
 
 test("native window options normalize transparency and desktop position", () => {
   assert.deepEqual(resolveNodeRendererOptions({}, "Default title", "win32"), {
@@ -79,8 +79,7 @@ test("native window options normalize transparency and desktop position", () => 
     /must be integers/,
   );
   assert.equal(
-    resolveNodeRendererOptions({ transparent: true }, "x", "linux")
-      .transparent,
+    resolveNodeRendererOptions({ transparent: true }, "x", "linux").transparent,
     true,
   );
   assert.equal(
@@ -118,20 +117,13 @@ test("native window options normalize transparency and desktop position", () => 
   assert.match(String(warnings[0][0]), /backgroundAlpha below 1 is ignored/);
 
   assert.equal(
-    resolveNodeRendererOptions(
-      { antialiasSamples: 8 },
-      "x",
-      "win32",
-    ).antialiasSamples,
+    resolveNodeRendererOptions({ antialiasSamples: 8 }, "x", "win32")
+      .antialiasSamples,
     8,
   );
   assert.throws(
     () =>
-      resolveNodeRendererOptions(
-        { antialiasSamples: 3 as 2 },
-        "x",
-        "win32",
-      ),
+      resolveNodeRendererOptions({ antialiasSamples: 3 as 2 }, "x", "win32"),
     /must be 0, 2, 4, or 8/,
   );
 });
@@ -207,12 +199,7 @@ test("maxFps controls only timer-paced animation frames", () => {
 
   for (const maxFps of [Number.NaN, 23.9, 360.1]) {
     assert.throws(
-      () =>
-        resolveNodeRendererOptions(
-          { vsync: false, maxFps },
-          "x",
-          "win32",
-        ),
+      () => resolveNodeRendererOptions({ vsync: false, maxFps }, "x", "win32"),
       /finite number from 24 to 360/,
     );
   }
@@ -250,17 +237,20 @@ test("native demos expose explicit decorated window defaults", () => {
 });
 
 test("Pixi 8 background RGB is premultiplied for transparent presentation", () => {
-  assert.deepEqual(premultiplyBackgroundColor(NATIVE_BACKGROUND_COLOR, 0), [
-    0, 0, 0,
+  assert.deepEqual(
+    premultiplyBackgroundColor(NATIVE_BACKGROUND_COLOR, 0),
+    [0, 0, 0],
+  );
+  assert.deepEqual(premultiplyBackgroundColor(NATIVE_BACKGROUND_COLOR, 0.5), [
+    8 / 255,
+    10.5 / 255,
+    34 / 255,
   ]);
-  assert.deepEqual(
-    premultiplyBackgroundColor(NATIVE_BACKGROUND_COLOR, 0.5),
-    [8 / 255, 10.5 / 255, 34 / 255],
-  );
-  assert.deepEqual(
-    premultiplyBackgroundColor(NATIVE_BACKGROUND_COLOR, 1),
-    [16 / 255, 21 / 255, 68 / 255],
-  );
+  assert.deepEqual(premultiplyBackgroundColor(NATIVE_BACKGROUND_COLOR, 1), [
+    16 / 255,
+    21 / 255,
+    68 / 255,
+  ]);
 });
 
 test("GLFW transparency is requested and verified", () => {
@@ -326,20 +316,20 @@ test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
   assert.deepEqual(resized, [640, 360]);
   assert.equal(canvas.width, 640);
   assert.equal(canvas.height, 360);
-    assert.equal(canvas.getPremultipliedRgbaPixels().byteLength, 640 * 360 * 4);
+  assert.equal(canvas.getPremultipliedRgbaPixels().byteLength, 640 * 360 * 4);
 });
 
 test("NodeGLCanvas delegates native drawing-buffer resizing", () => {
-    let resized: [number, number] | undefined;
-    const canvas = new NodeGLCanvas({}, 1280, 720, (width, height) => {
-        resized = [width, height];
-    });
+  let resized: [number, number] | undefined;
+  const canvas = new NodeGLCanvas({}, 1280, 720, (width, height) => {
+    resized = [width, height];
+  });
 
-    canvas.resize(800.9, 600.4);
+  canvas.resize(800.9, 600.4);
 
-    assert.deepEqual(resized, [800, 600]);
-    assert.equal(canvas.width, 800);
-    assert.equal(canvas.height, 600);
+  assert.deepEqual(resized, [800, 600]);
+  assert.equal(canvas.width, 800);
+  assert.equal(canvas.height, 600);
 });
 
 test("NodeGLWindow serializes its handle and controls window state", () => {
@@ -407,7 +397,9 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
   assert.equal(swapCalls, 1);
   assert.equal(drawCalls, 0);
   let wheelEvent: unknown;
-  window.on("mouseWheel", (event) => { wheelEvent = event; });
+  window.on("mouseWheel", (event) => {
+    wheelEvent = event;
+  });
   assert.deepEqual(wheelEvent, {
     x: 4,
     y: 5,
@@ -488,20 +480,22 @@ test("NodeDOMAdapter creates GL canvases for WebGL capability detection", () => 
 });
 
 test("NodeDOMAdapter installs a file location for Pixi 7 image loading", () => {
-    const globalObject = globalThis as unknown as { location?: URL };
-    const previousLocation = globalObject.location;
-    delete globalObject.location;
-    const adapter = new NodeDOMAdapter({} as never);
-    adapter.installPixi8(DOMAdapter);
-    const installedLocation = (globalThis as unknown as {
-        location?: { protocol: string };
-    }).location;
-    assert.equal(installedLocation?.protocol, "file:");
-    if (previousLocation) {
-        globalObject.location = previousLocation;
-    } else {
-        delete globalObject.location;
+  const globalObject = globalThis as unknown as { location?: URL };
+  const previousLocation = globalObject.location;
+  delete globalObject.location;
+  const adapter = new NodeDOMAdapter({} as never);
+  adapter.installPixi8(DOMAdapter);
+  const installedLocation = (
+    globalThis as unknown as {
+      location?: { protocol: string };
     }
+  ).location;
+  assert.equal(installedLocation?.protocol, "file:");
+  if (previousLocation) {
+    globalObject.location = previousLocation;
+  } else {
+    delete globalObject.location;
+  }
 });
 
 test("NodeDOMAdapter exposes WebGL 1 constructor without misclassifying WebGL 2", () => {

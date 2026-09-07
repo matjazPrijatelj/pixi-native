@@ -30,8 +30,10 @@ const [{ gsap }, { installGsapModalBridge }] = await Promise.all([
   import("../gsapModalBridge.ts"),
 ]);
 installGsapModalBridge(native, gsap.ticker, addDestroyListener);
-const { NodeCanvas } = await import("../../pixi-native/NodeCanvas.ts");
-const { supportsNativeVideo } = await import("../../pixi-native/platform.ts");
+const { NodeCanvas } = await import("../../pixi-native/canvas/NodeCanvas.ts");
+const { supportsNativeVideo } = await import(
+  "../../pixi-native/runtime/platform.ts"
+);
 const {
   animateDemoScene,
   createGraphicsTest,
@@ -52,7 +54,7 @@ const { FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
 const { Howler } = await import("../../pixi-native/audio/index.ts");
 const { copyRgbaRowsFlippedY } = await import(
-  "../../pixi-native/rgbaUpload.ts"
+  "../../pixi-native/canvas/rgbaUpload.ts"
 );
 const {
   getSceneIndexForKey,

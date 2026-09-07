@@ -1,4 +1,4 @@
-import type { NodeWindowRenderer } from "./nativeTypes.ts";
+import type { NodeWindowRenderer } from "../runtime/nativeTypes.ts";
 
 /** Minimal HTMLCanvasElement-shaped surface for Pixi's WebGPU renderer. */
 export class NodeGPUCanvas {

@@ -1,8 +1,11 @@
-import { NodeGLCanvas } from "./NodeGLCanvas.ts";
+import { NodeGLCanvas } from "../../canvas/NodeGLCanvas.ts";
 import { NodeGLWindow } from "./NodeGLWindow.ts";
-import type { NodeRenderSurface, NodeWindowHandle } from "./nativeTypes.ts";
-import type { ResolvedNodeRendererOptions } from "./windowOptions.ts";
-import { warnAntialiasSampleFallback } from "./windowOptions.ts";
+import type {
+  NodeRenderSurface,
+  NodeWindowHandle,
+} from "../../runtime/nativeTypes.ts";
+import type { ResolvedNodeRendererOptions } from "../../runtime/windowOptions.ts";
+import { warnAntialiasSampleFallback } from "../../runtime/windowOptions.ts";
 import {
   assertGlfwTransparency,
   requestGlfwTransparency,

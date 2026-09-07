@@ -2,6 +2,17 @@
 
 Native PixiJS runtime for rendering directly into a native window from Node.js, without a browser DOM, WebView, or CEF. The package exposes explicit `pixi-native/v7` and `pixi-native/v8` entrypoints so each display process selects one Pixi major.
 
+Compatibility integrations can import the shared scheduler, platform, DOM, and
+window types from `pixi-native/runtime`, and Canvas/upload adapters from
+`pixi-native/canvas`. Application lifecycle remains owned by the versioned
+facades and is not exposed as a separate package entrypoint.
+
+Internally, `src/pixi-native` is grouped by ownership: managed application
+lifecycle in `application`, Canvas/upload adapters in `canvas`, backend code in
+`renderers`, shared window/DOM/scheduling support in `runtime`, and independent
+`audio` and `video` modules. Public package entrypoints are deliberate facades;
+folder layout alone does not make an internal module importable.
+
 ## Stack
 
 - Node.js 24.13 or newer from the Node.js 24 LTS line
@@ -149,6 +160,12 @@ Create the verified private package with:
 pnpm pack:dist
 ```
 
+Run packaging from the normal development install because type checking, tests,
+and TypeScript compilation require `devDependencies`. The packed archive does
+not contain `node_modules` or development dependencies. Its fresh-install smoke
+test installs production dependencies first and runs the runtime checks before
+adding the TypeScript compiler used only to verify public declarations.
+
 On Windows x64, first build the pinned minimal FFmpeg runtime with:
 
 ```powershell
@@ -183,12 +200,17 @@ Install the tarball together with the PixiJS 8 peer dependency:
 pnpm add ./artifacts/pixi-native-0.1.0.tgz pixi.js@8.20.0
 ```
 
-The x64 package currently contains the Windows GPU binding, Windows and Linux
-video bindings, and the Windows modal-window and native-audio bindings. Linux
-WebGPU reports an explicit unsupported-platform error until its new
-`pixi_native_gpu.node` addon is built and added to the distribution. Linux
-WebGL remains available. The package owns its internal PixiJS 7 alias for the
-`pixi-native/v7` entrypoint. Windows includes the staged
+The package and `pnpm-workspace.yaml` currently target Windows x64. The packed
+archive contains only the Windows GPU, video, modal-window, and native-audio
+bindings; pnpm does not install optional native dependency variants for other
+operating systems or CPU architectures. The repository retains Linux source and
+build support, but Linux is not a production package target until its new
+`pixi_native_gpu.node` addon is available. At that point, add `linux` to
+`supportedArchitectures` and introduce a separately validated Linux package
+target rather than mixing platform binaries into the Windows archive.
+
+The package owns its internal PixiJS 7 alias for the `pixi-native/v7`
+entrypoint. Windows includes the staged
 minimal LGPL FFmpeg and FFprobe runtime. Linux FFmpeg is not bundled yet; set
 `FFMPEG_PATH` or make `ffmpeg` and `ffprobe` available in `PATH` there.
 

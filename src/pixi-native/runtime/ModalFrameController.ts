@@ -23,7 +23,7 @@ export function createCompositorFrameWaiter(
 ): (() => Promise<boolean>) | undefined {
   if (platform !== "win32") return undefined;
   const nativeWindow = nativeWindowOverride ??
-    require("../../native/window") as NativeWindowApi;
+    require("../../../native/window") as NativeWindowApi;
   if (!nativeWindow.waitForCompositorFrame) return undefined;
   return () => nativeWindow.waitForCompositorFrame!(1_000);
 }
@@ -39,7 +39,7 @@ export function setNativeWindowTransparent(
       "transparent native windows are supported only on Windows 11",
     );
   }
-  const nativeWindow = require("../../native/window") as NativeWindowApi;
+  const nativeWindow = require("../../../native/window") as NativeWindowApi;
   nativeWindow.setTransparent(nativeData, true);
 }
 
@@ -56,6 +56,6 @@ export function createModalFrameController(
 ): ModalFrameController {
   if (platform !== "win32") return NOOP_MODAL_FRAME_CONTROLLER;
 
-  const nativeWindow = require("../../native/window") as NativeWindowApi;
+  const nativeWindow = require("../../../native/window") as NativeWindowApi;
   return nativeWindow.create(nativeData, onFrame, onState);
 }

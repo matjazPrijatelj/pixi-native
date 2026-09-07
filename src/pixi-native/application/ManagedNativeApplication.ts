@@ -1,8 +1,8 @@
 import {
     createNativeKeyboardEvent,
     createNativeMouseEvent,
-} from "./NodeDOMAdapter.ts";
-import type { NodeNativeInput, NodeWindowHandle } from "./nativeTypes.ts";
+} from "../runtime/NodeDOMAdapter.ts";
+import type { NodeNativeInput, NodeWindowHandle } from "../runtime/nativeTypes.ts";
 
 const PRESENT_PRIORITY = -50;
 

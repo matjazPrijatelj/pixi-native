@@ -33,12 +33,12 @@
     "@napi-rs/canvas": "1.0.8",
     "@node-3d/core": "6.3.0",
     "@node-3d/glfw": "7.3.1",
+    "gsap": "^3.15.0",
+    "pixi.js": "8.20.0",
     "pixi.js-v7": "npm:pixi.js@7.4.3"
   },
   "devDependencies": {
     "@types/node": "22.15.21",
-    "gsap": "^3.15.0",
-    "pixi.js": "8.20.0",
     "prettier": "3.2.5",
     "typescript": "7.0.2"
   },
@@ -46,8 +46,7 @@
     "node": ">=24.13.0 <25"
   },
   "os": [
-    "win32",
-    "linux"
+    "win32"
   ],
   "cpu": [
     "x64"
@@ -79,7 +78,6 @@
     "native/video/src/binding-path.js",
     "native/video/src/index.js",
     "native/video/src/index.d.ts",
-    "native/video/dist/linux-x64",
     "native/video/dist/win32-x64",
     "README.md",
     "HISTORY.md",
@@ -105,13 +103,25 @@
     "./files": {
       "types": "./dist/pixi-native/files.d.ts",
       "default": "./dist/pixi-native/files.js"
+    },
+    "./runtime": {
+      "types": "./dist/pixi-native/runtime.d.ts",
+      "default": "./dist/pixi-native/runtime.js"
+    },
+    "./canvas": {
+      "types": "./dist/pixi-native/canvas.d.ts",
+      "default": "./dist/pixi-native/canvas.js"
     }
   },
   "peerDependencies": {
-    "pixi.js": ">=8.20.0 <9"
+    "pixi.js": ">=8.20.0 <9",
+    "pixi.js-v7": "npm:pixi.js@>=7.2.0 <8"
   },
   "peerDependenciesMeta": {
     "pixi.js": {
+      "optional": true
+    },
+    "pixi.js-v7": {
       "optional": true
     }
   }

@@ -1,21 +1,21 @@
 import { Application, DOMAdapter, VERSION } from "pixi.js";
 
-import { NodeCanvas } from "../NodeCanvas.ts";
-import { NodeDOMAdapter, normalizeRefreshRate } from "../NodeDOMAdapter.ts";
-import { createNodeGlfwWebGLSurface } from "../NodeGlfwWebGLSurface.ts";
-import type { NodeRendererContext } from "../createPixiRenderer.ts";
-import type { NodeRendererOptions } from "../nativeTypes.ts";
-import { copyRgbaRowsFlippedY } from "../rgbaUpload.ts";
-import { setNativeVideoModalState } from "../video/NativeVideo.ts";
-import { sliceWebGlBufferData } from "../webglBufferUpload.ts";
-import { createModalFrameController } from "../ModalFrameController.ts";
+import { NodeCanvas } from "../../canvas/NodeCanvas.ts";
+import { NodeDOMAdapter } from "../../runtime/NodeDOMAdapter.ts";
+import { createNodeGlfwWebGLSurface } from "./NodeGlfwWebGLSurface.ts";
+import type { NodeRendererContext } from "../../application/createPixiRenderer.ts";
+import type { NodeRendererOptions } from "../../runtime/nativeTypes.ts";
+import { copyRgbaRowsFlippedY } from "../../canvas/rgbaUpload.ts";
+import { setNativeVideoModalState } from "../../video/NativeVideo.ts";
+import { sliceWebGlBufferData } from "./webglBufferUpload.ts";
+import { createModalFrameController } from "../../runtime/ModalFrameController.ts";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
-} from "../windowOptions.ts";
+} from "../../runtime/windowOptions.ts";
 
 export async function createWebGlRenderer(
   options: NodeRendererOptions = {},
@@ -216,7 +216,6 @@ export async function createWebGlRenderer(
 
         nativeTexSubImage2D(...args);
       };
-
     }
 
     const domAdapter = new NodeDOMAdapter(

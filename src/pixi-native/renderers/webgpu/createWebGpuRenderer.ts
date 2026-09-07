@@ -1,33 +1,27 @@
 import { Application, DOMAdapter, VERSION } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import { createRequire } from "node:module";
-import { NodeDOMAdapter, normalizeRefreshRate } from "../NodeDOMAdapter.ts";
-import { NodeGPUCanvas } from "../NodeGPUCanvas.ts";
-import { NodeGLCanvas } from "../NodeGLCanvas.ts";
-import { NodeGLWindow } from "../NodeGLWindow.ts";
-import { NodeCanvas } from "../NodeCanvas.ts";
-import type {
-  NodeGPUApi,
-  NodeGPUInstance,
-  NodeWindowRenderer,
-  NodeNativeInput,
-  NodeRenderSurface,
-  NodeWindowHandle,
-} from "../nativeTypes.ts";
-import { resolveGpuBackend } from "../platform.ts";
+import {
+  NodeDOMAdapter,
+  normalizeRefreshRate,
+} from "../../runtime/NodeDOMAdapter.ts";
+import { NodeGPUCanvas } from "../../canvas/NodeGPUCanvas.ts";
+import { NodeCanvas } from "../../canvas/NodeCanvas.ts";
+import type { NodeGPUApi } from "../../runtime/nativeTypes.ts";
+import { resolveGpuBackend } from "../../runtime/platform.ts";
 import {
   getReusableUploadBuffer,
   prepareRgbaPixelsForUpload,
   type RgbaUploadFormat,
-} from "../rgbaUpload.ts";
+} from "../../canvas/rgbaUpload.ts";
 import * as sdl from "@kmamal/sdl";
-import { normalizeGpuBindGroupIndex } from "../gpuCompatibility.ts";
-import { setNativeVideoModalState } from "../video/NativeVideo.ts";
+import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
+import { setNativeVideoModalState } from "../../video/NativeVideo.ts";
 import {
   createCompositorFrameWaiter,
   createModalFrameController,
   setNativeWindowTransparent,
-} from "../ModalFrameController.ts";
+} from "../../runtime/ModalFrameController.ts";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -35,12 +29,12 @@ import {
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
   resolveWebGpuAntialiasSamples,
-} from "../windowOptions.ts";
+} from "../../runtime/windowOptions.ts";
 
 const require = createRequire(import.meta.url);
 
-import type { NodeRendererOptions } from "../nativeTypes.ts";
-import type { NodeRendererContext } from "../createPixiRenderer.ts";
+import type { NodeRendererOptions } from "../../runtime/nativeTypes.ts";
+import type { NodeRendererContext } from "../../application/createPixiRenderer.ts";
 
 export async function createWebGpuRenderer(
   options: NodeRendererOptions = {},
@@ -69,7 +63,7 @@ export async function createWebGpuRenderer(
     windowOptions.transparent,
   );
 
-  const gpu = require("../../../native/gpu") as NodeGPUApi;
+  const gpu = require("../../../../native/gpu") as NodeGPUApi;
   const backend = resolveGpuBackend();
   const presentMode = windowOptions.vsync ? "fifo" : "immediate";
   const gpuContext = gpu.createWindowContext({

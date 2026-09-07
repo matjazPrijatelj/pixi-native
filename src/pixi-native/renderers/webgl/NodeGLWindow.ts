@@ -1,4 +1,4 @@
-import type { NodeWindowHandle } from "./nativeTypes.ts";
+import type { NodeWindowHandle } from "../../runtime/nativeTypes.ts";
 
 export interface GlWindowMouseEvent {
     readonly x: number;

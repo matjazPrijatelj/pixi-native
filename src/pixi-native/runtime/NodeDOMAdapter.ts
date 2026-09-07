@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NodeGPUInstance } from "./nativeTypes.ts";
-import { NodeCanvas } from "./NodeCanvas.ts";
-import { NodeGLCanvas } from "./NodeGLCanvas.ts";
+import { NodeCanvas } from "../canvas/NodeCanvas.ts";
+import { NodeGLCanvas } from "../canvas/NodeGLCanvas.ts";
 import { FrameScheduler, VSyncFrameScheduler } from "./FrameScheduler.ts";
 
 type NativeImageConstructor = new () => {

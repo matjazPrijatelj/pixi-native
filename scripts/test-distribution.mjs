@@ -30,6 +30,8 @@ try {
     dependencies: {
       "pixi-native": toFileSpecifier(archivePath),
       "pixi.js": "8.20.0",
+    },
+    devDependencies: {
       typescript: "7.0.2",
     },
   };
@@ -47,6 +49,8 @@ try {
       '    "pixi-native/audio",',
       '    "pixi-native/video",',
       '    "pixi-native/files",',
+      '    "pixi-native/runtime",',
+      '    "pixi-native/canvas",',
       "];",
       "for (const entrypoint of entrypoints) await import(entrypoint);",
       'for (const removed of ["pixi-native", "pixi-native/webgpu", "pixi-native/webgl", "pixi-native/webgl-pixi7"]) {',
@@ -115,7 +119,9 @@ try {
       'import { Howl } from "pixi-native/audio";',
       'import { NativeVideo } from "pixi-native/video";',
       'import { createModuleFileAccess } from "pixi-native/files";',
-      "void [Container7, VideoSprite7, createApp7, createRenderer7, Container8, VideoSprite8, createApp8, createRenderer8, Howl, NativeVideo, createModuleFileAccess];",
+      'import { FrameScheduler } from "pixi-native/runtime";',
+      'import { NodeCanvas } from "pixi-native/canvas";',
+      "void [Container7, VideoSprite7, createApp7, createRenderer7, Container8, VideoSprite8, createApp8, createRenderer8, Howl, NativeVideo, createModuleFileAccess, FrameScheduler, NodeCanvas];",
       "",
     ].join("\n"),
   );
@@ -137,7 +143,7 @@ try {
     )}\n`,
   );
 
-  execSync("pnpm install --no-frozen-lockfile", {
+  execSync("pnpm install --prod --no-frozen-lockfile --ignore-workspace", {
     cwd: testDirectory,
     stdio: "inherit",
   });
@@ -164,6 +170,10 @@ try {
       resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
     );
   }
+  execSync("pnpm install --no-frozen-lockfile --ignore-workspace", {
+    cwd: testDirectory,
+    stdio: "inherit",
+  });
   execSync("pnpm exec tsc -p tsconfig.json", {
     cwd: testDirectory,
     stdio: "inherit",
