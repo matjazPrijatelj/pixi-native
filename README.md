@@ -10,17 +10,16 @@ Native PixiJS runtime for rendering directly into a native window from Node.js, 
 - PixiJS 7.4.3 WebGL through `pixi-native/v7`
 - Dawn WebGPU through the project-owned native Node addon
 - SDL native window and swap chain through `@kmamal/sdl`
-- Windows WebGL2 through SDL plus `webgl-node`/`native-gles` ANGLE/EGL
-- Linux WebGL2 through `@node-3d/core` and `@node-3d/glfw`
+- Windows and Linux WebGL2 through `@node-3d/core` and `@node-3d/glfw`
 - Skia-backed `NodeCanvas` using `@napi-rs/canvas` for Canvas2D text and image rasterization
 - Rust/napi-rs video bridge for native FFmpeg stdout frame delivery
 - CMake, a C++ compiler, and Go 1.26+ for rebuilding the addon
 
 The WebGL backend uses prebuilt, ABI-compatible native packages and does not require Python or a local node-gyp build. The default WebGPU backend does not load them.
 
-The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }` in WebGPU mode. On Windows the WebGL entrypoints attach an ANGLE/EGL WebGL2 context to an SDL `HWND`; Linux retains the GLFW backend. There is no automatic backend fallback.
+The project-owned native addon creates the Dawn adapter/device and connects it to the native SDL window. Pixi receives the same adapter and device through `gpu: { adapter, device }` in WebGPU mode. Both WebGL entrypoints use the same GLFW/OpenGL ES surface on Windows and Linux. There is no automatic backend fallback.
 
-The demo selects its renderer explicitly: use `pnpm dev:webgpu`, `pnpm dev:webgl`, or `pnpm dev:webgl7`. The commands open the interactive scene demo; use number keys or left/right to switch between Graphics, Sprite, Text, BitmapText, audio, video, rain-sprite, and particle scenes. WebGPU and Windows WebGL share SDL window behavior while owning separate Dawn and ANGLE presentation surfaces.
+The demo selects its renderer explicitly: use `pnpm dev:webgpu`, `pnpm dev:webgl`, or `pnpm dev:webgl7`. The commands open the interactive scene demo; use number keys or left/right to switch between Graphics, Sprite, Text, BitmapText, audio, video, rain-sprite, and particle scenes. WebGPU owns its SDL/Dawn presentation surface while PixiJS 7 and 8 WebGL share the GLFW surface.
 
 For Pixi 8 library use, install the package and Pixi peer dependency with `pnpm add pixi-native pixi.js@8.20.0`. Pixi 7 is an internal package dependency. The versioned entrypoint exports both the matching Pixi API and the managed native factories:
 

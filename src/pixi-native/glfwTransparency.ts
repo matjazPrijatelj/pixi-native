@@ -1,6 +1,7 @@
 type GlfwTransparencyApi = {
     readonly TRUE: number;
     readonly FALSE: number;
+    readonly ALPHA_BITS: number;
     readonly TRANSPARENT_FRAMEBUFFER: number;
     windowHint(hint: number, value: number): void;
     getWindowAttrib(window: unknown, attribute: number): number;
@@ -16,6 +17,7 @@ export function requestGlfwTransparency(
         glfw.TRANSPARENT_FRAMEBUFFER,
         transparent ? glfw.TRUE : glfw.FALSE,
     );
+    if (transparent) glfw.windowHint(glfw.ALPHA_BITS, 8);
 }
 
 /** Rejects a compositor/window combination that ignored transparency. */

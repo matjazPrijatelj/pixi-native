@@ -25,6 +25,11 @@ const { app, native, destroy, addDestroyListener } = await createApp({
   ...DEMO_WINDOW_OPTIONS,
   backend,
 });
+const [{ gsap }, { installGsapModalBridge }] = await Promise.all([
+  import("gsap"),
+  import("../gsapModalBridge.ts"),
+]);
+installGsapModalBridge(native, gsap.ticker, addDestroyListener);
 const { NodeCanvas } = await import("../../pixi-native/NodeCanvas.ts");
 const { supportsNativeVideo } = await import("../../pixi-native/platform.ts");
 const {

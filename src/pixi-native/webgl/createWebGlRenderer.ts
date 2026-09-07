@@ -1,20 +1,13 @@
-import { Image as CanvasImage } from "@napi-rs/canvas";
 import { Application, DOMAdapter, VERSION } from "pixi.js";
 
 import { NodeCanvas } from "../NodeCanvas.ts";
 import { NodeDOMAdapter, normalizeRefreshRate } from "../NodeDOMAdapter.ts";
-import { NodeGLCanvas } from "../NodeGLCanvas.ts";
-import { NodeGLWindow } from "../NodeGLWindow.ts";
+import { createNodeGlfwWebGLSurface } from "../NodeGlfwWebGLSurface.ts";
 import type { NodeRendererContext } from "../createPixiRenderer.ts";
-import type {
-  NodeRendererOptions,
-  NodeRenderSurface,
-  NodeWindowHandle,
-} from "../nativeTypes.ts";
+import type { NodeRendererOptions } from "../nativeTypes.ts";
 import { copyRgbaRowsFlippedY } from "../rgbaUpload.ts";
 import { setNativeVideoModalState } from "../video/NativeVideo.ts";
 import { sliceWebGlBufferData } from "../webglBufferUpload.ts";
-import { installWebGlImageUploadAdapter } from "../webglImageUpload.ts";
 import { createModalFrameController } from "../ModalFrameController.ts";
 import {
   getWindowOptionsDiagnostics,
@@ -22,12 +15,7 @@ import {
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
-  warnAntialiasSampleFallback,
 } from "../windowOptions.ts";
-import {
-  assertGlfwTransparency,
-  requestGlfwTransparency,
-} from "../glfwTransparency.ts";
 
 export async function createWebGlRenderer(
   options: NodeRendererOptions = {},
@@ -41,116 +29,53 @@ export async function createWebGlRenderer(
     options,
     "PixiJS 8 Native Node WebGL",
   );
-  const isGles3 = true;
-
   try {
-    let window: NodeWindowHandle;
-    let nativeWindowData: Uint8Array;
-    let canvas: NodeGLCanvas;
-    let renderer: NodeRenderSurface;
-    let pixiCanvas: unknown;
-    let webgl: any;
-    let imageConstructor: new () => { src: string };
-    let webglRenderingContextConstructor: { readonly prototype: object };
-    const usesWindowsAngle = process.platform === "win32";
+    const surface = await createNodeGlfwWebGLSurface(windowOptions, "WebGL");
+    const {
+      window,
+      nativeWindowData,
+      canvas,
+      renderer,
+      document: doc,
+      webgl,
+      imageConstructor,
+      webglRenderingContextConstructor,
+    } = surface;
 
-    if (usesWindowsAngle) {
-      const { createWindowsAngleWebGLSurface } = await import(
-        "../WindowsAngleWebGL.ts"
-      );
-      const angle = await createWindowsAngleWebGLSurface(windowOptions);
-      window = angle.window;
-      nativeWindowData = angle.nativeWindowData;
-      canvas = angle.canvas;
-      renderer = angle.renderer;
-      pixiCanvas = canvas;
-      webgl = angle.webgl;
-      installWebGlImageUploadAdapter(webgl);
-      imageConstructor = CanvasImage as unknown as new () => { src: string };
-      webglRenderingContextConstructor = angle.webglRenderingContextConstructor;
-    } else {
-      const { init, gl, Image } = await import("@node-3d/core");
-      const { glfw } = await import("@node-3d/glfw");
-      const { doc } = init({
-        title: windowOptions.title,
-        width: windowOptions.width,
-        height: windowOptions.height,
-        resizable: windowOptions.resizable,
-        decorated: !windowOptions.borderless,
-        vsync: windowOptions.vsync,
-        msaa: windowOptions.antialiasSamples,
-        isGles3,
-        isWebGL2: true,
-        autoEsc: true,
-        onBeforeWindow: (_window: unknown, rawGlfw: unknown) => {
-          requestGlfwTransparency(rawGlfw, windowOptions.transparent);
-        },
-      });
-      assertGlfwTransparency(glfw, doc.handle, windowOptions.transparent);
-      warnAntialiasSampleFallback(
-        "WebGL",
-        windowOptions.antialiasSamples,
-        Number(gl.getParameter(gl.SAMPLES)),
-      );
-      const glfwWindow = new NodeGLWindow(doc as never, {
-        pollEvents: glfw.pollEvents,
-        maximize: () => glfw.maximizeWindow(doc.handle),
-      });
-      if (windowOptions.x !== undefined && windowOptions.y !== undefined) {
-        glfwWindow.setPosition(windowOptions.x, windowOptions.y);
+    const createElement = doc.createElement.bind(doc);
+    doc.createElement = ((name: string) => {
+      const tagName = name.toLowerCase();
+      if (tagName === "canvas") return new NodeCanvas();
+      if (tagName === "div" || tagName === "a" || tagName === "button") {
+        const element: Record<string, unknown> = {
+          style: {},
+          children: [],
+          parentNode: null,
+          appendChild(child: Record<string, unknown>) {
+            child.parentNode = element;
+            (element.children as Record<string, unknown>[]).push(child);
+            return child;
+          },
+          remove() {
+            const parent = element.parentNode as Record<string, unknown> | null;
+            const children = parent?.children as
+              | Record<string, unknown>[]
+              | undefined;
+            if (children) {
+              parent!.children = children.filter((child) => child !== element);
+            }
+            element.parentNode = null;
+          },
+          addEventListener() {},
+          removeEventListener() {},
+        };
+        return element;
       }
-      window = glfwWindow;
-      nativeWindowData = glfwWindow.nativeWindowData;
-      webgl = gl;
-      imageConstructor = Image as unknown as new () => { src: string };
-      webglRenderingContextConstructor = gl.WebGLRenderingContext;
+      return createElement(name);
+    }) as never;
 
-      const createElement = doc.createElement.bind(doc);
-      doc.createElement = ((name: string) => {
-        const tagName = name.toLowerCase();
-        if (tagName === "canvas") return new NodeCanvas();
-        if (tagName === "div" || tagName === "a" || tagName === "button") {
-          const element: Record<string, unknown> = {
-            style: {},
-            children: [],
-            parentNode: null,
-            appendChild(child: Record<string, unknown>) {
-              child.parentNode = element;
-              (element.children as Record<string, unknown>[]).push(child);
-              return child;
-            },
-            remove() {
-              const parent = element.parentNode as Record<
-                string,
-                unknown
-              > | null;
-              const children = parent?.children as
-                | Record<string, unknown>[]
-                | undefined;
-              if (children)
-                parent!.children = children.filter(
-                  (child) => child !== element,
-                );
-              element.parentNode = null;
-            },
-            addEventListener() {},
-            removeEventListener() {},
-          };
-          return element;
-        }
-        return createElement(name);
-      }) as never;
-
-      canvas = new NodeGLCanvas(webgl, window.pixelWidth, window.pixelHeight);
-      renderer = {
-        resize: (width, height) => canvas.resize(width, height),
-        swap: () => glfwWindow.swapBuffers(),
-        destroy: () => undefined,
-      };
-      pixiCanvas = doc;
-    }
-
-    if (!usesWindowsAngle) {
+    const pixiCanvas = doc;
+    {
       const LegacyImage = imageConstructor as unknown as {
         fromPixels(
           width: number,
@@ -292,27 +217,6 @@ export async function createWebGlRenderer(
         nativeTexSubImage2D(...args);
       };
 
-      if (!isGles3) {
-        const normalizedShaderSource = webgl.shaderSource.bind(webgl) as (
-          shader: unknown,
-          source: string,
-        ) => void;
-
-        const shaderWebgl = webgl as unknown as {
-          shaderSource: (shader: unknown, source: string) => void;
-        };
-
-        shaderWebgl.shaderSource = (shader: unknown, source: string): void => {
-          const glEsSource = source.startsWith("#version")
-            ? source.replace(
-                /^#version[^\n]*\n/u,
-                (header) => `${header}#define GL_ES\n`,
-              )
-            : `#define GL_ES\n${source}`;
-
-          normalizedShaderSource(shader, glEsSource);
-        };
-      }
     }
 
     const domAdapter = new NodeDOMAdapter(
@@ -417,12 +321,8 @@ export async function createWebGlRenderer(
       },
     };
   } catch (error) {
-    const runtime =
-      process.platform === "win32"
-        ? "webgl-node/native-gles ANGLE"
-        : "@node-3d/core and @node-3d/glfw";
     throw new Error(
-      `WebGL backend is unavailable through ${runtime}.`,
+      "WebGL backend is unavailable through @node-3d/core and @node-3d/glfw.",
       { cause: error },
     );
   }

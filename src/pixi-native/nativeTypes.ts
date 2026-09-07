@@ -16,7 +16,7 @@ export interface NodeRendererOptions {
   readonly maxFps?: number;
   /** Creates an undecorated window. Borderless windows are not user-resizable. */
   readonly borderless?: boolean;
-  /** Enables per-pixel window transparency. Supported on Windows 11. */
+  /** Enables per-pixel transparency when supported by the desktop compositor. */
   readonly transparent?: boolean;
   /** Pixi background opacity. Opaque windows normalize values below 1 to 1. */
   readonly backgroundAlpha?: number;

@@ -38,7 +38,7 @@ export interface ResolvedNodeRendererOptions {
 export function resolveNodeRendererOptions(
   options: NodeRendererOptions,
   defaultTitle: string,
-  platform: NodeJS.Platform = process.platform,
+  _platform: NodeJS.Platform = process.platform,
 ): ResolvedNodeRendererOptions {
   const antialiasSamples =
     options.antialiasSamples ?? DEFAULT_ANTIALIAS_SAMPLES;
@@ -82,11 +82,6 @@ export function resolveNodeRendererOptions(
   }
 
   const transparent = options.transparent ?? false;
-  if (transparent && platform !== "win32") {
-    throw new Error(
-      "transparent native windows are supported only on Windows 11",
-    );
-  }
   const requestedBackgroundAlpha =
     options.backgroundAlpha ?? (transparent ? 0 : 1);
   if (

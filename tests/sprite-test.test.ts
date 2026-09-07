@@ -43,8 +43,38 @@ test("Sprite scene adds and removes animated batches without leaking tweens", ()
             gsap.globalTimeline.getChildren(true, true, true).length > staticTweenCount,
         );
 
+        const timelinesBeforeResize = gsap.globalTimeline.getChildren(
+            false,
+            false,
+            true,
+        );
+        const staticSprite = scene.children[1] as Sprite;
+        timelinesBeforeResize[0].totalTime(0);
         scene.resize(800, 600);
         assert.equal(scene.getDynamicSpriteCount(), 20);
+        const timelinesAfterResize = gsap.globalTimeline.getChildren(
+            false,
+            false,
+            true,
+        );
+        assert.equal(timelinesAfterResize.length, timelinesBeforeResize.length);
+        assert.ok(
+            timelinesAfterResize.every(
+                (timeline, index) => timeline === timelinesBeforeResize[index],
+            ),
+        );
+        const resizedY = staticSprite.y;
+        timelinesBeforeResize[0].totalTime(0.75);
+        assert.notEqual(staticSprite.y, resizedY);
+        assert.ok(
+            dynamicSprites.every(
+                (sprite) =>
+                    sprite.x >= 0 &&
+                    sprite.x <= 800 &&
+                    sprite.y >= 0 &&
+                    sprite.y <= 600,
+            ),
+        );
 
         assert.equal(scene.removeRandomSprites(), 10);
         assert.equal(scene.removeRandomSprites(), 0);

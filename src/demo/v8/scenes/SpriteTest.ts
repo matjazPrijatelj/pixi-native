@@ -18,9 +18,34 @@ export interface SpriteTestScene extends DisposableDemoScene {
   resize(width: number, height: number): void;
 }
 
-interface AnimatedSprite {
+interface AnimationTransform {
+  x: number;
+  y: number;
+  rotation: number;
+  scale: number;
+}
+
+interface DynamicSpriteLayout {
   readonly sprite: Sprite;
+  readonly size: number;
+  readonly baseScaleX: number;
+  readonly baseScaleY: number;
+  readonly transform: AnimationTransform;
+}
+
+interface AnimatedSprite extends DynamicSpriteLayout {
   timeline: gsap.core.Timeline;
+}
+
+interface StaticSpriteLayout {
+  readonly sprite: Sprite;
+  readonly horizontalPosition: number;
+  readonly verticalOffset: number;
+  readonly rotation: number;
+  readonly duration: number;
+  readonly baseScaleX: number;
+  readonly baseScaleY: number;
+  readonly transform: AnimationTransform;
 }
 
 interface SpriteTestOptions {
@@ -40,6 +65,15 @@ function randomBetween(
   maximum: number,
 ): number {
   return minimum + random() * Math.max(0, maximum - minimum);
+}
+
+function positionFromProgress(
+  progress: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (maximum <= minimum) return (minimum + maximum) * 0.5;
+  return minimum + Math.max(0, Math.min(1, progress)) * (maximum - minimum);
 }
 
 export function createSpriteTest(
@@ -76,10 +110,18 @@ export function createSpriteTest(
   marioSprite.anchor.set(0.5);
 
   const staticSprites = [batmanSprite, textureSprite, marioSprite];
-  const staticBaseScales = staticSprites.map((sprite) => ({
-    x: sprite.scale.x,
-    y: sprite.scale.y,
-  }));
+  const staticLayouts: StaticSpriteLayout[] = staticSprites.map(
+    (sprite, index) => ({
+      sprite,
+      horizontalPosition: [0.22, 0.5, 0.78][index],
+      verticalOffset: -20 - index * 6,
+      rotation: index % 2 === 0 ? 0.08 : -0.08,
+      duration: 1.5 + index * 0.35,
+      baseScaleX: sprite.scale.x,
+      baseScaleY: sprite.scale.y,
+      transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+    }),
+  );
   scene.addChild(...staticSprites);
 
   const updateTitle = (): void => {
@@ -88,89 +130,95 @@ export function createSpriteTest(
       "  |  UP +10 / DOWN -10";
   };
 
-  const positionStaticSprites = (): void => {
+  const applyStaticAnimations = (): void => {
     const centerY = Math.max(TITLE_MARGIN + 160, bounds.height * 0.56);
-    staticSprites.forEach((sprite, index) => {
-      sprite.scale.set(staticBaseScales[index].x, staticBaseScales[index].y);
-      sprite.rotation = 0;
-    });
-    batmanSprite.position.set(bounds.width * 0.22, centerY);
-    textureSprite.position.set(bounds.width * 0.5, centerY);
-    marioSprite.position.set(bounds.width * 0.78, centerY);
+    for (const layout of staticLayouts) {
+      const { sprite, transform } = layout;
+      sprite.position.set(
+        bounds.width * layout.horizontalPosition,
+        centerY + transform.y,
+      );
+      sprite.rotation = transform.rotation;
+      sprite.scale.set(
+        layout.baseScaleX * transform.scale,
+        layout.baseScaleY * transform.scale,
+      );
+    }
   };
 
   const createStaticAnimation = (
-    sprite: Sprite,
-    index: number,
+    layout: StaticSpriteLayout,
   ): gsap.core.Timeline => {
-    const startY = sprite.y;
-    const startScaleX = sprite.scale.x;
-    const startScaleY = sprite.scale.y;
     return gsap
       .timeline({
         repeat: -1,
         yoyo: true,
         defaults: { ease: "sine.inOut" },
+        onUpdate: applyStaticAnimations,
       })
       .to(
-        sprite,
+        layout.transform,
         {
-          y: startY - 20 - index * 6,
-          rotation: index % 2 === 0 ? 0.08 : -0.08,
-          duration: 1.5 + index * 0.35,
-        },
-        0,
-      )
-      .to(
-        sprite.scale,
-        {
-          x: startScaleX * 1.06,
-          y: startScaleY * 1.06,
-          duration: 1.5 + index * 0.35,
+          y: layout.verticalOffset,
+          rotation: layout.rotation,
+          scale: 1.06,
+          duration: layout.duration,
         },
         0,
       );
   };
 
-  const restartStaticAnimations = (): void => {
-    for (const timeline of staticTimelines) timeline.kill();
-    staticTimelines.length = 0;
-    positionStaticSprites();
-    staticSprites.forEach((sprite, index) => {
-      staticTimelines.push(createStaticAnimation(sprite, index));
-    });
+  const startStaticAnimations = (): void => {
+    applyStaticAnimations();
+    for (const layout of staticLayouts) {
+      staticTimelines.push(createStaticAnimation(layout));
+    }
   };
 
-  const createDynamicAnimation = (sprite: Sprite): gsap.core.Timeline => {
-    const margin = Math.max(24, sprite.width * 0.5);
-    const targetX = randomBetween(random, margin, bounds.width - margin);
-    const targetY = randomBetween(
-      random,
-      TITLE_MARGIN + margin,
-      bounds.height - margin,
+  const applyDynamicAnimation = (layout: DynamicSpriteLayout): void => {
+    const { sprite, transform } = layout;
+    const margin = Math.max(24, layout.size * transform.scale * 0.5);
+    sprite.position.set(
+      positionFromProgress(transform.x, margin, bounds.width - margin),
+      positionFromProgress(
+        transform.y,
+        TITLE_MARGIN + margin,
+        bounds.height - margin,
+      ),
     );
-    const targetScale = sprite.scale.x * randomBetween(random, 0.85, 1.2);
+    sprite.rotation = transform.rotation;
+    sprite.scale.set(
+      layout.baseScaleX * transform.scale,
+      layout.baseScaleY * transform.scale,
+    );
+  };
+
+  const createDynamicAnimation = (
+    layout: DynamicSpriteLayout,
+  ): gsap.core.Timeline => {
     return gsap
       .timeline({
         repeat: -1,
         yoyo: true,
         defaults: { ease: "sine.inOut" },
+        onUpdate: () => applyDynamicAnimation(layout),
       })
       .to(
-        sprite,
+        layout.transform,
         {
-          x: targetX,
-          y: targetY,
-          rotation: sprite.rotation + randomBetween(random, -Math.PI, Math.PI),
+          x: random(),
+          y: random(),
+          rotation:
+            layout.transform.rotation +
+            randomBetween(random, -Math.PI, Math.PI),
           duration: randomBetween(random, 1.8, 5),
         },
         0,
       )
       .to(
-        sprite.scale,
+        layout.transform,
         {
-          x: targetScale,
-          y: targetScale,
+          scale: randomBetween(random, 0.85, 1.2),
           duration: randomBetween(random, 1.8, 5),
         },
         0,
@@ -184,19 +232,26 @@ export function createSpriteTest(
     );
     const sprite = new Sprite(textures[textureIndex]);
     const size = randomBetween(random, 48, 140);
-    const halfSize = size * 0.5;
     sprite.width = size;
     sprite.height = size;
     sprite.anchor.set(0.5);
-    sprite.position.set(
-      randomBetween(random, halfSize, bounds.width - halfSize),
-      randomBetween(random, TITLE_MARGIN + halfSize, bounds.height - halfSize),
-    );
-    sprite.rotation = randomBetween(random, -0.35, 0.35);
+    const layout: DynamicSpriteLayout = {
+      sprite,
+      size,
+      baseScaleX: sprite.scale.x,
+      baseScaleY: sprite.scale.y,
+      transform: {
+        x: random(),
+        y: random(),
+        rotation: randomBetween(random, -0.35, 0.35),
+        scale: 1,
+      },
+    };
+    applyDynamicAnimation(layout);
     scene.addChild(sprite);
     dynamicSprites.push({
-      sprite,
-      timeline: createDynamicAnimation(sprite),
+      ...layout,
+      timeline: createDynamicAnimation(layout),
     });
   };
 
@@ -226,16 +281,8 @@ export function createSpriteTest(
 
   scene.resize = (width: number, height: number): void => {
     bounds = normalizeBounds({ width, height });
-    restartStaticAnimations();
-    for (const record of dynamicSprites) {
-      record.timeline.kill();
-      record.sprite.x = Math.min(Math.max(0, record.sprite.x), bounds.width);
-      record.sprite.y = Math.min(
-        Math.max(TITLE_MARGIN, record.sprite.y),
-        bounds.height,
-      );
-      record.timeline = createDynamicAnimation(record.sprite);
-    }
+    applyStaticAnimations();
+    for (const record of dynamicSprites) applyDynamicAnimation(record);
   };
 
   scene.dispose = (): void => {
@@ -245,8 +292,6 @@ export function createSpriteTest(
     dynamicSprites.length = 0;
   };
 
-  restartStaticAnimations();
+  startStaticAnimations();
   return scene;
 }
-
-

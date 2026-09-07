@@ -22,7 +22,12 @@ const { app, native, addDestroyListener } = await createApp({
     title: "PixiJS 7 Native Node WebGL",
 });
 // Load GSAP-backed scenes after the initializer installs native RAF globals.
-const { createSpriteTest } = await import("./scenes/SpriteTest.ts");
+const [{ createSpriteTest }, { gsap }, { installGsapModalBridge }] = await Promise.all([
+    import("./scenes/SpriteTest.ts"),
+    import("gsap"),
+    import("../gsapModalBridge.ts"),
+]);
+installGsapModalBridge(native, gsap.ticker, addDestroyListener);
 const asset = (name: string): string => fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
 // Native v7 has no browser format-detection surface. PNG is selected below,
 // so the detection plugins (including compressed-texture GL probes) are not

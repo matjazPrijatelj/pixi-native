@@ -2,6 +2,34 @@
 
 ## 2026-09-07
 
+- Routed PixiJS 8 and PixiJS 7 WebGL through one shared
+  `@node-3d/core`/`@node-3d/glfw` OpenGL ES surface on Windows and Linux,
+  explicitly requesting an 8-bit transparent framebuffer and allowing Linux
+  compositors to report support at startup. Removed the superseded
+  `webgl-node`/`native-gles` ANGLE path, package dependencies, distribution
+  checks, and notices after fresh Windows validation of both demos. Graphics,
+  Sprite/GSAP, normal video, packed-alpha video, transparency, drag, and
+  continuous resize were visually confirmed; type checking, all 137 retained
+  tests, the frozen lockfile, and the package build pass.
+- Kept PixiJS 7/8 animation and video frame work queued during the blocking
+  Windows move/resize loop by moving GLFW event polling to its own rearming
+  animation-frame callback. The callback rearms before entering GLFW and
+  rejects a nested poll while the native modal timer continues dispatching
+  Pixi frames. Added focused scheduling, reentrancy, and teardown coverage;
+  validation passes without rebuilding the native addon, and modal animation
+  and video continuity were manually confirmed in both WebGL demos.
+- Restored the GSAP modal-frame bridge removed by the shared application
+  initializer migration. Both demos now advance the independent GSAP ticker
+  from native modal frames and remove the listener during managed teardown;
+  focused regression coverage verifies ticking, cleanup, and the unsupported
+  no-op path. Both Sprite scenes were manually confirmed during drag and
+  continuous resize.
+- Kept SpriteTest GSAP timelines alive across continuous resize events in both
+  PixiJS versions. Animations now tween normalized layout state that is mapped
+  into the current window bounds, so resize updates positions without killing
+  or restarting timeline progress. Added PixiJS 7/8 regression coverage for
+  timeline identity, post-resize advancement, bounds, and teardown; static and
+  dynamically added sprites were manually confirmed in both demos.
 - Expanded WebGPU, PixiJS 8 WebGL, and PixiJS 7 WebGL startup diagnostics
   with resolved window configuration and actual desktop position.
 - Moved the demo test suite and its HEVC fixture from `src/demo/tests` to the

@@ -14,11 +14,6 @@ import { NodeGLCanvas } from "../src/pixi-native/NodeGLCanvas.ts";
 import { NodeGLWindow } from "../src/pixi-native/NodeGLWindow.ts";
 import { copyRgbaRowsFlippedY } from "../src/pixi-native/rgbaUpload.ts";
 import { sliceWebGlBufferData } from "../src/pixi-native/webglBufferUpload.ts";
-import { installWebGlMultisampleScreen } from "../src/pixi-native/webglMultisampleScreen.ts";
-import {
-  installWebGlImageUploadAdapter,
-  type WebGlImageUploadContext,
-} from "../src/pixi-native/webglImageUpload.ts";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -83,9 +78,10 @@ test("native window options normalize transparency and desktop position", () => 
     () => resolveNodeRendererOptions({ x: 10.5, y: 20 }, "x"),
     /must be integers/,
   );
-  assert.throws(
-    () => resolveNodeRendererOptions({ transparent: true }, "x", "linux"),
-    /only on Windows 11/,
+  assert.equal(
+    resolveNodeRendererOptions({ transparent: true }, "x", "linux")
+      .transparent,
+    true,
   );
   assert.equal(
     resolveNodeRendererOptions(
@@ -250,7 +246,6 @@ test("native demos expose explicit decorated window defaults", () => {
     backgroundAlpha: 0.5,
     x: 50,
     y: 50,
-    antialiasSamples: 0,
   });
 });
 
@@ -274,6 +269,7 @@ test("GLFW transparency is requested and verified", () => {
   const glfw = {
     TRUE: 1,
     FALSE: 0,
+    ALPHA_BITS: 0x00021004,
     TRANSPARENT_FRAMEBUFFER: 0x0002000a,
     windowHint(hint: number, value: number) {
       hints.push({ hint, value });
@@ -284,7 +280,10 @@ test("GLFW transparency is requested and verified", () => {
   };
 
   requestGlfwTransparency(glfw, true);
-  assert.deepEqual(hints, [{ hint: 0x0002000a, value: 1 }]);
+  assert.deepEqual(hints, [
+    { hint: 0x0002000a, value: 1 },
+    { hint: 0x00021004, value: 8 },
+  ]);
   assert.doesNotThrow(() => assertGlfwTransparency(glfw, {}, true));
   transparentFramebuffer = 0;
   assert.throws(
@@ -304,343 +303,6 @@ test("WebGL buffer upload copies are compact and independent", () => {
 
   data[1] = 99;
   assert.deepEqual([...sliced], [1, 2, 3]);
-});
-
-test("ANGLE multisample screen resolves and follows drawing-buffer resizes", () => {
-  const FRAMEBUFFER = 0x8d40;
-  const DRAW_FRAMEBUFFER = 0x8ca9;
-  const READ_FRAMEBUFFER = 0x8ca8;
-  const FRAMEBUFFER_BINDING = 0x8ca6;
-  const DRAW_FRAMEBUFFER_BINDING = 0x8ca6;
-  const READ_FRAMEBUFFER_BINDING = 0x8caa;
-  const RENDERBUFFER_BINDING = 0x8ca7;
-  const SAMPLES = 0x80a9;
-  const FRAMEBUFFER_COMPLETE = 0x8cd5;
-  const framebuffers = [{ name: "first" }, { name: "resized" }];
-  const renderbuffers = [
-    { name: "first-color" },
-    { name: "first-depth" },
-    { name: "resized-color" },
-    { name: "resized-depth" },
-  ];
-  const storageCalls: Array<[number, number, number]> = [];
-  const blits: number[][] = [];
-  const deletedFramebuffers: unknown[] = [];
-  const deletedRenderbuffers: unknown[] = [];
-  let drawFramebuffer: unknown = null;
-  let readFramebuffer: unknown = null;
-  let renderbuffer: unknown = null;
-  let availableSamples = [8, 4, 2, 1];
-
-  const context = {
-    FRAMEBUFFER,
-    DRAW_FRAMEBUFFER,
-    READ_FRAMEBUFFER,
-    FRAMEBUFFER_BINDING,
-    DRAW_FRAMEBUFFER_BINDING,
-    READ_FRAMEBUFFER_BINDING,
-    RENDERBUFFER_BINDING,
-    RENDERBUFFER: 0x8d41,
-    SAMPLES,
-    RGBA8: 0x8058,
-    DEPTH24_STENCIL8: 0x88f0,
-    COLOR_ATTACHMENT0: 0x8ce0,
-    DEPTH_STENCIL_ATTACHMENT: 0x821a,
-    FRAMEBUFFER_COMPLETE,
-    COLOR_BUFFER_BIT: 0x4000,
-    NEAREST: 0x2600,
-    createFramebuffer: () => framebuffers.shift() ?? null,
-    deleteFramebuffer: (value: unknown) => deletedFramebuffers.push(value),
-    createRenderbuffer: () => renderbuffers.shift() ?? null,
-    deleteRenderbuffer: (value: unknown) => deletedRenderbuffers.push(value),
-    bindFramebuffer(target: number, value: unknown) {
-      if (target === FRAMEBUFFER || target === DRAW_FRAMEBUFFER) {
-        drawFramebuffer = value;
-      }
-      if (target === FRAMEBUFFER || target === READ_FRAMEBUFFER) {
-        readFramebuffer = value;
-      }
-    },
-    bindRenderbuffer: (_target: number, value: unknown) => {
-      renderbuffer = value;
-    },
-    getParameter(parameter: number) {
-      if (
-        parameter === FRAMEBUFFER_BINDING ||
-        parameter === DRAW_FRAMEBUFFER_BINDING
-      ) {
-        return drawFramebuffer;
-      }
-      if (parameter === READ_FRAMEBUFFER_BINDING) return readFramebuffer;
-      if (parameter === RENDERBUFFER_BINDING) return renderbuffer;
-      return null;
-    },
-    getInternalformatParameter: () => new Int32Array(availableSamples),
-    getContextAttributes: () => ({ antialias: false }),
-    renderbufferStorageMultisample(
-      _target: number,
-      samples: number,
-      _format: number,
-      width: number,
-      height: number,
-    ) {
-      storageCalls.push([samples, width, height]);
-    },
-    framebufferRenderbuffer() {},
-    checkFramebufferStatus() {
-      return FRAMEBUFFER_COMPLETE;
-    },
-    blitFramebuffer(...args: number[]) {
-      blits.push(args);
-    },
-  } as unknown as WebGL2RenderingContext;
-
-  const screen = installWebGlMultisampleScreen(context, 320, 180);
-  assert.equal(screen.sampleCount, 4);
-  assert.equal(context.getContextAttributes()?.antialias, true);
-  assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
-  assert.deepEqual(storageCalls, [
-    [4, 320, 180],
-    [4, 320, 180],
-  ]);
-
-  const customFramebuffer = { name: "custom" } as unknown as WebGLFramebuffer;
-  context.bindFramebuffer(context.FRAMEBUFFER, customFramebuffer);
-  assert.equal(
-    context.getParameter(context.FRAMEBUFFER_BINDING),
-    customFramebuffer,
-  );
-  context.bindFramebuffer(context.FRAMEBUFFER, null);
-
-  screen.resolve();
-  assert.deepEqual(blits, [
-    [0, 0, 320, 180, 0, 0, 320, 180, context.COLOR_BUFFER_BIT, context.NEAREST],
-  ]);
-  assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
-
-  screen.resize(640, 360);
-  assert.deepEqual(storageCalls.slice(2), [
-    [4, 640, 360],
-    [4, 640, 360],
-  ]);
-  assert.equal(deletedFramebuffers.length, 1);
-  assert.equal(deletedRenderbuffers.length, 2);
-  assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
-
-  screen.destroy();
-  assert.equal(context.getContextAttributes()?.antialias, false);
-  assert.equal(deletedFramebuffers.length, 2);
-  assert.equal(deletedRenderbuffers.length, 4);
-
-  framebuffers.push({ name: "fallback" });
-  renderbuffers.push({ name: "fallback-color" }, { name: "fallback-depth" });
-  availableSamples = [4, 2, 1];
-  const originalWarn = console.warn;
-  const warnings: unknown[][] = [];
-  console.warn = (...values: unknown[]): void => {
-    warnings.push(values);
-  };
-  const fallbackScreen = (() => {
-    try {
-      return installWebGlMultisampleScreen(context, 320, 180, 8);
-    } finally {
-      console.warn = originalWarn;
-    }
-  })();
-  assert.equal(fallbackScreen.sampleCount, 4);
-  assert.match(String(warnings[0][0]), /requested 8x.*using 4x/);
-  fallbackScreen.destroy();
-
-  const disabledScreen = installWebGlMultisampleScreen(context, 320, 180, 0);
-  assert.equal(disabledScreen.sampleCount, 0);
-  assert.equal(context.getContextAttributes()?.antialias, false);
-});
-
-test("ANGLE adapter converts Pixi image-source uploads to premultiplied RGBA", () => {
-  const calls: Array<{ name: string; args: unknown[] }> = [];
-  const gl = {
-    RGBA: 0x1908,
-    UNSIGNED_BYTE: 0x1401,
-    UNPACK_FLIP_Y_WEBGL: 0x9240,
-    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
-    getParameter(parameter: number) {
-      return parameter === this.UNPACK_PREMULTIPLY_ALPHA_WEBGL;
-    },
-    texImage2D(...args: unknown[]) {
-      calls.push({ name: "image", args });
-    },
-    texSubImage2D(...args: unknown[]) {
-      calls.push({ name: "subImage", args });
-    },
-  } satisfies WebGlImageUploadContext;
-  installWebGlImageUploadAdapter(gl);
-  const source = {
-    width: 1,
-    height: 1,
-    getContext: () => ({
-      getImageData: () => ({ data: new Uint8ClampedArray([200, 100, 50, 128]) }),
-    }),
-  };
-
-  gl.texImage2D(1, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
-  gl.texSubImage2D(1, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
-
-  assert.equal(calls[0].args.length, 9);
-  assert.deepEqual(Array.from(calls[0].args[8] as Uint8Array), [100, 50, 25, 128]);
-  assert.equal(calls[1].args.length, 9);
-  assert.deepEqual(Array.from(calls[1].args[8] as Uint8Array), [100, 50, 25, 128]);
-});
-
-test("ANGLE adapter preserves typed-array texture uploads", () => {
-  let received: unknown[] | undefined;
-  const gl = {
-    RGBA: 0x1908,
-    UNSIGNED_BYTE: 0x1401,
-    UNPACK_FLIP_Y_WEBGL: 0x9240,
-    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
-    getParameter: () => false,
-    texImage2D(...args: unknown[]) {
-      received = args;
-    },
-    texSubImage2D() {},
-  } satisfies WebGlImageUploadContext;
-  installWebGlImageUploadAdapter(gl);
-  const pixels = new Uint8Array([1, 2, 3, 4]);
-
-  gl.texImage2D(1, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-  assert.equal(received?.[8], pixels);
-});
-
-test("ANGLE adapter decodes native Image texture uploads through Canvas2D", async () => {
-  let received: unknown[] | undefined;
-  const gl = {
-    RGBA: 0x1908,
-    UNSIGNED_BYTE: 0x1401,
-    UNPACK_FLIP_Y_WEBGL: 0x9240,
-    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
-    getParameter: () => true,
-    texImage2D(...args: unknown[]) {
-      received = args;
-    },
-    texSubImage2D() {},
-  } satisfies WebGlImageUploadContext;
-  installWebGlImageUploadAdapter(gl);
-
-  const image = new NodeDOMAdapter({} as never).createImage();
-  await new Promise<void>((resolve, reject) => {
-    image.onload = (): void => resolve();
-    image.onerror = reject;
-    image.src = fileURLToPath(
-      new URL("../src/demo/assets/bitmap-font/native-pixel.png", import.meta.url),
-    );
-  });
-
-  gl.texImage2D(1, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-
-  assert.equal(received?.length, 9);
-  assert.equal(received?.[3], image.width);
-  assert.equal(received?.[4], image.height);
-  assert.ok(received?.[8] instanceof Uint8Array);
-  assert.equal(
-    (received?.[8] as Uint8Array).byteLength,
-    image.width * image.height * 4,
-  );
-});
-
-test("ANGLE adapter removes transparent matte colors from the drum atlas", async () => {
-  let received: unknown[] | undefined;
-  const gl = {
-    RGBA: 0x1908,
-    UNSIGNED_BYTE: 0x1401,
-    UNPACK_FLIP_Y_WEBGL: 0x9240,
-    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
-    getParameter(parameter: number) {
-      return parameter === this.UNPACK_PREMULTIPLY_ALPHA_WEBGL;
-    },
-    texImage2D(...args: unknown[]) {
-      received = args;
-    },
-    texSubImage2D() {},
-  } satisfies WebGlImageUploadContext;
-  installWebGlImageUploadAdapter(gl);
-
-  const image = new NodeDOMAdapter({} as never).createImage();
-  await new Promise<void>((resolve, reject) => {
-    image.onload = (): void => resolve();
-    image.onerror = reject;
-    image.src = fileURLToPath(
-      new URL("../src/demo/assets/drum-kit.png", import.meta.url),
-    );
-  });
-  gl.texImage2D(1, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-
-  assert.ok(received?.[8] instanceof Uint8Array);
-  const pixels = received?.[8] as Uint8Array;
-  assert.equal(pixels.byteLength, image.width * image.height * 4);
-  const canvas = new NodeCanvas(image.width, image.height);
-  const context = canvas.getContext("2d") as {
-    drawImage(
-      source: CanvasImageSource,
-      x: number,
-      y: number,
-      width: number,
-      height: number,
-    ): void;
-  };
-  context.drawImage(image, 0, 0, image.width, image.height);
-  const expectedPixels = canvas.getPremultipliedRgbaPixels();
-  let orientationProbe = -1;
-  for (let y = 0; y < Math.floor(image.height / 2) && orientationProbe < 0; y++) {
-    const flippedY = image.height - y - 1;
-    for (let x = 0; x < image.width; x++) {
-      const offset = (y * image.width + x) * 4;
-      const flippedOffset = (flippedY * image.width + x) * 4;
-      if (
-        expectedPixels[offset] !== expectedPixels[flippedOffset] ||
-        expectedPixels[offset + 1] !== expectedPixels[flippedOffset + 1] ||
-        expectedPixels[offset + 2] !== expectedPixels[flippedOffset + 2] ||
-        expectedPixels[offset + 3] !== expectedPixels[flippedOffset + 3]
-      ) {
-        orientationProbe = offset;
-        break;
-      }
-    }
-  }
-  assert.ok(orientationProbe >= 0);
-  assert.deepEqual(
-    Array.from(pixels.subarray(orientationProbe, orientationProbe + 4)),
-    Array.from(
-      expectedPixels.subarray(orientationProbe, orientationProbe + 4),
-    ),
-  );
-
-  let transparentPixels = 0;
-  let translucentPixels = 0;
-  let transparentColorViolations = 0;
-  let premultiplicationViolations = 0;
-  for (let offset = 0; offset < pixels.byteLength; offset += 4) {
-    const alpha = pixels[offset + 3];
-    if (alpha === 0) {
-      transparentPixels++;
-      if (pixels[offset] || pixels[offset + 1] || pixels[offset + 2]) {
-        transparentColorViolations++;
-      }
-    } else if (alpha < 255) {
-      translucentPixels++;
-      if (
-        pixels[offset] > alpha ||
-        pixels[offset + 1] > alpha ||
-        pixels[offset + 2] > alpha
-      ) {
-        premultiplicationViolations++;
-      }
-    }
-  }
-  assert.ok(transparentPixels > 0);
-  assert.ok(translucentPixels > 0);
-  assert.equal(transparentColorViolations, 0);
-  assert.equal(premultiplicationViolations, 0);
 });
 
 test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
@@ -667,7 +329,7 @@ test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
     assert.equal(canvas.getPremultipliedRgbaPixels().byteLength, 640 * 360 * 4);
 });
 
-test("NodeGLCanvas delegates ANGLE surface resizing", () => {
+test("NodeGLCanvas delegates native drawing-buffer resizing", () => {
     let resized: [number, number] | undefined;
     const canvas = new NodeGLCanvas({}, 1280, 720, (width, height) => {
         resized = [width, height];

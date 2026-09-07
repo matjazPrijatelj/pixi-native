@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { manageNativeApplication } from "../src/pixi-native/ManagedNativeApplication.ts";
 
 type Callback = () => void;
+type FrameCallback = (timestamp: number) => void;
 
 class FakeTicker {
     public readonly entries: Array<{ callback: Callback; priority: number }> =
@@ -73,12 +74,32 @@ function createFixture(): {
     globalEvents: Array<{ type: string; event: Event }>;
     destroy: () => Promise<void>;
     addDestroyListener: (listener: () => void | Promise<void>) => () => void;
+    runFrame: (timestamp?: number) => void;
+    pendingFrameCount: () => number;
+    canceledFrames: number[];
 } {
     const ticker = new FakeTicker();
     const window = new FakeWindow();
     const order: string[] = [];
     const canvasEvents: Array<{ type: string; event: Event }> = [];
     const globalEvents: Array<{ type: string; event: Event }> = [];
+    const frameCallbacks = new Map<number, FrameCallback>();
+    const canceledFrames: number[] = [];
+    let nextFrameId = 1;
+    const requestFrame = (callback: FrameCallback): number => {
+        const requestId = nextFrameId++;
+        frameCallbacks.set(requestId, callback);
+        return requestId;
+    };
+    const cancelFrame = (requestId: number): void => {
+        canceledFrames.push(requestId);
+        frameCallbacks.delete(requestId);
+    };
+    const runFrame = (timestamp = 0): void => {
+        const callbacks = [...frameCallbacks.values()];
+        frameCallbacks.clear();
+        for (const callback of callbacks) callback(timestamp);
+    };
     ticker.add(() => order.push("render"), undefined, -25);
     const managed = manageNativeApplication({
         app: { ticker },
@@ -101,16 +122,45 @@ function createFixture(): {
         destroyApplication: () => {
             order.push("app-destroy");
         },
+        requestFrame,
+        cancelFrame,
     });
     window.pollEvents = () => order.push("poll");
-    return { ticker, window, order, canvasEvents, globalEvents, ...managed };
+    return {
+        ticker,
+        window,
+        order,
+        canvasEvents,
+        globalEvents,
+        runFrame,
+        pendingFrameCount: () => frameCallbacks.size,
+        canceledFrames,
+        ...managed,
+    };
 }
 
-test("managed runtime polls, lets Pixi render once, then presents", async () => {
+test("managed runtime renders, presents, and polls on its own frame", async () => {
     const fixture = createFixture();
     assert.equal(fixture.ticker.started, true);
     fixture.ticker.update();
-    assert.deepEqual(fixture.order, ["poll", "render", "swap"]);
+    fixture.runFrame();
+    assert.deepEqual(fixture.order, ["render", "swap", "poll"]);
+    assert.equal(fixture.pendingFrameCount(), 1);
+    await fixture.destroy();
+});
+
+test("poll frame rearms before native polling and skips reentrant polling", async () => {
+    const fixture = createFixture();
+    fixture.window.pollEvents = () => {
+        fixture.order.push("poll");
+        assert.equal(fixture.pendingFrameCount(), 1);
+        fixture.runFrame(16);
+    };
+
+    fixture.runFrame();
+
+    assert.deepEqual(fixture.order, ["poll"]);
+    assert.equal(fixture.pendingFrameCount(), 1);
     await fixture.destroy();
 });
 
@@ -178,6 +228,8 @@ test("managed destroy is idempotent and runs all cleanup in order", async () => 
     ]);
     assert.equal(fixture.ticker.started, false);
     assert.equal(fixture.ticker.entries.length, 1);
+    assert.equal(fixture.pendingFrameCount(), 0);
+    assert.equal(fixture.canceledFrames.length, 1);
 });
 
 test("native close uses the same teardown path", async () => {

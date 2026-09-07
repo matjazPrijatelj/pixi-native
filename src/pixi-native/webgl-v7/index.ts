@@ -2,13 +2,12 @@ import type { Application } from "pixi.js-v7";
 import { Image as CanvasImage } from "@napi-rs/canvas";
 import { NodeDOMAdapter } from "../NodeDOMAdapter.ts";
 import { NodeGLCanvas } from "../NodeGLCanvas.ts";
-import { NodeGLWindow } from "../NodeGLWindow.ts";
+import { createNodeGlfwWebGLSurface } from "../NodeGlfwWebGLSurface.ts";
 import { NodeCanvas } from "../NodeCanvas.ts";
 import { copyRgbaRowsFlippedY } from "../rgbaUpload.ts";
 import type {
   NodeNativeInput,
   NodeRendererOptions,
-  NodeRenderSurface,
   NodeWindowHandle,
 } from "../nativeTypes.ts";
 import { createModalFrameController } from "../ModalFrameController.ts";
@@ -17,17 +16,11 @@ import {
   NATIVE_BACKGROUND_COLOR,
   resolveAnimationFrameRate,
   resolveNodeRendererOptions,
-  warnAntialiasSampleFallback,
 } from "../windowOptions.ts";
-import {
-  assertGlfwTransparency,
-  requestGlfwTransparency,
-} from "../glfwTransparency.ts";
 import {
   manageNativeApplication,
   type ManagedNativeApplication,
 } from "../ManagedNativeApplication.ts";
-import { installWebGlImageUploadAdapter } from "../webglImageUpload.ts";
 
 export type RendererOptions = NodeRendererOptions;
 
@@ -57,79 +50,16 @@ export async function createRenderer(
     options,
     "PixiJS 7 Native Node WebGL",
   );
-  let window: NodeWindowHandle;
-  let nativeWindowData: Uint8Array;
-  let canvas: NodeGLCanvas;
-  let renderer: NodeRenderSurface;
-  let webgl: any;
-  let legacyImage:
-    | {
-        fromPixels(
-          width: number,
-          height: number,
-          bitsPerPixel: number,
-          pixels: Buffer,
-        ): unknown;
-      }
-    | undefined;
-  let webglRenderingContextConstructor: { readonly prototype: object };
-  const usesWindowsAngle = process.platform === "win32";
-
-  if (usesWindowsAngle) {
-    const { createWindowsAngleWebGLSurface } = await import(
-      "../WindowsAngleWebGL.ts"
-    );
-    const angle = await createWindowsAngleWebGLSurface(windowOptions);
-    window = angle.window;
-    nativeWindowData = angle.nativeWindowData;
-    canvas = angle.canvas;
-    renderer = angle.renderer;
-    webgl = angle.webgl;
-    installWebGlImageUploadAdapter(webgl);
-    webglRenderingContextConstructor = angle.webglRenderingContextConstructor;
-  } else {
-    const { init, gl, Image } = await import("@node-3d/core");
-    const { glfw } = await import("@node-3d/glfw");
-    const { doc } = init({
-      title: windowOptions.title,
-      width: windowOptions.width,
-      height: windowOptions.height,
-      resizable: windowOptions.resizable,
-      decorated: !windowOptions.borderless,
-      vsync: windowOptions.vsync,
-      msaa: windowOptions.antialiasSamples,
-      isGles3: true,
-      isWebGL2: true,
-      autoEsc: true,
-      onBeforeWindow: (_window: unknown, rawGlfw: unknown) => {
-        requestGlfwTransparency(rawGlfw, windowOptions.transparent);
-      },
-    });
-    assertGlfwTransparency(glfw, doc.handle, windowOptions.transparent);
-    warnAntialiasSampleFallback(
-      "WebGL7",
-      windowOptions.antialiasSamples,
-      Number(gl.getParameter(gl.SAMPLES)),
-    );
-    const glfwWindow = new NodeGLWindow(doc as never, {
-      pollEvents: glfw.pollEvents,
-      maximize: () => glfw.maximizeWindow(doc.handle),
-    });
-    if (windowOptions.x !== undefined && windowOptions.y !== undefined) {
-      glfwWindow.setPosition(windowOptions.x, windowOptions.y);
-    }
-    window = glfwWindow;
-    nativeWindowData = glfwWindow.nativeWindowData;
-    webgl = gl;
-    legacyImage = Image;
-    webglRenderingContextConstructor = gl.WebGLRenderingContext;
-    canvas = new NodeGLCanvas(webgl, window.pixelWidth, window.pixelHeight);
-    renderer = {
-      resize: (width, height) => canvas.resize(width, height),
-      swap: () => glfwWindow.swapBuffers(),
-      destroy: () => undefined,
-    };
-  }
+  const surface = await createNodeGlfwWebGLSurface(windowOptions, "WebGL7");
+  const {
+    window,
+    nativeWindowData,
+    canvas,
+    renderer,
+    webgl,
+    imageConstructor: legacyImage,
+    webglRenderingContextConstructor,
+  } = surface;
   const adapter = new NodeDOMAdapter(
     null,
     resolveAnimationFrameRate(windowOptions, window.display.frequency),
@@ -140,7 +70,7 @@ export async function createRenderer(
   );
   const { Application, settings, VERSION } = await import("pixi.js-v7");
   adapter.installPixi7(settings);
-  if (!usesWindowsAngle && legacyImage) {
+  {
     const nativeBufferData = webgl.bufferData.bind(webgl) as (
       target: number,
       data: ArrayBufferView,
@@ -292,7 +222,7 @@ export async function createRenderer(
     destroyed = true;
     modalController.detach();
     adapter.dispose();
-    // The application owner may release Pixi before the native ANGLE surface.
+    // The application owner may release Pixi before the native GL surface.
     // Pixi 7 plugin teardown is not idempotent, so never destroy it twice.
     if (app.renderer) {
       app.destroy(true, { children: true, texture: false, baseTexture: false });

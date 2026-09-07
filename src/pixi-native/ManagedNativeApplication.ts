@@ -4,10 +4,12 @@ import {
 } from "./NodeDOMAdapter.ts";
 import type { NodeNativeInput, NodeWindowHandle } from "./nativeTypes.ts";
 
-const POLL_PRIORITY = 50;
 const PRESENT_PRIORITY = -50;
 
 type NativeEvent = Record<string, unknown>;
+type FrameCallback = (timestamp: number) => void;
+type RequestFrame = (callback: FrameCallback) => number;
+type CancelFrame = (requestId: number) => void;
 type ManagedTicker = {
     add(callback: () => void, context?: unknown, priority?: number): unknown;
     remove(callback: () => void, context?: unknown): unknown;
@@ -37,6 +39,10 @@ export interface ManageNativeApplicationOptions<TApplication, TNative> {
     readonly native: TNative & ManagedRuntimeNative;
     readonly present?: () => void;
     readonly destroyApplication: () => void | Promise<void>;
+    /** @internal Test seam for the browser-like animation frame scheduler. */
+    readonly requestFrame?: RequestFrame;
+    /** @internal Test seam for the browser-like animation frame scheduler. */
+    readonly cancelFrame?: CancelFrame;
 }
 
 function readBoolean(
@@ -57,6 +63,11 @@ export function manageNativeApplication<TApplication, TNative>(
     options: ManageNativeApplicationOptions<TApplication, TNative>,
 ): ManagedNativeApplication<TApplication, TNative> {
     const { app, native, destroyApplication } = options;
+    const requestFrame =
+        options.requestFrame ??
+        globalThis.requestAnimationFrame.bind(globalThis);
+    const cancelFrame =
+        options.cancelFrame ?? globalThis.cancelAnimationFrame.bind(globalThis);
     const presentFrame = options.present ?? native.swap;
     if (!presentFrame) {
         throw new Error(
@@ -66,10 +77,25 @@ export function manageNativeApplication<TApplication, TNative>(
     const destroyListeners = new Set<() => void | Promise<void>>();
     let mouseButtons = 0;
     let active = true;
+    let pollingEvents = false;
+    let pollFrameRequest: number | undefined;
     let destroyPromise: Promise<void> | undefined;
 
     const pollEvents = (): void => {
-        if (active) native.window.pollEvents?.();
+        pollFrameRequest = undefined;
+        if (!active) return;
+
+        // Rearm first: glfwPollEvents enters a blocking Win32 modal loop while
+        // moving/resizing, where the native timer dispatches queued RAF work.
+        pollFrameRequest = requestFrame(pollEvents);
+        if (pollingEvents) return;
+
+        pollingEvents = true;
+        try {
+            native.window.pollEvents?.();
+        } finally {
+            pollingEvents = false;
+        }
     };
     const present = (): void => {
         if (active) presentFrame();
@@ -182,9 +208,9 @@ export function manageNativeApplication<TApplication, TNative>(
         native.input.dispatchGlobalEvent("resize", new Event("resize"));
     });
 
-    app.ticker.add(pollEvents, undefined, POLL_PRIORITY);
     app.ticker.add(present, undefined, PRESENT_PRIORITY);
     app.ticker.start();
+    pollFrameRequest = requestFrame(pollEvents);
 
     const removeProcessListeners = (): void => {
         process.off("SIGINT", handleSignal);
@@ -193,6 +219,10 @@ export function manageNativeApplication<TApplication, TNative>(
     const destroy = (): Promise<void> => {
         if (destroyPromise) return destroyPromise;
         active = false;
+        if (pollFrameRequest !== undefined) {
+            cancelFrame(pollFrameRequest);
+            pollFrameRequest = undefined;
+        }
         destroyPromise = (async () => {
             let firstError: unknown;
             const run = async (
@@ -206,7 +236,6 @@ export function manageNativeApplication<TApplication, TNative>(
             };
 
             app.ticker.stop();
-            app.ticker.remove(pollEvents);
             app.ticker.remove(present);
             removeProcessListeners();
             for (const listener of [...destroyListeners]) await run(listener);
