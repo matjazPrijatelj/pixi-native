@@ -39,6 +39,7 @@ Thumbs.db
 # Native addon build output
 native/**/target/
 native/**/build/
+native/**/dist/**/*.node
 native/**/dawn/
 native/**/depot_tools/
 native/ffmpeg/source/

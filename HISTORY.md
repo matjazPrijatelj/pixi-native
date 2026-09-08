@@ -574,3 +574,11 @@
   `auto_scale` negotiation regression after VA-API retries.
 - Kept all native `.node` build artifacts versioned in Git and assigned them
   to Git LFS, including platform package copies.
+- Updated native video, window, and GPU build scripts to copy fresh binaries
+  into the runtime platform packages automatically.
+- Fixed the Linux minimal FFmpeg configuration order so `h264_vaapi` and
+  `hevc_vaapi` remain enabled after `--disable-everything`.
+- Added a reproducible `ffmpeg:build:linux` command that validates both
+  hardware acceleration modules before staging the Linux FFmpeg binaries.
+- Limited Git LFS tracking to distributable native package `.node` modules;
+  source and intermediate native build copies remain local staging output.
