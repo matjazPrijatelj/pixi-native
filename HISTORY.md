@@ -2,6 +2,7 @@
 
 ## 2026-09-08
 
+<<<<<<< Updated upstream
 - Kept all demo MP4 files available locally while removing the large movie
   assets from Git tracking; PixiJS 7/8 video tests continue cycling every
   available asset, with only `Big_Buck_Bunny_720_10s_20MB.mp4` and
@@ -16,6 +17,11 @@
   Git LFS downloads are skipped with a clear `git lfs pull` instruction instead
   of starting repeated FFmpeg decoder retries.
 
+=======
+- Blocked accidental root `pnpm pack` invocations with a clear redirect to
+  `pnpm run pack:dist`, keeping the private development workspace out of
+  distributable archives.
+>>>>>>> Stashed changes
 - Made Pixi 7 and Pixi 8 initialize their native asset environment as part of
   `createRenderer`/`createApp`, allowing standard `Assets.load` calls without
   application-owned `Assets.init` or native texture conversion helpers.
