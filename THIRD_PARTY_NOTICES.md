@@ -1,11 +1,29 @@
 # Third-party notices
 
-`pixi-native` is an internally distributed, unlicensed package. That status
-does not replace or restrict the licenses of the third-party components below.
+Pixi Native is `UNLICENSED`. That project status does not replace or
+restrict the licenses of the third-party components listed below.
+
+## JavaScript and native runtime projects
+
+Pixi Native uses these projects through direct packages or native integration:
+
+- [PixiJS](https://pixijs.com/) for the rendering API and scene graph
+- [@node-3d](https://github.com/node-3d) and
+  [GLFW](https://www.glfw.org/) for native WebGL windows
+- [SDL](https://www.libsdl.org/) through `@kmamal/sdl` for input, display
+  information, and Linux audio output
+- [@napi-rs/canvas](https://github.com/Brooooooklyn/canvas) for Canvas2D, text,
+  and image decoding
+- [napi-rs](https://napi.rs/) for the Rust native addons
+- [CPAL](https://github.com/RustAudio/cpal) and crossbeam for Windows audio
+- [FFmpeg](https://ffmpeg.org/) for video probing, decoding, and streamed audio
+
+The installed packages and their upstream repositories contain their copyright
+and license terms. Those terms continue to apply to each dependency.
 
 ## Dawn and Tint
 
-The packaged `dawn.node` binaries contain Dawn and Tint code.
+The packaged `pixi_native_gpu.node` binaries contain Dawn and Tint code.
 
 Copyright 2017-2026 The Dawn & Tint Authors
 
@@ -32,36 +50,34 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-The pinned Dawn source contains additional third-party notices in its upstream
-`LICENSE` file: <https://dawn.googlesource.com/dawn/+/HEAD/LICENSE>.
+The pinned Dawn source contains more third-party notices in its upstream
+[LICENSE file](https://dawn.googlesource.com/dawn/+/HEAD/LICENSE).
 
 ## Rust native-addon dependencies
 
-The native window, audio, and video binaries include code from napi-rs and,
-where applicable, CPAL, crossbeam, and windows-rs. Their exact versions are
-recorded in the checked-in Cargo lockfiles and remain governed by their
-respective upstream licenses.
+The native window, audio, and video binaries include napi-rs and, where used,
+CPAL, crossbeam, and windows-rs. The checked-in Cargo lockfiles record their
+exact versions. Each crate remains subject to its upstream license.
 
 ## Microsoft D3DCompiler
 
-The Windows package contains `d3dcompiler_47.dll` from the Windows SDK. Its
-redistribution remains subject to the Microsoft Software License Terms for the
-Windows SDK used to build the binary.
+The Windows package contains `d3dcompiler_47.dll` from the Windows SDK.
+Microsoft Software License Terms for the Windows SDK used to build the binary
+govern its redistribution.
 
 ## FFmpeg
 
-The Windows x64 distribution contains a project-built, statically linked
-FFmpeg runtime as separate `ffmpeg.exe` and `ffprobe.exe` programs invoked
-through subprocess pipes:
+The Windows x64 and Linux x64 native packages contain project-built, statically
+linked FFmpeg and FFprobe programs. Pixi Native invokes them through subprocess
+pipes.
 
-- Source: <https://github.com/FFmpeg/FFmpeg/commit/140fd653ae>
+- Source: <https://github.com/FFmpeg/FFmpeg/commit/140fd653aed8cad774f991ba083e2d01e86420c7>
+- Release: FFmpeg 8.0
 - License profile: GNU Lesser General Public License version 2.1 or later
-- Configuration: decode-only minimal Windows x64 build without GPL or nonfree components
+- Configuration: decode-focused x64 builds without GPL or nonfree components
 
-The packaged `FFMPEG_LICENSE.txt` contains the complete LGPL 2.1 text and
-`FFMPEG_BUILD_INFO.txt` records the source, compiler, linkage, and configure
-options. Each release places the complete pinned corresponding-source archive
-and its SHA-256 file beside the npm tarball. The LGPL terms apply to the bundled
-FFmpeg programs. H.264 and H.265 may have separate patent-licensing obligations
-that are not granted by the LGPL. Linux FFmpeg is not currently contained in
-this package and must be supplied through `FFMPEG_PATH` or `PATH`.
+Each native package includes `FFMPEG_LICENSE.txt`, `FFMPEG_BUILD_INFO.txt`,
+and `FFMPEG_SHA256SUMS` beside its FFmpeg programs. Each release places the
+complete pinned corresponding-source archive and its SHA-256 file beside the npm
+archives. The LGPL terms apply to the bundled FFmpeg programs. H.264 and H.265
+may require separate patent licenses that the LGPL does not grant.

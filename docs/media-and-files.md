@@ -2,8 +2,7 @@
 
 ## Module-relative files
 
-Packaged displays should resolve their own assets from `import.meta.url`, not
-from `process.cwd()`:
+Resolve packaged assets from `import.meta.url` instead of `process.cwd()`:
 
 ```ts
 import { createModuleFileAccess } from "@pixi-native/pixi8/files";
@@ -15,11 +14,18 @@ const settings = await files.readJson<{ renderer: "webgpu" | "webgl" }>(
 const imagePath = files.resolvePath("../assets/logo.png");
 ```
 
-Relative paths resolve beside the calling module. Absolute paths, Windows drive
-paths, UNC paths, and `file:` URLs remain absolute. The helper is intentionally
-read-only; use `node:fs` directly for writes and `fetch` for HTTP resources.
+The helper exposes `resolvePath()`, `exists()`, `readBytes()`, `readText()`, and
+`readJson<T>()`. Relative paths resolve beside the calling module. Absolute
+paths, Windows drive paths, UNC paths, and `file:` URLs stay absolute.
 
-After `createApp()`, image textures use Pixi's standard asset pipeline:
+This API is read-only. Use `node:fs` for writes and `fetch` for HTTP resources.
+The focused `/files` entrypoint does not initialize Pixi, a GPU device, or a
+native window.
+
+## Images and Canvas2D
+
+`createApp()` and `createRenderer()` install Pixi's native asset environment.
+Use the standard Pixi asset pipeline after either initializer completes:
 
 ```ts
 import { Assets, Sprite, createApp } from "@pixi-native/pixi8";
@@ -27,16 +33,19 @@ import { Assets, Sprite, createApp } from "@pixi-native/pixi8";
 const runtime = await createApp({ backend: "webgpu" });
 const texture = await Assets.load(imagePath);
 runtime.app.stage.addChild(new Sprite(texture));
+
+runtime.addDestroyListener(() => Assets.unload(imagePath));
 ```
 
-The native renderer owns pixel format, alpha, and orientation conversion. Do
-not call `Assets.init()` or copy an image through a native canvas in application
-code. Release cached textures with `Assets.unload(imagePath)` during teardown.
+Application code does not need `Assets.init()` or a manual Canvas2D texture
+copy. The renderer handles pixel format, premultiplied alpha, and orientation.
+The native Canvas2D adapter also backs normal Pixi text and runtime bitmap-font
+atlases.
 
 ## Native video
 
-`NativeVideo` owns FFmpeg decoding and browser-like playback state.
-`VideoSprite` uploads its NV12 frames through the selected Pixi renderer:
+`NativeVideo` controls FFmpeg decoding and browser-shaped playback state.
+`VideoSprite` uploads NV12 frames through the selected Pixi renderer:
 
 ```ts
 import {
@@ -60,29 +69,43 @@ runtime.addDestroyListener(() => video.destroy());
 await video.play();
 ```
 
-Assigning `video.src` reloads a source while retaining the same `VideoSprite`.
-The video API also supports `load()`, `pause()`, seeking through `currentTime`,
-`loop`, `playbackRate`, volume/mute controls, media events, live reconnect, and
-decoder statistics.
+The public video API supports:
 
-For a video containing a color image on the left and a grayscale alpha mask on
-the right, pass the mask width divided by the color width:
+- file and live sources, source replacement through `src`, and live reconnect;
+- `load()`, `play()`, `pause()`, looping, volume, mute, and playback-rate
+  control;
+- seeking through `currentTime` for file sources;
+- browser-style media events, decoder state, and frame statistics.
+
+Windows uses D3D11VA when available and falls back to CPU decoding. Linux uses
+VA-API when available and has the same CPU fallback. Both platform packages
+contain the project's minimal FFmpeg and FFprobe executables.
+
+FFmpeg lookup checks an explicit `ffmpegPath`, `FFMPEG_PATH`, the installed
+native platform package, and then development `PATH`.
+
+### Packed-alpha video
+
+A video can store color on the left and a grayscale alpha mask on the right.
+Pass the mask width divided by the color width:
 
 ```ts
 const sprite = new VideoSprite(video, { alphaMaskScale: 0.5 });
 ```
 
-The color and mask split must retain positive, even widths for NV12 chroma
-alignment.
+The color and mask regions must have positive, even widths for NV12 chroma
+alignment. The shader samples both regions without converting the full frame to
+RGBA on the CPU.
 
-FFmpeg lookup is: explicit `ffmpegPath`, `FFMPEG_PATH`, the installed native
-platform package, then development `PATH`. The Windows native package contains
-the verified minimal FFmpeg runtime.
+### Video limits
+
+- Output uses SDR BT.709 limited-range NV12.
+- Decoder output reaches the renderer through a CPU-visible frame copy.
+- Live sources do not support seeking and require playback rate `1`.
 
 ## Native audio
 
-The `/audio` entrypoint provides Howler-style `Howl` and `Howler` objects backed
-by the native audio engine:
+The `/audio` entrypoint provides Howler-style `Howl` and `Howler` objects:
 
 ```ts
 import { Howl } from "@pixi-native/pixi8/audio";
@@ -100,6 +123,12 @@ const effects = new Howl({
 effects.play("win");
 ```
 
-Audio supports overlapping voices, sprites, looping, pause/stop/seek, fades,
-volume, mute, events, preload, and bounded streaming. Unload caller-owned audio
-during application teardown.
+Audio supports overlapping voices, sprites, looping, pause, stop, seek, fades,
+volume, mute, events, preload, and bounded FFmpeg streaming. Windows uses the
+native WASAPI addon. Linux uses SDL playback.
+
+Unload caller-owned audio during application teardown:
+
+```ts
+runtime.addDestroyListener(() => effects.unload());
+```

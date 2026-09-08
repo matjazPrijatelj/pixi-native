@@ -2,6 +2,13 @@
 
 ## 2026-09-09
 
+- Reworked the public README and packaged guides for the 0.1.0 pre-release with
+  package contents, Windows/Linux support matrices, registry and tarball setup,
+  copyable PixiJS 7/8 examples, API ownership, media limits, deployment, and a
+  canonical documentation link.
+- Added dependency acknowledgements, updated the third-party notices for the
+  project-owned GPU addon and both bundled FFmpeg targets, and documented the
+  current `UNLICENSED` publication blocker without changing package metadata.
 - Fixed the Windows distribution audio regression by using the tracked
   120-second AAC fixture for the 15-second streaming test. Audio play waits now
   report native and FFmpeg `playerror` details instead of timing out.

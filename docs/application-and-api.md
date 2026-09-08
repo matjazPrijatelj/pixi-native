@@ -1,92 +1,113 @@
-# Application and API
+# Application lifecycle and API
 
-## Package entrypoints
+## Public package entrypoints
 
-Use one version package as the main application facade:
+Use one version package as the main facade for a display:
 
-- `@pixi-native/pixi7` exports PixiJS 7, `createApp`, `createRenderer`,
+- `@pixi-native/pixi7` exports PixiJS 7, `createApp()`, `createRenderer()`,
   `VideoSprite`, and the neutral core API.
-- `@pixi-native/pixi8` exports PixiJS 8 and the equivalent native API.
-- `/audio`, `/files`, `/runtime`, and `/canvas` are supported focused
-  entrypoints on both version packages.
-- `@pixi-native/core` owns Pixi-neutral functionality. Most display code should
-  import through its selected version package instead.
+- `@pixi-native/pixi8` exports PixiJS 8 and the matching native API.
+- `/audio`, `/files`, `/runtime`, and `/canvas` provide focused entrypoints on
+  both version packages.
+- `@pixi-native/core` owns Pixi-neutral functionality. Display code can import
+  through its version facade in most cases.
 
-Only package exports are public. Internal `dist/` paths and repository source
-paths may change without compatibility guarantees.
+Only declared package exports form the public API. The packages do not expose
+an `/application` entrypoint. Internal `dist/` paths and repository source paths
+may change between releases.
 
 ## Managed application lifecycle
 
-`createApp()` is the normal entrypoint. It initializes the native window and
-renderer, installs the minimal browser-like surface required by Pixi, starts the
-Pixi ticker, polls native events, presents frames, and owns teardown.
+`createApp()` is the standard entrypoint. It creates the native window and
+renderer, installs the minimal browser-shaped adapter required by Pixi, starts
+the ticker, polls input, presents frames, and controls teardown.
 
 ```ts
 import { createApp } from "@pixi-native/pixi8";
 
-const runtime = await createApp({ backend: "webgpu" });
-
-runtime.addDestroyListener(async () => {
-  // Release application-owned resources before native teardown.
+const runtime = await createApp({
+  backend: "webgpu",
+  width: 1280,
+  height: 720,
 });
 
-await runtime.destroy();
+runtime.addDestroyListener(async () => {
+  // Release application-owned media, timers, and integrations here.
+});
+
+// Call await runtime.destroy() from a custom application shutdown path.
 ```
 
-`destroy()` is idempotent. A native close event, `SIGINT`, and `SIGTERM` enter
-the same teardown path. Register external timers, media, or integrations with
-`addDestroyListener()` instead of maintaining a competing process shutdown path.
+Native close, `SIGINT`, and `SIGTERM` enter the same managed shutdown path.
+`destroy()` is idempotent. Register caller-owned resources with
+`addDestroyListener()` so they stop before the native surface and device.
 
-The returned values are:
+The returned object contains:
 
-- `app`: the normal Pixi `Application` for the selected major version;
-- `native`: the native window, canvas/input surface, and renderer context;
-- `destroy()`: managed asynchronous teardown;
-- `addDestroyListener()`: lifecycle registration for caller-owned resources.
+- `app`, the Pixi `Application` for the selected major;
+- `native`, the native window, canvas/input surface, and renderer context;
+- `destroy()`, the managed asynchronous teardown function;
+- `addDestroyListener()`, which registers caller-owned cleanup.
+
+## Renderer selection
+
+PixiJS 8 accepts `backend: "webgpu"` or `backend: "webgl"`. WebGPU is the
+default when the option is absent. PixiJS 7 uses WebGL and does not accept a
+WebGPU backend.
+
+The requested backend must exist in the installed native package. Startup fails
+with a platform or renderer error when it is unavailable. Pixi Native does not
+try another backend and does not create a browser renderer.
+
+| Platform       | WebGPU backend | WebGL backend  |
+| -------------- | -------------- | -------------- |
+| Windows 11 x64 | D3D12          | GLFW/OpenGL ES |
+| Linux x64      | Vulkan         | GLFW/OpenGL ES |
 
 ## Manual renderer ownership
 
-`createRenderer()` initializes Pixi and the native surface but does not install
-the managed application loop. Use it only when the caller intentionally owns
-event polling, rendering, presentation, resizing, and cleanup.
+`createRenderer()` initializes Pixi and the native surface without installing
+the managed application loop. The caller then owns event polling, rendering,
+presentation, resizing, and cleanup.
 
 ```ts
 import { createRenderer } from "@pixi-native/pixi8";
 
 const { app, native } = await createRenderer({ backend: "webgpu" });
 
-// The caller now owns its frame loop and teardown order.
 app.render();
 native.renderer.swap();
 ```
 
-Prefer `createApp()` unless manual ownership is a firm architectural
-requirement.
+Use `createApp()` unless the application already has a complete frame and
+shutdown lifecycle.
 
 ## Window and presentation options
 
-Both version packages accept the shared native window options:
+Both version facades accept these shared options:
 
-- `title`, `width`, and `height` configure the initial window;
-- `x` and `y` set an absolute virtual-desktop position and must be supplied
-  together;
-- `resizable` and `borderless` control window decoration and resizing;
+- `title`, `width`, and `height` configure the initial window.
+- `x` and `y` set an absolute virtual-desktop position. Supply both values.
+- `resizable` and `borderless` control resizing and window decoration.
 - `transparent` and `backgroundAlpha` configure compositor transparency where
-  supported;
-- `antialiasSamples` accepts `0`, `2`, `4`, or `8` and defaults to `4`;
-- `vsync` selects synchronized or immediate presentation;
-- `maxFps` applies only to timer-paced rendering when `vsync` is false.
-
-PixiJS 8 additionally requires an explicit `backend` choice when the default
-WebGPU backend is not desired. PixiJS 7 is WebGL-only.
+  the platform supports it.
+- `antialiasSamples` accepts `0`, `2`, `4`, or `8` and defaults to `4`. A
+  backend may report and use its nearest supported value.
+- `vsync` selects synchronized or immediate presentation.
+- `maxFps` accepts 24 through 360 and applies when `vsync` is false. VSync
+  ignores it and owns frame pacing.
 
 The native window exposes `setPosition()`, `minimize()`, `maximize()`, and
-`restore()`. Per-pixel transparent areas still receive mouse input; click-through
-and custom title-bar behavior are not part of the public API.
+`restore()`. Transparent pixels remain input-active. Click-through behavior and
+custom title bars are outside the public API.
+
+Windows uses the compositor path for transparent WebGPU windows. Linux requests
+premultiplied alpha from the active compositor; WebGPU selects an opaque surface
+and reports that choice when the compositor does not offer it.
 
 ## Runtime constraints
 
-The installed DOM adapter implements only the browser capabilities Pixi needs.
-It is not an HTML layout engine and does not provide navigation, CSS, browser
-media elements, or arbitrary web applications. Use native media and filesystem
-entrypoints documented in [Media and files](media-and-files.md).
+The DOM adapter implements the capabilities Pixi needs for rendering, assets,
+and pointer or keyboard events. It does not implement HTML layout, CSS,
+navigation, browser media elements, or arbitrary web applications. Use the
+native APIs described in [Media and files](media-and-files.md).

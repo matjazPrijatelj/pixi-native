@@ -1,10 +1,24 @@
 # Deployment
 
+## Package set
+
+A release contains three platform-neutral packages and one native package for
+the operating system used to create it:
+
+- `@pixi-native/core`
+- `@pixi-native/pixi7`
+- `@pixi-native/pixi8`
+- `@pixi-native/native-win32-x64` or `@pixi-native/native-linux-x64`
+
+Install the core, each Pixi facade required by the displays, and one matching
+native package. Node rejects a native package on the wrong operating system or
+architecture.
+
 ## Shared launcher layout
 
-A launcher may contain displays built with either PixiJS major. Install the
-shared runtime and platform binaries once in the launcher's dependency root,
-then run every display as a separate Node.js process:
+A launcher can host displays built with either Pixi major. Install the shared
+runtime and platform binaries once in the launcher dependency root, then run
+each display as a separate Node.js process:
 
 ```text
 launcher/
@@ -18,50 +32,71 @@ launcher/
    └─ current-pixi8/
 ```
 
-Each display imports only its selected version facade. This prevents Pixi
+Each display imports one version facade. Separate processes keep Pixi
 singletons, extensions, caches, and plugins from crossing major versions while
-avoiding duplicate native binaries.
+sharing one physical copy of the native binaries.
 
-## Private tarballs
+## Registry installation
 
-The repository produces three platform-neutral packages and the native package
-for the current OS with:
+After the project publishes the packages, install them together in the launcher
+root. For a Windows launcher that uses both Pixi versions:
+
+```sh
+pnpm add @pixi-native/core @pixi-native/pixi7 @pixi-native/pixi8 @pixi-native/native-win32-x64
+```
+
+Use `@pixi-native/native-linux-x64` on Linux.
+
+The project has not published version 0.1.0 to a public registry, and its
+packages remain `UNLICENSED`. Choose a project license and update package
+publication metadata before an open-source release.
+
+## Release archives
+
+Run packaging on the target operating system from the full development
+installation:
 
 ```sh
 pnpm pack:dist
 ```
 
-Install the generated archives together in the launcher root. Packaging runs
-type checking, tests, TypeScript compilation, native-artifact validation,
-`npm pack`, and a fresh production-consumer smoke test. It uses existing native
-artifacts and does not rebuild native addons or FFmpeg.
+The command runs type checking and tests, compiles the TypeScript packages,
+validates native artifacts, creates npm archives and SHA-256 files, and installs
+the archives into a fresh production consumer. It uses existing native addons
+and FFmpeg binaries. It does not run a native build.
 
-Do not copy a development pnpm-linked `node_modules` directory into a release.
-Create a fresh production installation so package files and native binaries are
-physical and portable.
+Install every generated `.tgz` required by the launcher in one `pnpm add`
+command. Keep the archive versions aligned across core, both Pixi facades, and
+the native package.
 
-## Platform packages
+Do not copy the development checkout's pnpm-linked `node_modules` into a
+release. Create a fresh production installation so JavaScript, `.node` addons,
+DLLs, and FFmpeg programs are physical files under the launcher root.
 
-`@pixi-native/core`, `@pixi-native/pixi7`, and `@pixi-native/pixi8` are
-platform-neutral. Native addons and the packaged FFmpeg runtime belong to a
-platform package selected by Node platform and architecture.
+## Platform contents
 
-The distribution provides `@pixi-native/native-win32-x64` and
-`@pixi-native/native-linux-x64` with the same resolver contract. Run packing on
-the target OS; display imports and Pixi package names do not change.
+| Capability         | Windows 11 x64                           | Linux x64                       |
+| ------------------ | ---------------------------------------- | ------------------------------- |
+| PixiJS 8 WebGPU    | D3D12                                    | Vulkan                          |
+| PixiJS 8 WebGL     | GLFW/OpenGL ES                           | GLFW/OpenGL ES                  |
+| PixiJS 7 WebGL     | GLFW/OpenGL ES                           | GLFW/OpenGL ES                  |
+| Window bridge      | Native window addon                      | Native window addon             |
+| Audio output       | Native WASAPI addon                      | SDL playback                    |
+| Video acceleration | D3D11VA with CPU fallback                | VA-API with CPU fallback        |
+| Media tools        | Packaged `ffmpeg.exe` and `ffprobe.exe`  | Packaged `ffmpeg` and `ffprobe` |
 
-An unsupported or missing native target fails explicitly during startup. The
-runtime does not load a binary built for another operating system and does not
-silently switch renderer backends.
+The native resolver fails with a target-specific error when the package or a
+required addon is missing. It does not load an addon for another platform.
 
 ## Current limitations
 
-- Packaged WebGPU currently targets Windows x64/D3D12 and Linux x64/Vulkan.
-- Linux WebGPU remains unavailable until the project-owned Vulkan addon is
-  packaged; Linux WebGL and native media development paths are separate.
-- Transparent windows are currently supported on Windows 11 and remain
-  input-active in transparent areas.
-- Native video outputs SDR BT.709 limited NV12 and is not decoder-to-GPU
-  zero-copy.
-- Live video is non-seekable and supports playback rate `1` only.
-- There is no WebView or browser-renderer fallback.
+- Linux WebGPU transparency depends on compositor surface capabilities and
+  falls back to an opaque surface when premultiplied alpha is unavailable.
+- Transparent windows remain pointer-active in transparent areas.
+- Native video outputs SDR BT.709 limited-range NV12 and still copies decoder
+  output before GPU sampling.
+- Live video is non-seekable and supports playback rate `1`.
+- The runtime provides no WebView or browser renderer fallback.
+
+See [Third-party notices](../THIRD_PARTY_NOTICES.md) for the native binary and
+FFmpeg redistribution terms.
