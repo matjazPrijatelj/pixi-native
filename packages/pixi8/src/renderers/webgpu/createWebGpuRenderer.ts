@@ -74,6 +74,16 @@ export async function createWebGpuRenderer(
   const adapter = gpuContext.adapter;
   const device = gpuContext.device;
   const renderer = gpuContext.renderer;
+  const actualAlphaMode =
+    gpuContext.alphaMode ?? renderer.getAlphaMode?.() ??
+    (windowOptions.transparent ? "premultiplied" : "opaque");
+  if (windowOptions.transparent && actualAlphaMode !== "premultiplied") {
+    console.warn(
+      `[pixi-native] transparent WebGPU surface is unavailable; using ${actualAlphaMode} alpha mode`,
+    );
+  }
+  const effectiveBackgroundAlpha =
+    actualAlphaMode === "opaque" ? 1 : windowOptions.backgroundAlpha;
 
   const queue = device.queue as any;
   const rgbaUploadBuffers = new Map<number, Uint8Array>();
@@ -212,9 +222,9 @@ export async function createWebGpuRenderer(
     height: canvas.height,
     background: premultiplyBackgroundColor(
       NATIVE_BACKGROUND_COLOR,
-      windowOptions.backgroundAlpha,
+      effectiveBackgroundAlpha,
     ),
-    backgroundAlpha: windowOptions.backgroundAlpha,
+    backgroundAlpha: effectiveBackgroundAlpha,
     resolution: 1,
     antialias: webGpuAntialiasSamples !== 0,
     autoStart: false,
@@ -278,6 +288,8 @@ export async function createWebGpuRenderer(
     backend,
     presentMode,
     format: renderer.getPreferredFormat(),
+    requestedAlphaMode: windowOptions.transparent ? "premultiplied" : "opaque",
+    alphaMode: actualAlphaMode,
     size: [canvas.width, canvas.height],
     devicePixelRatio: 1,
     refreshRateHz,

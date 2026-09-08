@@ -23,6 +23,7 @@ import {
   resolveWebGpuAntialiasSamples,
   warnAntialiasSampleFallback,
 } from "@pixi-native/core/runtime/windowOptions.js";
+import { setNativeWindowTransparent } from "@pixi-native/core/runtime/ModalFrameController.js";
 import { DEMO_WINDOW_OPTIONS } from "../src/demo/windowOptions.ts";
 import {
   assertGlfwTransparency,
@@ -234,6 +235,13 @@ test("native demos expose explicit decorated window defaults", () => {
     x: 50,
     y: 50,
   });
+});
+
+test("Linux transparency leaves Wayland handles with SDL", () => {
+  if (process.platform !== "linux") return;
+  assert.doesNotThrow(() =>
+    setNativeWindowTransparent(new Uint8Array(8), true),
+  );
 });
 
 test("Pixi 8 background RGB is premultiplied for transparent presentation", () => {

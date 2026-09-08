@@ -282,6 +282,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     static void Init(Napi::Env env) {
         Napi::Function constructor = DefineClass(env, "Renderer", {
             InstanceMethod("getPreferredFormat", &Renderer::GetPreferredFormat),
+            InstanceMethod("getAlphaMode", &Renderer::GetAlphaMode),
             InstanceMethod("getCurrentTexture", &Renderer::GetCurrentTexture),
             InstanceMethod("getCurrentTextureView", &Renderer::GetCurrentTextureView),
             InstanceMethod("swap", &Renderer::Swap),
@@ -326,15 +327,25 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     uint32_t width_ = 0;
     uint32_t height_ = 0;
     bool configured_ = false;
+    bool alphaFallback_ = false;
 
     void ConfigureInitialSurface(Napi::Env env) {
         WGPUSurfaceCapabilities capabilities = {};
         gProcs->surfaceGetCapabilities(surface_, context_->adapter.Get(), &capabilities);
         bool alphaSupported = false;
+        bool opaqueSupported = false;
         for (size_t index = 0; index < capabilities.alphaModeCount; ++index) {
             alphaSupported |= capabilities.alphaModes[index] == alphaMode_;
+            opaqueSupported |= capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Opaque;
         }
-        if (!alphaSupported || capabilities.formatCount == 0) {
+        if (!alphaSupported && alphaMode_ == WGPUCompositeAlphaMode_Premultiplied &&
+            opaqueSupported) {
+#if defined(__linux__)
+            alphaMode_ = WGPUCompositeAlphaMode_Opaque;
+            alphaFallback_ = true;
+#endif
+        }
+        if ((!alphaSupported && !alphaFallback_) || capabilities.formatCount == 0) {
             gProcs->surfaceCapabilitiesFreeMembers(capabilities);
             Napi::Error::New(env, "requested WebGPU surface configuration is not supported")
                 .ThrowAsJavaScriptException();
@@ -385,6 +396,14 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         return converter(format, static_cast<wgpu::TextureFormat>(preferredFormat_))
             ? wgpu::interop::ToJS(info.Env(), format)
             : info.Env().Null();
+    }
+
+    Napi::Value GetAlphaMode(const Napi::CallbackInfo& info) {
+        return Napi::String::New(
+            info.Env(),
+            alphaMode_ == WGPUCompositeAlphaMode_Premultiplied
+                ? "premultiplied"
+                : "opaque");
     }
 
     Napi::Value GetCurrentTexture(const Napi::CallbackInfo& info) {
@@ -495,6 +514,8 @@ Napi::Value CreateWindowContext(const Napi::CallbackInfo& info) {
     result.Set("adapter", adapterObject);
     result.Set("device", deviceObject);
     result.Set("renderer", renderer);
+    result.Set("requestedAlphaMode", alphaMode);
+    result.Set("alphaMode", renderer.Get("getAlphaMode").As<Napi::Function>().Call(renderer, {}).ToString());
     result.Set("_nativeContext", SharedExternal(env, context));
     return result;
 }

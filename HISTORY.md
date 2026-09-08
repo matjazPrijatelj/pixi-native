@@ -2,6 +2,7 @@
 
 ## 2026-09-08
 
+<<<<<<< HEAD
 - Made Pixi 7 and Pixi 8 initialize their native asset environment as part of
   `createRenderer`/`createApp`, allowing standard `Assets.load` calls without
   application-owned `Assets.init` or native texture conversion helpers.
@@ -13,6 +14,18 @@
   lifecycle and entrypoints, media/files, optional GSAP plus PixiPlugin wiring,
   and shared-launcher deployment. Packaging now includes and verifies those
   guides, and production-consumer tests prove GSAP is not installed transitively.
+=======
+- Added a Linux WebGPU surface capability fallback: when Wayland/Vulkan does
+  not expose premultiplied alpha, the native renderer now selects opaque mode,
+  reports the actual alpha mode, and keeps the Intel Linux demo running.
+
+- Registered the Linux x64 native package in the shared resolver so bundled
+  FFmpeg is available to SDL audio and video-audio playback. Linux Wayland
+  windows now keep their SDL-owned premultiplied alpha path without passing a
+  Wayland handle to the Windows-only transparency addon, and SDL playback
+  startup errors are exposed for diagnostics.
+
+>>>>>>> 7ccd702 (fixed linux webgpu)
 - Split the distribution into `@pixi-native/pixi7`, `@pixi-native/pixi8`,
   `@pixi-native/core`, and `@pixi-native/native-win32-x64` workspace packages.
   Each version package exposes its matching Pixi API with compact `createApp`,

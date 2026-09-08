@@ -1,0 +1,24 @@
+{
+    "name": "@pixi-native/native-gpu",
+    "version": "0.1.0",
+    "private": true,
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "scripts": {
+        "native:build": "node scripts/build.mjs"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/matjazPrijatelj/node-pixi8-wgpu.git"
+    },
+    "config": {
+        "depotTools": {
+            "url": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+            "commit": "5b7fcc4bb71bbbf952a5283fbd621256905be31b"
+        },
+        "dawn": {
+            "url": "https://dawn.googlesource.com/dawn",
+            "commit": "053ad3188bd2cda62388d2382626317dda275fe7"
+        }
+    }
+}

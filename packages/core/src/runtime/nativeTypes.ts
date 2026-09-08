@@ -39,12 +39,15 @@ export interface NodeGPUApi {
     adapter: GPUAdapter;
     device: GPUDevice;
     renderer: NodeWindowRenderer;
+    requestedAlphaMode?: "opaque" | "premultiplied";
+    alphaMode?: "opaque" | "premultiplied";
   };
   destroy(context: object): void;
 }
 
 export interface NodeWindowRenderer {
-  getPreferredFormat(): GPUTextureFormat;
+    getPreferredFormat(): GPUTextureFormat;
+    getAlphaMode?(): "opaque" | "premultiplied";
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap(): void;

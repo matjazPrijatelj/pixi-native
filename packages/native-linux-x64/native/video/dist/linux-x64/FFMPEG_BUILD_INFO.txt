@@ -1,0 +1,43 @@
+pixi-native minimal FFmpeg build
+
+Target: linux-x64
+Source: https://github.com/FFmpeg/FFmpeg.git
+Source commit: 140fd653aed8cad774f991ba083e2d01e86420c7
+License profile: LGPL 2.1 or later
+Linkage: static FFmpeg libraries; Linux system libraries only
+Compiler: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+Configure options:
+--target-os=linux
+--cc=gcc
+--cxx=g++
+--enable-vaapi
+--enable-hwaccel=h264_vaapi
+--enable-hwaccel=hevc_vaapi
+--arch=x86_64
+--disable-autodetect
+--disable-debug
+--disable-doc
+--disable-shared
+--enable-static
+--disable-gpl
+--disable-nonfree
+--disable-version3
+--disable-everything
+--enable-small
+--enable-ffmpeg
+--enable-ffprobe
+--enable-avcodec
+--enable-avformat
+--enable-avfilter
+--enable-swresample
+--enable-swscale
+--enable-network
+--enable-decoder=h264,hevc,aac,mp3,pcm_u8,pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_f64le
+--enable-parser=h264,hevc,aac,mpegaudio
+--enable-demuxer=mov,mpegts,h264,hevc,aac,mp3,wav,sdp,rtp
+--enable-protocol=file,pipe,http,https,tls,tcp,udp,rtp
+--enable-filter=fps,scale,format,hwdownload,atempo,aresample,aformat
+--enable-encoder=rawvideo,pcm_f32le
+--enable-muxer=rawvideo,pcm_f32le,null
+--extra-cflags=-Os

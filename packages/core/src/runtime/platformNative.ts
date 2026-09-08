@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
 export interface NativePlatformModules {
+<<<<<<< HEAD
   readonly target: string;
   readonly gpuModule: string;
   readonly windowModule: string;
@@ -14,6 +15,20 @@ export interface NativePlatformModules {
 
 const PLATFORM_PACKAGES: Readonly<Record<string, string>> = {
   "win32-x64": "@pixi-native/native-win32-x64",
+=======
+    readonly target: string;
+    readonly gpuModule: string;
+    readonly windowModule: string;
+    readonly videoModule: string;
+    readonly audioBinding?: string;
+    readonly ffmpeg: string;
+    readonly ffprobe: string;
+}
+
+const PLATFORM_PACKAGES: Readonly<Record<string, string>> = {
+    "win32-x64": "@pixi-native/native-win32-x64",
+    "linux-x64": "@pixi-native/native-linux-x64",
+>>>>>>> 7ccd702 (fixed linux webgpu)
 };
 
 /** Resolves the one installed native package for the active OS and architecture. */

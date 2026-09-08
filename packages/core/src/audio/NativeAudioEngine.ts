@@ -64,6 +64,7 @@ function resolveFfmpegPath(): string {
 }
 
 export class NativeAudioEngine {
+<<<<<<< HEAD
   private readonly owners = new Map<number, NativeAudioEventTarget>();
   private readonly positions = new Map<number, VoicePosition>();
   private readonly voiceOwners = new Map<number, number>();
@@ -80,6 +81,25 @@ export class NativeAudioEngine {
   private globalVolume = 1;
   private globalMuted = false;
   private queueGeneration = 0;
+=======
+    private readonly owners = new Map<number, NativeAudioEventTarget>();
+    private readonly positions = new Map<number, VoicePosition>();
+    private readonly voiceOwners = new Map<number, number>();
+    private readonly fadeVersions = new Map<number, number>();
+    private readonly eventTimers = new Set<ReturnType<typeof setTimeout>>();
+    private worker?: Worker;
+    private device?: sdl.Sdl.Audio.AudioPlaybackInstance;
+    private pumpTimer?: ReturnType<typeof setInterval>;
+    private renderPending = false;
+    private nextOwnerId = 1;
+    private nextVoiceId = 1;
+    private nextPreloadId = 1;
+    private submittedFrames = 0;
+    private globalVolume = 1;
+    private globalMuted = false;
+    private queueGeneration = 0;
+    private lastError?: Error;
+>>>>>>> 7ccd702 (fixed linux webgpu)
 
   public registerOwner(owner: NativeAudioEventTarget): number {
     const id = this.nextOwnerId++;
@@ -348,6 +368,7 @@ export class NativeAudioEngine {
     this.pump();
   }
 
+<<<<<<< HEAD
   private dispatch(
     ownerId: number,
     event: NativeAudioEvent,
@@ -356,6 +377,197 @@ export class NativeAudioEngine {
   ): void {
     this.owners.get(ownerId)?.handleNativeAudioEvent(event, id, message);
   }
+=======
+    public currentTime(id: number): number | undefined {
+        const position = this.positions.get(id);
+        if (!position) return undefined;
+        if (!position.playing || !this.device) return position.seconds;
+        const queuedFrames = this.device.queued / (CHANNELS * BYTES_PER_SAMPLE);
+        const audibleFrame = this.submittedFrames - queuedFrames;
+        return Math.max(
+            0,
+            position.seconds -
+                (position.outputFrame - audibleFrame) * position.playbackRate / SAMPLE_RATE,
+        );
+    }
+
+    public currentVolume(id: number): number | undefined {
+        return this.positions.get(id)?.volume;
+    }
+
+    public get volume(): number {
+        return this.globalVolume;
+    }
+
+    public set volume(value: number) {
+        this.globalVolume = value;
+    }
+
+    public get muted(): boolean {
+        return this.globalMuted;
+    }
+
+    public set muted(value: boolean) {
+        this.globalMuted = value;
+    }
+
+    public get diagnostics(): { activeVoices: number; queuedMs: number; underruns: number } {
+        return {
+            activeVoices: this.positions.size,
+            queuedMs: this.device
+                ? (this.device.queued * 1000) /
+                  (SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE)
+                : 0,
+            underruns: 0,
+        };
+    }
+
+    public get error(): Error | undefined {
+        return this.lastError;
+    }
+
+    public stopAll(): void {
+        this.worker?.postMessage({ type: "clear" });
+        this.positions.clear();
+        this.voiceOwners.clear();
+        this.fadeVersions.clear();
+        this.clearQueuedOutput();
+    }
+
+    public clearQueuedOutput(): void {
+        this.queueGeneration++;
+        this.device?.clearQueue();
+        this.submittedFrames = 0;
+    }
+
+    public shutdown(): void {
+        this.stopAll();
+        if (this.pumpTimer) clearInterval(this.pumpTimer);
+        this.pumpTimer = undefined;
+        for (const timer of this.eventTimers) clearTimeout(timer);
+        this.eventTimers.clear();
+        this.worker?.postMessage({ type: "shutdown" });
+        void this.worker?.terminate();
+        this.worker = undefined;
+        if (this.device && !this.device.closed) this.device.close();
+        this.device = undefined;
+        this.owners.clear();
+    }
+
+    private ensureStarted(): void {
+        if (this.worker && this.device) return;
+        this.lastError = undefined;
+        try {
+            this.device = sdl.audio.openDevice(
+                { type: "playback" },
+                {
+                    channels: CHANNELS,
+                    frequency: SAMPLE_RATE,
+                    format: "f32",
+                    buffered: 1024,
+                },
+            );
+            this.worker = new Worker(new URL(AUDIO_WORKER_MODULE, import.meta.url), {
+                execArgv: ["--enable-source-maps"],
+            });
+        } catch (error) {
+            this.device = undefined;
+            this.worker = undefined;
+            this.lastError = error instanceof Error ? error : new Error(String(error));
+            throw new Error(
+                `[pixi-native] SDL playback device could not be opened: ${this.lastError.message}`,
+                { cause: this.lastError },
+            );
+        }
+        this.worker.on("message", (message) => this.handleWorkerMessage(message));
+        this.worker.on("error", (error) => {
+            this.lastError = error;
+            for (const owner of this.owners.values()) {
+                owner.handleNativeAudioEvent("playerror", undefined, error.message);
+            }
+        });
+        this.device.play();
+        this.pumpTimer = setInterval(() => this.pump(), 5);
+        this.pumpTimer.unref();
+        this.pump();
+    }
+
+    private pump(): void {
+        if (!this.device || !this.worker || this.renderPending) return;
+        const queuedFrames = this.device.queued / (CHANNELS * BYTES_PER_SAMPLE);
+        if (queuedFrames >= TARGET_QUEUE_FRAMES) return;
+        this.renderPending = true;
+        this.worker.postMessage({
+            type: "render",
+            frames: CHUNK_FRAMES,
+            globalVolume: this.globalVolume,
+            globalMuted: this.globalMuted,
+            generation: this.queueGeneration,
+        });
+    }
+
+    private handleWorkerMessage(message: any): void {
+        if (message.type === "event") {
+            this.dispatch(message.ownerId, message.event, message.id, message.message);
+            return;
+        }
+        if (message.type === "preloaded") {
+            this.dispatch(message.ownerId, "load", message.requestId);
+            return;
+        }
+        if (message.type !== "chunk" || !this.device) return;
+        this.renderPending = false;
+        if (message.generation !== this.queueGeneration) {
+            this.pump();
+            return;
+        }
+        const buffer = Buffer.from(message.buffer);
+        this.device.enqueue(buffer);
+        this.submittedFrames += message.frames;
+        for (const position of message.positions) {
+            this.positions.set(position.id, {
+                ownerId: position.ownerId,
+                seconds: position.seconds,
+                outputFrame: this.submittedFrames,
+                playing: position.playing,
+                volume: position.volume,
+                playbackRate: position.playbackRate,
+            });
+        }
+        const audibleDelayMs =
+            (this.device.queued * 1000) /
+            (SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE);
+        for (const event of message.events) {
+            const timer = setTimeout(() => {
+                this.eventTimers.delete(timer);
+                if (
+                    event.event === "fade" &&
+                    event.fadeVersion !== this.fadeVersions.get(event.id)
+                ) {
+                    return;
+                }
+                if (event.event === "end" && event.final !== false) {
+                    this.positions.delete(event.id);
+                    this.voiceOwners.delete(event.id);
+                    this.fadeVersions.delete(event.id);
+                }
+                this.dispatch(event.ownerId, event.event, event.id);
+            }, audibleDelayMs);
+            timer.unref();
+            this.eventTimers.add(timer);
+        }
+        this.pump();
+    }
+
+    private dispatch(
+        ownerId: number,
+        event: NativeAudioEvent,
+        id?: number,
+        message?: string,
+    ): void {
+        this.owners.get(ownerId)?.handleNativeAudioEvent(event, id, message);
+    }
+>>>>>>> 7ccd702 (fixed linux webgpu)
 }
 
 interface WindowsNativeEvent {
@@ -403,12 +615,23 @@ export function resolveWindowsNativeAudioBindingPath(
   platform = process.platform,
   arch = process.arch,
 ): string {
+<<<<<<< HEAD
   if (platform !== "win32" || arch !== "x64") {
     throw new Error(
       `Native WASAPI audio supports only Windows x64, not ${platform}-${arch}`,
     );
   }
   return resolveNativePlatformModules(platform, arch).audioBinding;
+=======
+    if (platform !== "win32" || arch !== "x64") {
+        throw new Error(`Native WASAPI audio supports only Windows x64, not ${platform}-${arch}`);
+    }
+    const audioBinding = resolveNativePlatformModules(platform, arch).audioBinding;
+    if (!audioBinding) {
+        throw new Error(`Native WASAPI audio binding is missing for ${platform}-${arch}`);
+    }
+    return audioBinding;
+>>>>>>> 7ccd702 (fixed linux webgpu)
 }
 
 class WindowsNativeAudioEngine {
