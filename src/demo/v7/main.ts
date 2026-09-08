@@ -19,6 +19,7 @@ import {
 } from "./bitmapFonts.ts";
 import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
+import { filterVideoAssets } from "../videoAssets.ts";
 
 type Pixi7Scene = Container & {
   update?: (deltaMS: number, now: number) => void;
@@ -45,7 +46,7 @@ const asset = (name: string): string =>
   fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
 installDynamicBitmapTextFont();
 await loadExternalBitmapFont(asset("bitmap-font/native-pixel.fnt"));
-const videos: Pixi7VideoSource[] = [
+const videos: Pixi7VideoSource[] = filterVideoAssets([
   {
     file: "jerneja_en_doubleZero.mp4",
     source: asset("jerneja_en_doubleZero.mp4"),
@@ -81,7 +82,7 @@ const videos: Pixi7VideoSource[] = [
     source: asset("water_netflix_15000kbps_2160p_59.94fps_h264.mp4"),
     fps: 19_001 / 317,
   },
-];
+], (file) => asset(file));
 const [texture, batman, mario, rain, drumTexture] = (await Promise.all(
   [
     "test-texture.png",

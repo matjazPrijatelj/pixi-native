@@ -6,6 +6,7 @@ import type { RainSpriteTestScene } from "./scenes/RainSpriteTest.ts";
 import type { VideoTestScene } from "./scenes/VideoTest.ts";
 import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
+import { filterVideoAssets } from "../videoAssets.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -106,11 +107,21 @@ const videos = [
   },
 ];
 
-const videoPaths = videos.map(({ file }) =>
+const videoPaths = filterVideoAssets(videos, (file) =>
   fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
+).map(({ file }) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)));
+const availableVideos = videos.filter((_video) =>
+  videoPaths.includes(
+    fileURLToPath(new URL(`../assets/${_video.file}`, import.meta.url)),
+  ),
 );
 const eventVideoSources = videos
-  .map(({ file, fps }, index) => ({ file, fps, source: videoPaths[index] }))
+  .map(({ file, fps }) => ({
+    file,
+    fps,
+    source: fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
+  }))
+  .filter(({ source }) => videoPaths.includes(source))
   .filter(({ fps }) => Math.abs(fps - 30) < 0.001);
 
 let videoIndex = 0;
@@ -126,15 +137,16 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createBitmapTextTest(),
 ];
 
-const videoSceneIndex = supportsVideo ? scenes.length : null;
+const videoSceneIndex =
+  supportsVideo && availableVideos.length > 0 ? scenes.length : null;
 
 if (videoSceneIndex !== null) {
   scenes.push(() =>
     createVideoTest(
       videoPaths[videoIndex],
       { width: native.canvas.width, height: native.canvas.height },
-      videos[videoIndex].file,
-      videos[videoIndex].fps,
+      availableVideos[videoIndex].file,
+      availableVideos[videoIndex].fps,
       eventVideoSources,
       transparentVideoPath,
     ),
@@ -279,7 +291,7 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   const nextVideoIndex = getVideoIndexForKey(
     event.key,
     videoIndex,
-    videoPaths.length,
+    availableVideos.length,
     event.repeat,
   );
 

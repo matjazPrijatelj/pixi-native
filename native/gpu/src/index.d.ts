@@ -2777,22 +2777,13 @@ interface GPUTextureUsage {
 type PresentMode = "fifo" | "fifoRelaxed" | "immediate" | "mailbox";
 
 interface Renderer {
-<<<<<<< HEAD
   getPreferredFormat(): GPUTextureFormat;
+  getAlphaMode(): 'opaque' | 'premultiplied';
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap();
   resize();
   destroy();
-=======
-  getPreferredFormat(): GPUTextureFormat
-  getAlphaMode(): 'opaque' | 'premultiplied'
-  getCurrentTexture(): GPUTexture
-  getCurrentTextureView(): GPUTextureView
-  swap()
-  resize()
-  destroy()
->>>>>>> 7ccd702 (fixed linux webgpu)
 }
 
 interface WebGPU {

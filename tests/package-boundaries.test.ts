@@ -65,7 +65,7 @@ test("GSAP remains an optional consumer integration", async () => {
     assert.equal(manifest.peerDependencies?.gsap, undefined, packageName);
     assert.doesNotMatch(
       await readTypeScriptSources(
-        new URL("src", packageRoot).pathname.slice(1),
+        fileURLToPath(new URL("src", packageRoot)),
       ),
       /from ["']gsap(?:\/[^"']*)?["']|import\(["']gsap(?:\/[^"']*)?["']\)/,
       packageName,
