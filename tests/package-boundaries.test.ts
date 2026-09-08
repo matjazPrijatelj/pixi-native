@@ -7,6 +7,9 @@ import {
   type NativePlatformModules,
 } from "@pixi-native/core/runtime/platformNative.js";
 
+const REPOSITORY_ROOT = new URL("..", import.meta.url);
+const PUBLISHED_PACKAGE_NAMES = ["core", "pixi7", "pixi8"] as const;
+
 async function readTypeScriptSources(directory: string): Promise<string> {
   const entries = await readdir(directory, { withFileTypes: true });
   const sources: string[] = [];
@@ -37,6 +40,36 @@ test("each version package imports only its matching Pixi major", async () => {
   );
   assert.doesNotMatch(pixi7, /from ["']pixi\.js["']/);
   assert.doesNotMatch(pixi8, /pixi\.js-v7/);
+});
+
+test("GSAP remains an optional consumer integration", async () => {
+  const rootManifest = JSON.parse(
+    await readFile(new URL("package.json", REPOSITORY_ROOT), "utf8"),
+  ) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  assert.equal(rootManifest.dependencies?.gsap, undefined);
+  assert.equal(rootManifest.devDependencies?.gsap, "^3.15.0");
+
+  for (const packageName of PUBLISHED_PACKAGE_NAMES) {
+    const packageRoot = new URL(`packages/${packageName}/`, REPOSITORY_ROOT);
+    const manifest = JSON.parse(
+      await readFile(new URL("package.json", packageRoot), "utf8"),
+    ) as {
+      dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+    };
+    assert.equal(manifest.dependencies?.gsap, undefined, packageName);
+    assert.equal(manifest.peerDependencies?.gsap, undefined, packageName);
+    assert.doesNotMatch(
+      await readTypeScriptSources(
+        new URL("src", packageRoot).pathname.slice(1),
+      ),
+      /from ["']gsap(?:\/[^"']*)?["']|import\(["']gsap(?:\/[^"']*)?["']\)/,
+      packageName,
+    );
+  }
 });
 
 test("native platform resolver validates support, installation, and target", () => {

@@ -6,7 +6,7 @@
     "engines": {
         "node": ">=24.13.0 <25"
     },
-    "files": ["dist", "README.md", "HISTORY.md", "THIRD_PARTY_NOTICES.md"],
+    "files": ["dist", "docs", "README.md", "HISTORY.md", "THIRD_PARTY_NOTICES.md"],
     "exports": {
         ".": "./src/index.ts",
         "./audio": "./src/audio/index.ts",

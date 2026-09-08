@@ -119,6 +119,9 @@ try {
       for (const filename of DOCUMENTATION_FILES) {
         await cp(resolve(root, filename), resolve(stagePackageRoot, filename));
       }
+      await cp(resolve(root, "docs"), resolve(stagePackageRoot, "docs"), {
+        recursive: true,
+      });
     } else {
       for (const filename of [
         "index.cjs",
@@ -207,7 +210,16 @@ function validatePackedFiles(packageName, files) {
           ),
           `${FFMPEG_TARGET_DIRECTORY}/${FFMPEG_CHECKSUM_FILE}`,
         ]
-      : ["dist/index.js", "dist/index.d.ts"];
+      : [
+          "dist/index.js",
+          "dist/index.d.ts",
+          "docs/README.md",
+          "docs/getting-started.md",
+          "docs/application-and-api.md",
+          "docs/media-and-files.md",
+          "docs/integrations/gsap.md",
+          "docs/deployment.md",
+        ];
   const missing = required.filter((filename) => !fileSet.has(filename));
   if (missing.length > 0) {
     throw new Error(

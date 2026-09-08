@@ -32,7 +32,6 @@
     "@napi-rs/canvas": "1.0.8",
     "@node-3d/core": "6.3.0",
     "@node-3d/glfw": "7.3.1",
-    "gsap": "^3.15.0",
     "pixi.js": "8.20.0",
     "pixi.js-v7": "npm:pixi.js@7.4.3"
   },
@@ -42,6 +41,7 @@
     "@pixi-native/pixi7": "workspace:*",
     "@pixi-native/pixi8": "workspace:*",
     "@types/node": "22.15.21",
+    "gsap": "^3.15.0",
     "prettier": "3.2.5",
     "typescript": "7.0.2"
   },

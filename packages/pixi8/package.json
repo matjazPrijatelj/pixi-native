@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "README.md",
     "HISTORY.md",
     "THIRD_PARTY_NOTICES.md"

@@ -2,6 +2,14 @@
 
 ## 2026-09-08
 
+- Removed accidentally committed JavaScript and declaration outputs from
+  `packages/core/src`; package compilation continues to emit them only into
+  `packages/core/dist`.
+- Made GSAP a development-only dependency used by demos and tests; published
+  packages remain GSAP-free. Added English developer guides for setup, public
+  lifecycle and entrypoints, media/files, optional GSAP plus PixiPlugin wiring,
+  and shared-launcher deployment. Packaging now includes and verifies those
+  guides, and production-consumer tests prove GSAP is not installed transitively.
 - Split the distribution into `@pixi-native/pixi7`, `@pixi-native/pixi8`,
   `@pixi-native/core`, and `@pixi-native/native-win32-x64` workspace packages.
   Each version package exposes its matching Pixi API with compact `createApp`,

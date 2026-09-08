@@ -79,6 +79,23 @@ try {
       "",
     ].join("\n"),
   );
+  await writeFile(
+    join(testDirectory, "smoke-optional-gsap-and-docs.mjs"),
+    [
+      'import assert from "node:assert/strict";',
+      'import { existsSync } from "node:fs";',
+      'import { dirname, resolve } from "node:path";',
+      'import { fileURLToPath } from "node:url";',
+      'for (const packageName of ["@pixi-native/core", "@pixi-native/pixi7", "@pixi-native/pixi8"]) {',
+      "  const entryPath = fileURLToPath(import.meta.resolve(packageName));",
+      '  const packageRoot = resolve(dirname(entryPath), "..");',
+      '  for (const documentationPath of ["docs/README.md", "docs/getting-started.md", "docs/application-and-api.md", "docs/media-and-files.md", "docs/integrations/gsap.md", "docs/deployment.md"]) {',
+      "    assert.equal(existsSync(resolve(packageRoot, documentationPath)), true, `${packageName}/${documentationPath}`);",
+      "  }",
+      "}",
+      "",
+    ].join("\n"),
+  );
 
   const displayDirectory = join(testDirectory, "displays", "example");
   await mkdir(join(displayDirectory, "dist"), { recursive: true });
@@ -133,6 +150,15 @@ try {
     cwd: testDirectory,
     stdio: "inherit",
   });
+  const productionGraph = JSON.parse(
+    execSync("pnpm list gsap --prod --depth Infinity --json", {
+      cwd: testDirectory,
+      encoding: "utf8",
+    }),
+  );
+  if (containsPackage(productionGraph, "gsap")) {
+    throw new Error("GSAP must not be installed in the production fixture");
+  }
   execSync("node smoke-v7.mjs", { cwd: testDirectory, stdio: "inherit" });
   execSync("node smoke-v8.mjs", { cwd: testDirectory, stdio: "inherit" });
   const nativeOutput = execSync("node smoke-native.mjs", {
@@ -141,6 +167,10 @@ try {
   });
   process.stdout.write(nativeOutput);
   execSync("node displays/example/dist/file-smoke.mjs", {
+    cwd: testDirectory,
+    stdio: "inherit",
+  });
+  execSync("node smoke-optional-gsap-and-docs.mjs", {
     cwd: testDirectory,
     stdio: "inherit",
   });
@@ -178,4 +208,16 @@ function createRuntimeSmoke(packageName, major) {
     `console.log("Imported ${packageName} with Pixi " + VERSION);`,
     "",
   ].join("\n");
+}
+
+function containsPackage(value, packageName) {
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsPackage(entry, packageName));
+  }
+  if (!value || typeof value !== "object") return false;
+  if (value.name === packageName) return true;
+  return Object.entries(value).some(
+    ([key, entry]) =>
+      key === packageName || containsPackage(entry, packageName),
+  );
 }
