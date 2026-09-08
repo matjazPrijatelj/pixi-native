@@ -569,3 +569,8 @@
 
 - Added a shared 4x MSAA screen framebuffer and resolve step to the Windows ANGLE surface used by PixiJS 7 and PixiJS 8 WebGL, replacing the non-multisampled default framebuffer that left Graphics edges visibly jagged.
 - Added the shared `antialiasSamples` option for WebGPU, WebGL8, and WebGL7 with a 4x default, explicit 0x/2x/4x/8x selection, and backend-specific fallback warnings.
+- Hardened the Linux FFmpeg CPU fallback by using a software-only NV12 filter
+  graph with serial filter initialization, avoiding the bundled FFmpeg
+  `auto_scale` negotiation regression after VA-API retries.
+- Kept all native `.node` build artifacts versioned in Git and assigned them
+  to Git LFS, including platform package copies.
