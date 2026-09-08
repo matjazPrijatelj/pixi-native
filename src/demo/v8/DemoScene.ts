@@ -37,5 +37,3 @@ export function animateDemoScene(
     }
   ).update?.(deltaMS, now);
 }
-
-

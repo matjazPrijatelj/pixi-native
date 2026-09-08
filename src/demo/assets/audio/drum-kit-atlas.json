@@ -1,41 +1,15 @@
 {
-  "src": [
-    "drum-kit-atlas.mp3"
-  ],
+  "src": ["drum-kit-atlas.mp3"],
   "texture": "../drum-kit.png",
   "sprite": {
-    "crash": [
-      250,
-      1400
-    ],
-    "closedHat": [
-      1900,
-      350
-    ],
-    "ride": [
-      2500,
-      1200
-    ],
-    "highTom": [
-      3950,
-      750
-    ],
-    "snare": [
-      4950,
-      600
-    ],
-    "kick": [
-      5800,
-      550
-    ],
-    "floorTom": [
-      6600,
-      850
-    ],
-    "openHat": [
-      7700,
-      1000
-    ]
+    "crash": [250, 1400],
+    "closedHat": [1900, 350],
+    "ride": [2500, 1200],
+    "highTom": [3950, 750],
+    "snare": [4950, 600],
+    "kick": [5800, 550],
+    "floorTom": [6600, 850],
+    "openHat": [7700, 1000]
   },
   "pads": [
     {

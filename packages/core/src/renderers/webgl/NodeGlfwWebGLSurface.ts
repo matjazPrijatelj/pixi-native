@@ -99,4 +99,3 @@ export async function createNodeGlfwWebGLSurface(
     webglRenderingContextConstructor: gl.WebGLRenderingContext,
   };
 }
-

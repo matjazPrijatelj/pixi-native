@@ -21,11 +21,16 @@ export function isReloadShortcut(
 
 function normalizeDirectionalKey(key: string | null): string | null {
   switch (key) {
-    case "ArrowUp": return "up";
-    case "ArrowDown": return "down";
-    case "ArrowLeft": return "left";
-    case "ArrowRight": return "right";
-    default: return key;
+    case "ArrowUp":
+      return "up";
+    case "ArrowDown":
+      return "down";
+    case "ArrowLeft":
+      return "left";
+    case "ArrowRight":
+      return "right";
+    default:
+      return key;
   }
 }
 

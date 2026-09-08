@@ -79,5 +79,3 @@ export function createTextTest(): Container {
   scene.addChild(title, outlined, small, green, noStroke);
   return scene;
 }
-
-

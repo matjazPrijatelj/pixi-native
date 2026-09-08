@@ -78,4 +78,3 @@ export interface NodeNativeInput {
   dispatchCanvasEvent(type: string, event: Event): void;
   dispatchGlobalEvent(type: string, event: Event): void;
 }
-

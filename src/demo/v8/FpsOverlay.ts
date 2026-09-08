@@ -51,5 +51,3 @@ export class FpsOverlay extends Container {
     this.nextUpdateMS = 1000;
   }
 }
-
-

@@ -1,20 +1,19 @@
 import { Container, type IDestroyOptions } from "pixi.js-v7";
 
 export interface DisposableDemoScene extends Container {
-    dispose?(): void;
-    /** Scenes with live child-list changes must stay on Pixi's direct path. */
-    useRenderGroup?: boolean;
+  dispose?(): void;
+  /** Scenes with live child-list changes must stay on Pixi's direct path. */
+  useRenderGroup?: boolean;
 }
 
 const SCENE_DESTROY_OPTIONS: IDestroyOptions = {
-    children: true,
+  children: true,
 };
 
 /** Releases one scene and all resources it owns, while preserving shared textures. */
 export function disposeDemoScene(scene: DisposableDemoScene): void {
-    if (scene.destroyed) return;
-    scene.parent?.removeChild(scene);
-    scene.dispose?.();
-    scene.destroy(SCENE_DESTROY_OPTIONS);
+  if (scene.destroyed) return;
+  scene.parent?.removeChild(scene);
+  scene.dispose?.();
+  scene.destroy(SCENE_DESTROY_OPTIONS);
 }
-

@@ -1,20 +1,8 @@
 {
-  "src": [
-    "howler-test.wav"
-  ],
+  "src": ["howler-test.wav"],
   "sprite": {
-    "toneA": [
-      0,
-      800
-    ],
-    "toneB": [
-      1000,
-      800
-    ],
-    "music": [
-      2000,
-      4000,
-      true
-    ]
+    "toneA": [0, 800],
+    "toneB": [1000, 800],
+    "music": [2000, 4000, true]
   }
 }

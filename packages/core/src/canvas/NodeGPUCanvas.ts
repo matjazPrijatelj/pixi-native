@@ -8,7 +8,10 @@ export class NodeGPUCanvas {
 
   private readonly renderer: NodeWindowRenderer;
   private readonly context: GPUCanvasContext;
-  private readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  private readonly listeners = new Map<
+    string,
+    Set<EventListenerOrEventListenerObject>
+  >();
 
   public constructor(renderer: NodeWindowRenderer, width = 1280, height = 720) {
     this.renderer = renderer;
@@ -87,4 +90,3 @@ export class NodeGPUCanvas {
     this.renderer.resize();
   }
 }
-

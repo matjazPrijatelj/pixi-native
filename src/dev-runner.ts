@@ -4,7 +4,9 @@ import { existsSync } from "node:fs";
 const RESTART_EXIT_CODE = 75;
 const backend = process.argv[2];
 if (backend !== "webgpu" && backend !== "webgl" && backend !== "webgl7") {
-  throw new Error("Choose `webgpu`, `webgl`, or `webgl7` as the demo backend argument");
+  throw new Error(
+    "Choose `webgpu`, `webgl`, or `webgl7` as the demo backend argument",
+  );
 }
 
 if (existsSync(".env")) process.loadEnvFile(".env");

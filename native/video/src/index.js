@@ -5,57 +5,57 @@ const requireNative = createRequire(__filename);
 const native = requireNative(getBindingPath());
 
 class NativeVideoDecoder {
-    constructor(options) {
-        this.decoder = new native.NativeVideoDecoder(options);
-    }
+  constructor(options) {
+    this.decoder = new native.NativeVideoDecoder(options);
+  }
 
-    open(source) {
-        this.decoder.open(source);
-    }
+  open(source) {
+    this.decoder.open(source);
+  }
 
-    pollLatest() {
-        return this.decoder.pollLatest();
-    }
+  pollLatest() {
+    return this.decoder.pollLatest();
+  }
 
-    pollNext() {
-        return this.decoder.pollNext();
-    }
+  pollNext() {
+    return this.decoder.pollNext();
+  }
 
-    queuedFrames() {
-        return this.decoder.queuedFrames();
-    }
+  queuedFrames() {
+    return this.decoder.queuedFrames();
+  }
 
-    catchUpTo(timestampUs) {
-        this.decoder.catchUpTo(timestampUs);
-    }
+  catchUpTo(timestampUs) {
+    this.decoder.catchUpTo(timestampUs);
+  }
 
-    pollError() {
-        return this.decoder.pollError();
-    }
+  pollError() {
+    return this.decoder.pollError();
+  }
 
-    backend() {
-        return this.decoder.backend();
-    }
+  backend() {
+    return this.decoder.backend();
+  }
 
-    decodedFrames() {
-        return this.decoder.decodedFrames();
-    }
+  decodedFrames() {
+    return this.decoder.decodedFrames();
+  }
 
-    droppedFrames() {
-        return this.decoder.droppedFrames();
-    }
+  droppedFrames() {
+    return this.decoder.droppedFrames();
+  }
 
-    skippedFrames() {
-        return this.decoder.skippedFrames();
-    }
+  skippedFrames() {
+    return this.decoder.skippedFrames();
+  }
 
-    isFinished() {
-        return this.decoder.isFinished();
-    }
+  isFinished() {
+    return this.decoder.isFinished();
+  }
 
-    close() {
-        this.decoder.close();
-    }
+  close() {
+    this.decoder.close();
+  }
 }
 
 module.exports = { NativeVideoDecoder };

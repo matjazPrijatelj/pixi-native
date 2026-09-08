@@ -78,5 +78,3 @@ export function createGraphicsTest(): Container {
 
   return scene;
 }
-
-

@@ -24,4 +24,3 @@ export function resolveGpuBackend(
 export function supportsNativeVideo(platform: NodeJS.Platform): boolean {
   return platform === "win32" || platform === "linux";
 }
-

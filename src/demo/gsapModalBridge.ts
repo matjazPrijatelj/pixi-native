@@ -1,23 +1,19 @@
 interface ModalFrameSource {
-    readonly addModalFrameListener?: (
-        listener: () => void,
-    ) => () => void;
+  readonly addModalFrameListener?: (listener: () => void) => () => void;
 }
 
 interface ManualTicker {
-    tick(): void;
+  tick(): void;
 }
 
-type AddDestroyListener = (
-    listener: () => void | Promise<void>,
-) => () => void;
+type AddDestroyListener = (listener: () => void | Promise<void>) => () => void;
 
 /** Advances GSAP inside the native Windows move/resize modal frame loop. */
 export function installGsapModalBridge(
-    source: ModalFrameSource,
-    ticker: ManualTicker,
-    addDestroyListener: AddDestroyListener,
+  source: ModalFrameSource,
+  ticker: ManualTicker,
+  addDestroyListener: AddDestroyListener,
 ): void {
-    const removeListener = source.addModalFrameListener?.(() => ticker.tick());
-    if (removeListener) addDestroyListener(removeListener);
+  const removeListener = source.addModalFrameListener?.(() => ticker.tick());
+  if (removeListener) addDestroyListener(removeListener);
 }

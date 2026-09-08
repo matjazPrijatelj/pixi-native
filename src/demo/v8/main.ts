@@ -13,9 +13,7 @@ if (!(globalThis as any).navigator) {
   });
 }
 const { Assets, BitmapFont, Texture } = await import("pixi.js");
-const { createApp } = await import(
-  "@pixi-native/pixi8"
-);
+const { createApp } = await import("@pixi-native/pixi8");
 const backend = process.argv[2];
 if (backend !== "webgpu" && backend !== "webgl") {
   throw new Error(

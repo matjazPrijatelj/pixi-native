@@ -129,4 +129,3 @@ export class NodeGLCanvas {
     extension?.resize(this.width, this.height);
   }
 }
-

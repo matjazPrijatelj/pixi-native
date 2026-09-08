@@ -463,4 +463,3 @@ export function normalizeRefreshRate(refreshRateHz: number): number {
     ? refreshRateHz
     : 60;
 }
-
