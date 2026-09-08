@@ -25,7 +25,12 @@ pnpm add @pixi-native/core @pixi-native/pixi8 @pixi-native/native-win32-x64
 ```
 
 ```ts
-import { Sprite, createApp, createModuleFileAccess } from "@pixi-native/pixi8";
+import {
+  Assets,
+  Sprite,
+  createApp,
+  createModuleFileAccess,
+} from "@pixi-native/pixi8";
 
 const files = createModuleFileAccess(import.meta.url);
 const { app, native, destroy } = await createApp({
@@ -35,7 +40,10 @@ const { app, native, destroy } = await createApp({
   transparent: true,
 });
 
-app.stage.addChild(Sprite.from(files.resolvePath("../assets/character.png")));
+const character = await Assets.load(
+  files.resolvePath("../assets/character.png"),
+);
+app.stage.addChild(new Sprite(character));
 native.window.setPosition(100, 100);
 
 await destroy();

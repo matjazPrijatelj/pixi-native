@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import type { Texture } from "pixi.js";
 import type { SpriteTestScene } from "./scenes/SpriteTest.ts";
 import type { AudioTestScene } from "./scenes/AudioTest.ts";
 import type { RainSpriteTestScene } from "./scenes/RainSpriteTest.ts";
@@ -12,7 +13,7 @@ if (!(globalThis as any).navigator) {
     configurable: true,
   });
 }
-const { Assets, BitmapFont, Texture } = await import("pixi.js");
+const { Assets, BitmapFont } = await import("pixi.js");
 const { createApp } = await import("@pixi-native/pixi8");
 const backend = process.argv[2];
 if (backend !== "webgpu" && backend !== "webgl") {
@@ -29,7 +30,6 @@ const [{ gsap }, { installGsapModalBridge }] = await Promise.all([
   import("../gsapModalBridge.ts"),
 ]);
 installGsapModalBridge(native, gsap.ticker, addDestroyListener);
-const { NodeCanvas } = await import("@pixi-native/core/canvas/NodeCanvas.js");
 const { supportsNativeVideo } = await import(
   "@pixi-native/core/runtime/platform.js"
 );
@@ -52,9 +52,6 @@ const {
 const { FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
 const { Howler } = await import("@pixi-native/core/audio");
-const { copyRgbaRowsFlippedY } = await import(
-  "@pixi-native/core/canvas/rgbaUpload.js"
-);
 const {
   getSceneIndexForKey,
   getSpriteCountDeltaForKey,
@@ -85,48 +82,13 @@ const transparentVideoPath = fileURLToPath(
   ),
 );
 
-await Assets.init({
-  skipDetections: true,
-  texturePreference: { format: ["png"] },
-});
-
 installDynamicBitmapTextFont();
 await Assets.load(bitmapFontPath);
-type PixiTexture = InstanceType<typeof Texture>;
-
-const loadNativeTexture = async (path: string): Promise<PixiTexture> => {
-  const loaded = await Assets.load(path);
-  const image = (loaded as any).source?.resource;
-  const imageCanvas = new NodeCanvas(loaded.width, loaded.height);
-  const context = imageCanvas.getContext("2d") as any;
-
-  if (!image || !context?.drawImage) {
-    throw new Error(`Native image cannot be rasterized: ${path}`);
-  }
-
-  if (native.backend === "webgl" && image?.data) {
-    const imageData = context.createImageData(loaded.width, loaded.height);
-    copyRgbaRowsFlippedY(
-      imageData.data,
-      image.data,
-      loaded.width,
-      loaded.height,
-    );
-    context.putImageData(imageData, 0, 0);
-  } else {
-    context.drawImage(image, 0, 0, loaded.width, loaded.height);
-  }
-  return Texture.from({
-    resource: imageCanvas as unknown as HTMLCanvasElement,
-    format: "rgba8unorm",
-  });
-};
-
 const spriteTextures = (await Promise.all(
-  texturePaths.map(loadNativeTexture),
-)) as [PixiTexture, PixiTexture, PixiTexture];
-const drumTexture = await loadNativeTexture(drumTexturePath);
-const rainDropTexture = await loadNativeTexture(rainDropTexturePath);
+  texturePaths.map((path) => Assets.load(path)),
+)) as [Texture, Texture, Texture];
+const drumTexture = await Assets.load(drumTexturePath);
+const rainDropTexture = await Assets.load(rainDropTexturePath);
 
 const videos = [
   { file: "jerneja_en_doubleZero.mp4", fps: 30 },
@@ -358,11 +320,8 @@ const destroyBitmapFonts = async (): Promise<void> => {
 };
 
 const destroySpriteTextures = async (): Promise<void> => {
-  for (const texture of spriteTextures) texture.destroy(true);
   await Promise.all(texturePaths.map((path) => Assets.unload(path)));
-  drumTexture.destroy(true);
   await Assets.unload(drumTexturePath);
-  rainDropTexture.destroy(true);
   await Assets.unload(rainDropTexturePath);
 };
 

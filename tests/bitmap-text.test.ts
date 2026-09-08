@@ -23,6 +23,10 @@ const FONT_URL = new URL(
   "../src/demo/assets/bitmap-font/native-pixel.fnt",
   import.meta.url,
 );
+const TEXTURE_URL = new URL(
+  "../src/demo/assets/test-texture.png",
+  import.meta.url,
+);
 
 test("the generated text descriptor is valid BMFont data", async () => {
   const descriptor = await readFile(FONT_URL, "utf8");
@@ -32,6 +36,22 @@ test("the generated text descriptor is valid BMFont data", async () => {
   assert.equal(parsed.fontFamily, "NativePixel");
   assert.equal(parsed.pages.length, 1);
   assert.equal(Object.keys(parsed.chars).length, 43);
+});
+
+test("PixiJS 8 Assets loads a native PNG without explicit Assets initialization", async () => {
+  const adapter = new NodeDOMAdapter({} as never);
+  adapter.installPixi8(DOMAdapter);
+  const texturePath = fileURLToPath(TEXTURE_URL);
+
+  try {
+    const texture = await Assets.load(texturePath);
+    assert.equal(texture.width, 128);
+    assert.equal(texture.height, 128);
+    assert.equal(texture.source.resource?.constructor.name, "Image");
+  } finally {
+    await Assets.unload(texturePath);
+    adapter.dispose();
+  }
 });
 
 test("BitmapText scene supports generated and external atlases", async () => {

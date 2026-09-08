@@ -2,6 +2,9 @@
 
 ## 2026-09-08
 
+- Made Pixi 7 and Pixi 8 initialize their native asset environment as part of
+  `createRenderer`/`createApp`, allowing standard `Assets.load` calls without
+  application-owned `Assets.init` or native texture conversion helpers.
 - Removed accidentally committed JavaScript and declaration outputs from
   `packages/core/src`; package compilation continues to emit them only into
   `packages/core/dist`.

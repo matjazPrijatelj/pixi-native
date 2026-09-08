@@ -1,4 +1,4 @@
-import type { Application } from "pixi.js-v7";
+import { Assets, type Application } from "pixi.js-v7";
 import { Image as CanvasImage } from "@napi-rs/canvas";
 import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
@@ -43,6 +43,20 @@ export type App = ManagedNativeApplication<
   RendererResult["native"]
 >;
 
+let nativeAssetsInitialization: Promise<void> | undefined;
+
+/** Prepares Pixi's browser-facing Assets API for the installed native DOM. */
+function initializeNativeAssets(): Promise<void> {
+  nativeAssetsInitialization ??= (() => {
+    Assets.detections.length = 0;
+    return Assets.init({
+      skipDetections: true,
+      texturePreference: { format: ["png"] },
+    });
+  })();
+  return nativeAssetsInitialization;
+}
+
 export async function createRenderer(
   options: RendererOptions = {},
 ): Promise<RendererResult> {
@@ -70,6 +84,7 @@ export async function createRenderer(
   );
   const { Application, settings, VERSION } = await import("pixi.js-v7");
   adapter.installPixi7(settings);
+  await initializeNativeAssets();
   {
     const nativeBufferData = webgl.bufferData.bind(webgl) as (
       target: number,

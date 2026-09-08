@@ -19,6 +19,20 @@ Relative paths resolve beside the calling module. Absolute paths, Windows drive
 paths, UNC paths, and `file:` URLs remain absolute. The helper is intentionally
 read-only; use `node:fs` directly for writes and `fetch` for HTTP resources.
 
+After `createApp()`, image textures use Pixi's standard asset pipeline:
+
+```ts
+import { Assets, Sprite, createApp } from "@pixi-native/pixi8";
+
+const runtime = await createApp({ backend: "webgpu" });
+const texture = await Assets.load(imagePath);
+runtime.app.stage.addChild(new Sprite(texture));
+```
+
+The native renderer owns pixel format, alpha, and orientation conversion. Do
+not call `Assets.init()` or copy an image through a native canvas in application
+code. Release cached textures with `Assets.unload(imagePath)` during teardown.
+
 ## Native video
 
 `NativeVideo` owns FFmpeg decoding and browser-like playback state.

@@ -43,14 +43,6 @@ const [{ createSpriteTest }, { gsap }, { installGsapModalBridge }] =
 installGsapModalBridge(native, gsap.ticker, addDestroyListener);
 const asset = (name: string): string =>
   fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
-// Native v7 has no browser format-detection surface. PNG is selected below,
-// so the detection plugins (including compressed-texture GL probes) are not
-// needed and would otherwise inspect an unsupported data URI.
-Assets.detections.length = 0;
-await Assets.init({
-  skipDetections: true,
-  texturePreference: { format: ["png"] },
-});
 installDynamicBitmapTextFont();
 await loadExternalBitmapFont(asset("bitmap-font/native-pixel.fnt"));
 const videos: Pixi7VideoSource[] = [

@@ -1,4 +1,4 @@
-import type { Application } from "pixi.js";
+import { Assets, type Application } from "pixi.js";
 import type { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
 import type { NodeGPUCanvas } from "@pixi-native/core/canvas/NodeGPUCanvas.js";
 import { createWebGlRenderer } from "./renderers/webgl/createWebGlRenderer.ts";
@@ -43,17 +43,37 @@ export type AppOptions = RendererOptions;
 
 export type App = ManagedNativeApplication<Application, NodeRendererContext>;
 
+let nativeAssetsInitialization: Promise<void> | undefined;
+
+/** Prepares Pixi's browser-facing Assets API for the installed native DOM. */
+function initializeNativeAssets(): Promise<void> {
+  nativeAssetsInitialization ??= Assets.init({
+    skipDetections: true,
+    texturePreference: { format: ["png"] },
+    preferences: {
+      preferWorkers: false,
+      preferCreateImageBitmap: false,
+    },
+  });
+  return nativeAssetsInitialization;
+}
+
 /** Selects one explicit backend; backend implementations own their startup details. */
 export async function createRenderer(
   options: RendererOptions = {},
 ): Promise<RendererResult> {
   const { backend = "webgpu", ...rendererOptions } = options;
+  let result: RendererResult;
   switch (backend) {
     case "webgpu":
-      return createWebGpuRenderer(rendererOptions);
+      result = await createWebGpuRenderer(rendererOptions);
+      break;
     case "webgl":
-      return createWebGlRenderer(rendererOptions);
+      result = await createWebGlRenderer(rendererOptions);
+      break;
   }
+  await initializeNativeAssets();
+  return result;
 }
 
 /** Creates a self-running Pixi 8 application on one native renderer backend. */

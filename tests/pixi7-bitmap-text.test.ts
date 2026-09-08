@@ -29,22 +29,21 @@ test("PixiJS 7 dynamic BitmapFont contains every scene glyph", () => {
   BitmapFont.uninstall(DYNAMIC_BITMAP_FONT_NAME);
 });
 
-test("PixiJS 7 Assets loader resolves real dimensions before scene setup", async () => {
-  new NodeDOMAdapter({} as never).installPixi7(settings);
-  Assets.detections.length = 0;
-  await Assets.init({
-    skipDetections: true,
-    texturePreference: { format: ["png"] },
-  });
+test("PixiJS 7 Assets loads a native PNG without explicit Assets initialization", async () => {
+  const adapter = new NodeDOMAdapter({} as never);
+  adapter.installPixi7(settings);
   (globalThis as unknown as { location?: Location }).location ??= new URL(
     "file:///",
   ) as unknown as Location;
   const path = fileURLToPath(
     new URL("../src/demo/assets/drum-kit.png", import.meta.url),
   );
-  const texture = await Assets.load(path);
-
-  assert.ok(texture.width > 1);
-  assert.ok(texture.height > 1);
-  await Assets.unload(path);
+  try {
+    const texture = await Assets.load(path);
+    assert.ok(texture.width > 1);
+    assert.ok(texture.height > 1);
+  } finally {
+    await Assets.unload(path);
+    adapter.dispose();
+  }
 });
