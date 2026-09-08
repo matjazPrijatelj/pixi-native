@@ -582,3 +582,7 @@
   hardware acceleration modules before staging the Linux FFmpeg binaries.
 - Limited Git LFS tracking to distributable native package `.node` modules;
   source and intermediate native build copies remain local staging output.
+- Fixed WebGL bitmap-font PNG loading for GLFW native images by converting
+  local `file:` URLs to filesystem paths.
+- Fixed PixiJS 7 external bitmap-font loading by passing the atlas as a valid
+  `file:` URL to `Texture.from()`.

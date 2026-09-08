@@ -143,34 +143,9 @@ export class NodeDOMAdapter {
   }
 
   public createImage(): HTMLImageElement {
-    const image = new this.imageConstructor();
-    if (
-      this.imageConstructor !== (Image as unknown as NativeImageConstructor)
-    ) {
-      return image as unknown as HTMLImageElement;
-    }
-    const imagePrototype = Object.getPrototypeOf(image) as object;
-    const sourceDescriptor = Object.getOwnPropertyDescriptor(
-      imagePrototype,
-      "src",
-    );
-
-    if (!sourceDescriptor?.get || !sourceDescriptor.set) {
-      throw new Error("Native image source property is unavailable");
-    }
-
-    Object.defineProperty(image, "src", {
-      configurable: true,
-      enumerable: sourceDescriptor.enumerable,
-      get: () => sourceDescriptor.get?.call(image),
-      set: (value: string) => {
-        sourceDescriptor.set?.call(
-          image,
-          value.startsWith("file:") ? fileURLToPath(value) : value,
-        );
-      },
-    });
-    return image as unknown as HTMLImageElement;
+    return patchFileUrlImageSource(
+      new this.imageConstructor(),
+    ) as unknown as HTMLImageElement;
   }
   public getWebGLRenderingContext(): { prototype: object } {
     if (!this.webglContext)
@@ -272,7 +247,13 @@ export class NodeDOMAdapter {
     // Pixi 7's Assets image parser constructs `new Image()` directly
     // instead of going through the adapter. Keep that constructor aligned
     // with HTMLImageElement so BaseImageResource accepts the loaded image.
-    globalObject.Image = this.imageConstructor;
+    const imageConstructor = this.imageConstructor;
+    globalObject.Image = class extends imageConstructor {
+      public constructor() {
+        super();
+        patchFileUrlImageSource(this);
+      }
+    };
     // Pixi's CanvasSource uses this constructor for its instanceof check.
     // @napi-rs/canvas may expose a different global constructor, while the
     // project-owned NodeCanvas is the object actually returned by createCanvas.
@@ -454,6 +435,31 @@ export class NodeDOMAdapter {
     };
     return element;
   }
+}
+
+/** Adapts native image setters to the file URLs emitted by Pixi asset loaders. */
+function patchFileUrlImageSource(image: { src: string }): { src: string } {
+  let imagePrototype = Object.getPrototypeOf(image) as object | null;
+  let sourceDescriptor: PropertyDescriptor | undefined;
+  while (imagePrototype && !sourceDescriptor) {
+    sourceDescriptor = Object.getOwnPropertyDescriptor(imagePrototype, "src");
+    imagePrototype = Object.getPrototypeOf(imagePrototype);
+  }
+
+  if (!sourceDescriptor?.get || !sourceDescriptor.set) return image;
+
+  Object.defineProperty(image, "src", {
+    configurable: true,
+    enumerable: sourceDescriptor.enumerable,
+    get: () => sourceDescriptor.get?.call(image),
+    set: (value: string) => {
+      sourceDescriptor.set?.call(
+        image,
+        value.startsWith("file:") ? fileURLToPath(value) : value,
+      );
+    },
+  });
+  return image;
 }
 
 export function normalizeRefreshRate(refreshRateHz: number): number {

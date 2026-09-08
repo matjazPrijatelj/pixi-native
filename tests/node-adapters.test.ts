@@ -698,6 +698,42 @@ test("NodeDOMAdapter loads file URLs into a native image", async () => {
   assert.equal(image.height, 192);
 });
 
+test("NodeDOMAdapter converts file URLs for custom native image constructors", () => {
+  let receivedSource = "";
+  class CustomImage {
+    private source = "";
+
+    public get src(): string {
+      return this.source;
+    }
+
+    public set src(value: string) {
+      this.source = value;
+      receivedSource = value;
+    }
+  }
+
+  const adapter = new NodeDOMAdapter(
+    {} as never,
+    60,
+    undefined,
+    undefined,
+    CustomImage,
+  );
+  const image = adapter.createImage();
+  const expectedPath = fileURLToPath(
+    new URL("../src/demo/assets/bitmap-font/native-pixel.png", import.meta.url),
+  );
+
+  image.src = new URL(
+    "../src/demo/assets/bitmap-font/native-pixel.png",
+    import.meta.url,
+  ).href;
+
+  assert.equal(receivedSource, expectedPath);
+  assert.equal(image.src, expectedPath);
+});
+
 test("NodeDOMAdapter fetches absolute paths and file URLs without HTTP", async () => {
   const adapter = new NodeDOMAdapter({} as never);
   const fontUrl = new URL(

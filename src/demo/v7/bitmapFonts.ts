@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { BitmapFont, BitmapText, Texture } from "pixi.js-v7";
 
 export const DYNAMIC_BITMAP_FONT_NAME = "NativeDynamicBitmap";
@@ -29,7 +30,7 @@ export async function loadExternalBitmapFont(path: string): Promise<void> {
   const descriptor = await readFile(path, "utf8");
   const data = parseBitmapFontDescriptor(descriptor);
   const texturePath = join(dirname(path), data.pages[0].file);
-  const texture = Texture.from(texturePath);
+  const texture = Texture.from(pathToFileURL(texturePath).href);
   BitmapFont.install(descriptor as never, [texture] as never);
 }
 

@@ -6,6 +6,7 @@ import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import {
   DYNAMIC_BITMAP_FONT_NAME,
   installDynamicBitmapTextFont,
+  loadExternalBitmapFont,
 } from "../src/demo/v7/bitmapFonts.ts";
 
 test("PixiJS 7 dynamic BitmapFont contains every scene glyph", () => {
@@ -44,6 +45,22 @@ test("PixiJS 7 Assets loads a native PNG without explicit Assets initialization"
     assert.ok(texture.height > 1);
   } finally {
     await Assets.unload(path);
+    adapter.dispose();
+  }
+});
+
+test("PixiJS 7 loads the external bitmap font atlas from a file URL", async () => {
+  const adapter = new NodeDOMAdapter({} as never);
+  adapter.installPixi7(settings);
+  const fontPath = fileURLToPath(
+    new URL("../src/demo/assets/bitmap-font/native-pixel.fnt", import.meta.url),
+  );
+
+  try {
+    await loadExternalBitmapFont(fontPath);
+    assert.ok(BitmapFont.available.NativePixel);
+  } finally {
+    BitmapFont.uninstall("NativePixel");
     adapter.dispose();
   }
 });
