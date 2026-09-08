@@ -17,8 +17,20 @@ const run = (command, args) =>
   });
 
 await run("cargo", ["build", "--release"]);
-const output = resolve(root, "dist", `${process.platform}-${process.arch}`);
+const platformDirectory = `${process.platform}-${process.arch}`;
+const output = resolve(root, "dist", platformDirectory);
+const packageOutput = resolve(
+  root,
+  "../../packages",
+  `native-${platformDirectory}`,
+  "native",
+  "window",
+  "dist",
+  platformDirectory,
+);
 await mkdir(output, { recursive: true });
+await mkdir(packageOutput, { recursive: true });
+const nativeBinary = resolve(output, "native_window.node");
 await copyFile(
   resolve(
     root,
@@ -28,5 +40,6 @@ await copyFile(
       ? "pixi_node_window.dll"
       : "libpixi_node_window.so",
   ),
-  resolve(output, "native_window.node"),
+  nativeBinary,
 );
+await copyFile(nativeBinary, resolve(packageOutput, "native_window.node"));

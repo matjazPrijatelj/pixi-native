@@ -26,10 +26,24 @@ if (!artifact || process.arch !== "x64") {
   );
 }
 const platformDirectory = `${process.platform}-${process.arch}`;
+const packageOutput = resolve(
+  root,
+  "../../packages",
+  `native-${platformDirectory}`,
+  "native",
+  "video",
+  "dist",
+  platformDirectory,
+);
 
 await run("cargo", ["build", "--release"]);
 await mkdir(resolve(root, "dist", platformDirectory), { recursive: true });
-await copyFile(
-  resolve(root, "target", "release", artifact),
-  resolve(root, "dist", platformDirectory, "native_video.node"),
+await mkdir(packageOutput, { recursive: true });
+const nativeBinary = resolve(
+  root,
+  "dist",
+  platformDirectory,
+  "native_video.node",
 );
+await copyFile(resolve(root, "target", "release", artifact), nativeBinary);
+await copyFile(nativeBinary, resolve(packageOutput, "native_video.node"));
