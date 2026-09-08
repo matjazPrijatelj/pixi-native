@@ -61,7 +61,7 @@ if (process.platform === "win32" || process.platform === "linux") {
   validateFfmpegCapabilities(ffmpegDirectory, ffmpegDistribution);
   await runFfmpegSmokeTests(
     ffmpegDirectory,
-    resolve(root, "src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4"),
+    resolve(root, "src/demo/assets/Sync_Check-720p30fps.mp4"),
     resolve(root, "src/demo/assets/audio/howler-test.wav"),
     resolve(root, "tests/fixtures/hevc-one-frame.mp4"),
     ffmpegDistribution,

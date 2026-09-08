@@ -11,20 +11,24 @@ import {
 
 const archiveArguments = process.argv.slice(2);
 if (archiveArguments.length !== 4) {
-  throw new Error("Expected core, pixi7, pixi8, and one native package archive");
+  throw new Error(
+    "Expected core, pixi7, pixi8, and one native package archive",
+  );
 }
 
 const archives = new Map(
   archiveArguments.map((argument) => {
     const path = resolve(argument);
     const filename = basename(path);
-    const key = filename.includes("native-win32-x64") || filename.includes("native-linux-x64")
-      ? "native"
-      : filename.includes("pixi7")
-        ? "pixi7"
-        : filename.includes("pixi8")
-          ? "pixi8"
-          : "core";
+    const key =
+      filename.includes("native-win32-x64") ||
+      filename.includes("native-linux-x64")
+        ? "native"
+        : filename.includes("pixi7")
+          ? "pixi7"
+          : filename.includes("pixi8")
+            ? "pixi8"
+            : "core";
     return [key, path];
   }),
 );
@@ -37,7 +41,9 @@ const nativeArchiveName = basename(archives.get("native"));
 const nativePackageName = nativeArchiveName.includes("native-linux-x64")
   ? "@pixi-native/native-linux-x64"
   : "@pixi-native/native-win32-x64";
-const nativeTarget = nativePackageName.includes("linux") ? "linux-x64" : "win32-x64";
+const nativeTarget = nativePackageName.includes("linux")
+  ? "linux-x64"
+  : "win32-x64";
 const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
 const temporaryRoot = resolve(repositoryRoot, ".tmp");
 await mkdir(temporaryRoot, { recursive: true });
@@ -191,12 +197,12 @@ try {
   );
   await validateFfmpegIdentity(ffmpegDirectory, true, ffmpegDistribution);
   await runFfmpegSmokeTests(
-      ffmpegDirectory,
-      resolve(repositoryRoot, "src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4"),
-      resolve(repositoryRoot, "src/demo/assets/audio/howler-test.wav"),
-      resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
-      ffmpegDistribution,
-    );
+    ffmpegDirectory,
+    resolve(repositoryRoot, "src/demo/assets/Sync_Check-720p30fps.mp4"),
+    resolve(repositoryRoot, "src/demo/assets/audio/howler-test.wav"),
+    resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
+    ffmpegDistribution,
+  );
 
   execSync("pnpm install --no-frozen-lockfile --ignore-workspace", {
     cwd: testDirectory,

@@ -90,8 +90,8 @@ test("Howler-compatible sprites overlap and fade through the native mixer", asyn
     const second = howl.play("toneB");
     assert.notEqual(first, second);
     await Promise.all([
-      waitForEvent(howl, "play", 5_000, first),
-      waitForEvent(howl, "play", 5_000, second),
+      waitForPlay(howl, 5_000, first),
+      waitForPlay(howl, 5_000, second),
     ]);
     assert.equal(howl.playing(first), true);
     assert.equal(howl.playing(second), true);
@@ -128,7 +128,7 @@ test("Howler-compatible sprites overlap and fade through the native mixer", asyn
       preload: false,
     });
     const streamId = stream.play("toneA");
-    await waitForEvent(stream, "play", 5_000, streamId);
+    await waitForPlay(stream, 5_000, streamId);
     await waitForEvent(stream, "end", 5_000, streamId);
     assert.equal(stream.playing(streamId), false);
 
@@ -139,7 +139,7 @@ test("Howler-compatible sprites overlap and fade through the native mixer", asyn
     });
     await waitForEvent(looping, "load", 5_000);
     const loopingId = looping.play("looping");
-    await waitForEvent(looping, "play", 5_000, loopingId);
+    await waitForPlay(looping, 5_000, loopingId);
     const loopFade = waitForEvent(looping, "fade", 3_000, loopingId);
     looping.fade(0, 1, 1_100, loopingId);
     await loopFade;
@@ -153,9 +153,7 @@ test("Howler-compatible sprites overlap and fade through the native mixer", asyn
     await waitForEvent(drums, "load", 5_000);
     const drumIds = DRUM_PADS.map((pad) => drums.play(pad.sprite));
     assert.equal(new Set(drumIds).size, DRUM_PADS.length);
-    await Promise.all(
-      drumIds.map((id) => waitForEvent(drums, "play", 5_000, id)),
-    );
+    await Promise.all(drumIds.map((id) => waitForPlay(drums, 5_000, id)));
     assert.ok(drumIds.every((id) => drums.playing(id)));
     drums.stop();
   } finally {
@@ -179,7 +177,7 @@ test(
     try {
       await waitForEvent(howl, "load", 5_000);
       const id = howl.play("blocked");
-      await waitForEvent(howl, "play", 5_000, id);
+      await waitForPlay(howl, 5_000, id);
       const events: string[] = [];
       howl.on("fade", () => events.push("fade"), id);
       howl.on("end", () => events.push("end"), id);
@@ -221,10 +219,7 @@ test(
       "@pixi-native/core/audio"
     );
     const videoSource = fileURLToPath(
-      new URL(
-        "../src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4",
-        import.meta.url,
-      ),
+      new URL("../src/demo/assets/Sync_Check-720p30fps.mp4", import.meta.url),
     );
     const audio = new Howl({
       src: [videoSource],
@@ -235,7 +230,7 @@ test(
 
     try {
       const id = audio.play("video");
-      await waitForEvent(audio, "play", 5_000, id);
+      await waitForPlay(audio, 5_000, id);
       const initialTime = audio.seek(id) as number;
       const initialUnderruns = nativeAudioEngine.diagnostics.underruns;
       const startedAt = performance.now();
@@ -272,17 +267,18 @@ test("Windows native audio binding preflight is platform-specific", async () => 
 interface EventSource {
   once(
     event: AudioTestEvent,
-    callback: (id?: number) => void,
+    callback: AudioTestEventCallback,
     id?: number,
   ): unknown;
   off(
     event: AudioTestEvent,
-    callback: (id?: number) => void,
+    callback: AudioTestEventCallback,
     id?: number,
   ): unknown;
 }
 
-type AudioTestEvent = "load" | "play" | "fade" | "end";
+type AudioTestEvent = "load" | "playerror" | "play" | "fade" | "end";
+type AudioTestEventCallback = (id?: number, message?: string) => void;
 
 function waitForEvent(
   source: EventSource,
@@ -300,6 +296,34 @@ function waitForEvent(
       reject(new Error(`Timed out waiting for audio ${event}`));
     }, timeoutMs);
     source.once(event, callback, id);
+  });
+}
+
+function waitForPlay(
+  source: EventSource,
+  timeoutMs: number,
+  id: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      source.off("play", playCallback, id);
+      source.off("playerror", errorCallback, id);
+    };
+    const playCallback = (): void => {
+      cleanup();
+      resolve();
+    };
+    const errorCallback = (_eventId?: number, message?: string): void => {
+      cleanup();
+      reject(new Error(`Audio play failed: ${message ?? "unknown error"}`));
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for audio play"));
+    }, timeoutMs);
+    source.once("play", playCallback, id);
+    source.once("playerror", errorCallback, id);
   });
 }
 
