@@ -2,6 +2,16 @@
 
 ## 2026-09-08
 
+- Kept all demo MP4 files available locally while removing the large movie
+  assets from Git tracking; PixiJS 7/8 video tests continue cycling every
+  available asset, with only `Big_Buck_Bunny_720_10s_20MB.mp4` and
+  `Sync_Check-720p30fps.mp4` versioned.
+
+- Made distribution packing platform-specific: Linux x64 now packages and
+  fresh-tests `@pixi-native/native-linux-x64` with Linux FFmpeg binaries,
+  while Windows continues to package its Windows native target. Release
+  tarballs and checksums remain tracked in Git until npm publication.
+
 - Added LFS-pointer detection for PixiJS 7/8 demo video assets so missing
   Git LFS downloads are skipped with a clear `git lfs pull` instruction instead
   of starting repeated FFmpeg decoder retries.

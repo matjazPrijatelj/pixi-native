@@ -12,7 +12,7 @@ launcher/
 │  ├─ @pixi-native/core
 │  ├─ @pixi-native/pixi7
 │  ├─ @pixi-native/pixi8
-│  └─ @pixi-native/native-win32-x64
+│  └─ @pixi-native/native-<platform>-x64
 └─ displays/
    ├─ legacy-pixi7/
    └─ current-pixi8/
@@ -24,7 +24,8 @@ avoiding duplicate native binaries.
 
 ## Private tarballs
 
-The repository produces the four verified packages with:
+The repository produces three platform-neutral packages and the native package
+for the current OS with:
 
 ```sh
 pnpm pack:dist
@@ -45,9 +46,9 @@ physical and portable.
 platform-neutral. Native addons and the packaged FFmpeg runtime belong to a
 platform package selected by Node platform and architecture.
 
-The current distribution provides `@pixi-native/native-win32-x64`. Future Linux
-support uses `@pixi-native/native-linux-x64` with the same resolver contract;
-display imports and Pixi package names do not change.
+The distribution provides `@pixi-native/native-win32-x64` and
+`@pixi-native/native-linux-x64` with the same resolver contract. Run packing on
+the target OS; display imports and Pixi package names do not change.
 
 An unsupported or missing native target fails explicitly during startup. The
 runtime does not load a binary built for another operating system and does not
@@ -55,7 +56,7 @@ silently switch renderer backends.
 
 ## Current limitations
 
-- Packaged WebGPU currently targets Windows x64 and D3D12.
+- Packaged WebGPU currently targets Windows x64/D3D12 and Linux x64/Vulkan.
 - Linux WebGPU remains unavailable until the project-owned Vulkan addon is
   packaged; Linux WebGL and native media development paths are separate.
 - Transparent windows are currently supported on Windows 11 and remain

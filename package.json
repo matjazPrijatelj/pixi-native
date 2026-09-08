@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@pixi-native/core": "workspace:*",
+    "@pixi-native/native-linux-x64": "workspace:*",
     "@pixi-native/native-win32-x64": "workspace:*",
     "@pixi-native/pixi7": "workspace:*",
     "@pixi-native/pixi8": "workspace:*",

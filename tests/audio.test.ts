@@ -222,7 +222,7 @@ test(
     );
     const videoSource = fileURLToPath(
       new URL(
-        "../src/demo/assets/Big_Buck_Bunny_1080_30s.mp4",
+        "../src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4",
         import.meta.url,
       ),
     );

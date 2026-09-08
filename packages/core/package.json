@@ -33,14 +33,19 @@
     "@node-3d/glfw": "7.3.1"
   },
   "peerDependencies": {
+    "@pixi-native/native-linux-x64": "0.1.0",
     "@pixi-native/native-win32-x64": "0.1.0"
   },
   "peerDependenciesMeta": {
+    "@pixi-native/native-linux-x64": {
+      "optional": true
+    },
     "@pixi-native/native-win32-x64": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@pixi-native/native-linux-x64": "workspace:*",
     "@pixi-native/native-win32-x64": "workspace:*"
   }
 }

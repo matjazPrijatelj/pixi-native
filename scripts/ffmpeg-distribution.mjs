@@ -6,7 +6,7 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   FFMPEG_BUILD_INFO_FILE,
-  FFMPEG_CONFIGURE_OPTIONS,
+  FFMPEG_DISTRIBUTIONS,
   FFMPEG_SOURCE_COMMIT,
   FFMPEG_SOURCE_URL,
 } from "./ffmpeg-build-config.mjs";
@@ -32,6 +32,20 @@ export const OBSOLETE_SHARED_FFMPEG_FILES = [
   "swscale-9.dll",
   "FFMPEG_README.txt",
 ];
+
+export function getFfmpegDistribution(target = "win32-x64") {
+  const distribution = FFMPEG_DISTRIBUTIONS[target];
+  if (!distribution) throw new Error(`Unsupported FFmpeg target: ${target}`);
+  return {
+    ...distribution,
+    packagedFiles: [
+      ...distribution.binaryFiles,
+      FFMPEG_LICENSE_FILE,
+      FFMPEG_BUILD_INFO_FILE,
+    ],
+    checksumFile: FFMPEG_CHECKSUM_FILE,
+  };
+}
 
 function runAndCapture(executable, args) {
   const environment = runtimeEnvironment();
@@ -89,20 +103,28 @@ export async function sha256File(path) {
   return hash.digest("hex");
 }
 
-export async function writeFfmpegChecksums(directory) {
+export async function writeFfmpegChecksums(
+  directory,
+  packagedFiles = FFMPEG_PACKAGED_FILES,
+  checksumFile = FFMPEG_CHECKSUM_FILE,
+) {
   const lines = [];
-  for (const filename of FFMPEG_PACKAGED_FILES) {
+  for (const filename of packagedFiles) {
     lines.push(`${await sha256File(join(directory, filename))}  ${filename}`);
   }
   await writeFile(
-    join(directory, FFMPEG_CHECKSUM_FILE),
+    join(directory, checksumFile),
     `${lines.join("\n")}\n`,
   );
 }
 
-export async function validateFfmpegChecksums(directory) {
+export async function validateFfmpegChecksums(
+  directory,
+  packagedFiles = FFMPEG_PACKAGED_FILES,
+  checksumFile = FFMPEG_CHECKSUM_FILE,
+) {
   const checksumText = await readFile(
-    join(directory, FFMPEG_CHECKSUM_FILE),
+    join(directory, checksumFile),
     "utf8",
   );
   const checksumPattern = /^([a-f0-9]{64})  ([^/\\]+)$/;
@@ -115,11 +137,11 @@ export async function validateFfmpegChecksums(directory) {
     recorded.set(match[2], match[1]);
   }
 
-  const expected = new Set(FFMPEG_PACKAGED_FILES);
+  const expected = new Set(packagedFiles);
   const unexpected = [...recorded.keys()].filter(
     (filename) => !expected.has(filename),
   );
-  const missing = FFMPEG_PACKAGED_FILES.filter(
+  const missing = packagedFiles.filter(
     (filename) => !recorded.has(filename),
   );
   if (unexpected.length > 0 || missing.length > 0) {
@@ -128,7 +150,7 @@ export async function validateFfmpegChecksums(directory) {
     );
   }
 
-  for (const filename of FFMPEG_PACKAGED_FILES) {
+  for (const filename of packagedFiles) {
     const actual = await sha256File(join(directory, filename));
     if (actual !== recorded.get(filename)) {
       throw new Error(`FFmpeg checksum mismatch for ${filename}.`);
@@ -136,7 +158,11 @@ export async function validateFfmpegChecksums(directory) {
   }
 }
 
-export async function validateFfmpegIdentity(directory, executeBinaries) {
+export async function validateFfmpegIdentity(
+  directory,
+  executeBinaries,
+  distribution = getFfmpegDistribution(),
+) {
   const buildInfo = await readFile(
     join(directory, FFMPEG_BUILD_INFO_FILE),
     "utf8",
@@ -151,16 +177,16 @@ export async function validateFfmpegIdentity(directory, executeBinaries) {
   requireText(buildInfo, "License profile: LGPL 2.1 or later", "build info");
   requireText(
     buildInfo,
-    "Linkage: static FFmpeg libraries; Windows system DLLs only",
+    distribution.linkage,
     "build info",
   );
-  for (const option of FFMPEG_CONFIGURE_OPTIONS)
+  for (const option of distribution.configureOptions)
     requireText(buildInfo, option, "build info");
   requireText(license, "GNU LESSER GENERAL PUBLIC LICENSE", "license");
   requireText(license, "Version 2.1, February 1999", "license");
 
   if (!executeBinaries) return;
-  for (const executable of ["ffmpeg.exe", "ffprobe.exe"]) {
+  for (const executable of distribution.binaryFiles) {
     const version = runAndCapture(join(directory, executable), ["-version"]);
     const normalizedVersion = version.replaceAll("'", "");
     if (!/^ff(?:mpeg|probe) version n?8\.0(?:\s|$)/m.test(version)) {
@@ -168,7 +194,7 @@ export async function validateFfmpegIdentity(directory, executeBinaries) {
         `${executable} does not identify the pinned FFmpeg 8.0 source.`,
       );
     }
-    for (const option of FFMPEG_CONFIGURE_OPTIONS)
+    for (const option of distribution.configureOptions)
       requireText(normalizedVersion, option, `${executable} configuration`);
     const licenseOutput = runAndCapture(join(directory, executable), ["-L"]);
     if (!/GNU Lesser General Public\s+License/.test(licenseOutput)) {
@@ -194,8 +220,11 @@ function requireNamedRows(output, names, description, rowPattern) {
   }
 }
 
-export function validateFfmpegCapabilities(directory) {
-  const ffmpeg = join(directory, "ffmpeg.exe");
+export function validateFfmpegCapabilities(
+  directory,
+  distribution = getFfmpegDistribution(),
+) {
+  const ffmpeg = join(directory, distribution.binaryFiles[0]);
   const protocols = runAndCapture(ffmpeg, ["-hide_banner", "-protocols"]);
   const protocolNames = new Set(
     protocols
@@ -203,16 +232,10 @@ export function validateFfmpegCapabilities(directory) {
       .map((line) => line.trim())
       .filter((line) => /^[a-z0-9]+$/.test(line)),
   );
-  for (const protocol of [
-    "file",
-    "pipe",
-    "http",
-    "https",
-    "tls",
-    "tcp",
-    "udp",
-    "rtp",
-  ]) {
+  const requiredProtocols = distribution.targetDirectory.includes("linux")
+    ? ["file", "pipe", "http", "tcp", "udp", "rtp"]
+    : ["file", "pipe", "http", "https", "tls", "tcp", "udp", "rtp"];
+  for (const protocol of requiredProtocols) {
     if (!protocolNames.has(protocol)) {
       throw new Error(`FFmpeg does not provide required protocol: ${protocol}`);
     }
@@ -265,9 +288,12 @@ export function validateFfmpegCapabilities(directory) {
   requireNamedRows(muxers, ["rawvideo", "f32le"], "muxer", muxerRow);
 
   const accelerators = runAndCapture(ffmpeg, ["-hide_banner", "-hwaccels"]);
-  if (!/^d3d11va$/m.test(accelerators)) {
+  const requiredAccelerator = distribution.targetDirectory.includes("linux")
+    ? "vaapi"
+    : "d3d11va";
+  if (!new RegExp(`^${requiredAccelerator}$`, "m").test(accelerators)) {
     throw new Error(
-      "FFmpeg does not provide required hardware acceleration: d3d11va",
+      `FFmpeg does not provide required hardware acceleration: ${requiredAccelerator}`,
     );
   }
 }
@@ -277,8 +303,10 @@ export async function runFfmpegSmokeTests(
   videoFixture,
   audioFixture,
   hevcFixture,
+  distribution = getFfmpegDistribution(),
 ) {
-  const ffmpeg = join(directory, "ffmpeg.exe");
+  const ffmpeg = join(directory, distribution.binaryFiles[0]);
+  const nullDevice = distribution.nullDevice;
   execFileSync(
     ffmpeg,
     [
@@ -295,7 +323,7 @@ export async function runFfmpegSmokeTests(
       "-f",
       "rawvideo",
       "-y",
-      "NUL",
+      nullDevice,
     ],
     { stdio: "ignore", windowsHide: true },
   );
@@ -319,7 +347,7 @@ export async function runFfmpegSmokeTests(
       "-f",
       "f32le",
       "-y",
-      "NUL",
+      nullDevice,
     ],
     { stdio: "ignore", windowsHide: true },
   );
@@ -341,7 +369,7 @@ export async function runFfmpegSmokeTests(
       "-f",
       "f32le",
       "-y",
-      "NUL",
+      nullDevice,
     ],
     { stdio: "ignore", windowsHide: true },
   );
@@ -362,7 +390,7 @@ export async function runFfmpegSmokeTests(
         "-f",
         "rawvideo",
         "-y",
-        "NUL",
+        nullDevice,
       ],
       { stdio: "ignore", windowsHide: true },
     );
@@ -414,7 +442,7 @@ export async function runFfmpegSmokeTests(
       "-f",
       "rawvideo",
       "-y",
-      "NUL",
+      nullDevice,
     ]);
   } finally {
     await new Promise((resolve, reject) =>

@@ -95,7 +95,7 @@ build when another one is active.
 
 ## Distribution
 
-Create the four private, checksummed packages from the full development install:
+Create the platform-specific private, checksummed packages from the full development install:
 
 ```sh
 pnpm pack:dist
@@ -104,9 +104,11 @@ pnpm pack:dist
 The command performs type checking, tests, TypeScript compilation,
 native-artifact validation, package creation, and a fresh production-consumer
 test. It does not rebuild native addons or FFmpeg. Generated archives are placed
-under `artifacts/`.
+under `artifacts/`; final tarballs and their checksums remain tracked in Git
+until npm publication. Linux x64 creates `native-linux-x64`; Windows x64
+creates `native-win32-x64`.
 
-Install all four archives once in a shared launcher dependency root when its
+Install all generated archives once in a shared launcher dependency root when its
 display processes may use either Pixi major. See [Deployment](docs/deployment.md)
 for the process and platform-package contract.
 
@@ -119,9 +121,9 @@ for the process and platform-package contract.
 - Native Canvas2D, FFmpeg video, and native audio
 - Explicit renderer selection with no browser or renderer fallback
 
-The packaged GPU addon currently targets Windows x64. Linux uses a future
-`@pixi-native/native-linux-x64` package without changing display imports. See
-[Deployment](docs/deployment.md#current-limitations) for current limitations.
+The packaged GPU addon currently targets Windows x64 and Linux x64 without
+changing display imports. See [Deployment](docs/deployment.md#current-limitations)
+for current limitations.
 
 This repository and its private packages are `UNLICENSED`. Third-party license
 information is recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

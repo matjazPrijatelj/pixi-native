@@ -63,14 +63,14 @@ const videos: Pixi7VideoSource[] = filterVideoAssets([
     fps: 30,
   },
   {
-    file: "Big_Buck_Bunny_1080_10s_5MB.mp4",
-    source: asset("Big_Buck_Bunny_1080_10s_5MB.mp4"),
-    fps: 60,
-  },
-  {
     file: "Big_Buck_Bunny_720_10s_20MB.mp4",
     source: asset("Big_Buck_Bunny_720_10s_20MB.mp4"),
     fps: 30,
+  },
+  {
+    file: "Big_Buck_Bunny_1080_10s_5MB.mp4",
+    source: asset("Big_Buck_Bunny_1080_10s_5MB.mp4"),
+    fps: 60,
   },
   {
     file: "cutting_orange_tuil_8s_3484kbps_2160p_59.94fps_h264.mp4",

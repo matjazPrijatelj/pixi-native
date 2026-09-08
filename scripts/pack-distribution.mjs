@@ -15,6 +15,7 @@ import {
   FFMPEG_CHECKSUM_FILE,
   FFMPEG_PACKAGED_FILES,
   FFMPEG_TARGET_DIRECTORY,
+  getFfmpegDistribution,
 } from "./ffmpeg-distribution.mjs";
 import {
   FFMPEG_SOURCE_ARCHIVE,
@@ -26,7 +27,18 @@ const artifactsDirectory = resolve(root, "artifacts");
 const temporaryRoot = resolve(root, ".tmp");
 const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
 const MAX_UNPACKED_BYTES = 100 * 1024 * 1024;
-const PACKAGE_NAMES = ["core", "pixi7", "pixi8", "native-win32-x64"];
+const nativeTarget = `${process.platform}-${process.arch}`;
+const nativePackageName =
+  nativeTarget === "linux-x64"
+    ? "native-linux-x64"
+    : nativeTarget === "win32-x64"
+      ? "native-win32-x64"
+      : null;
+if (!nativePackageName) {
+  throw new Error(`Distribution packing supports only ${nativeTarget}.`);
+}
+const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
+const PACKAGE_NAMES = ["core", "pixi7", "pixi8", nativePackageName];
 const DOCUMENTATION_FILES = [
   "README.md",
   "HISTORY.md",
@@ -152,7 +164,7 @@ try {
     );
     if (packResult.unpackedSize > MAX_UNPACKED_BYTES) {
       throw new Error(
-        `${manifest.name} is too large: ${packResult.unpackedSize} bytes`,
+      `${manifest.name} is too large: ${packResult.unpackedSize} bytes`,
       );
     }
     validatePackedFiles(
@@ -197,18 +209,20 @@ console.log(`FFmpeg source SHA-256: ${sourceChecksum}`);
 function validatePackedFiles(packageName, files) {
   const fileSet = new Set(files);
   const required =
-    packageName === "native-win32-x64"
+    packageName.startsWith("native-")
       ? [
           "index.cjs",
           "index.d.ts",
-          "native/gpu/dist/win32-x64/pixi_native_gpu.node",
-          "native/window/dist/win32-x64/native_window.node",
-          "native/audio/dist/win32-x64/native_audio.node",
-          "native/video/dist/win32-x64/native_video.node",
-          ...FFMPEG_PACKAGED_FILES.map(
-            (filename) => `${FFMPEG_TARGET_DIRECTORY}/${filename}`,
+          `native/gpu/dist/${nativeTarget}/pixi_native_gpu.node`,
+          `native/window/dist/${nativeTarget}/native_window.node`,
+          ...(nativeTarget === "win32-x64"
+            ? [`native/audio/dist/${nativeTarget}/native_audio.node`]
+            : []),
+          `native/video/dist/${nativeTarget}/native_video.node`,
+          ...ffmpegDistribution.packagedFiles.map(
+            (filename) => `${ffmpegDistribution.targetDirectory}/${filename}`,
           ),
-          `${FFMPEG_TARGET_DIRECTORY}/${FFMPEG_CHECKSUM_FILE}`,
+          `${ffmpegDistribution.targetDirectory}/${ffmpegDistribution.checksumFile}`,
         ]
       : [
           "dist/index.js",

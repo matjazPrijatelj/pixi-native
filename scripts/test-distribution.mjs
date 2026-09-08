@@ -6,18 +6,19 @@ import {
   runFfmpegSmokeTests,
   validateFfmpegChecksums,
   validateFfmpegIdentity,
+  getFfmpegDistribution,
 } from "./ffmpeg-distribution.mjs";
 
 const archiveArguments = process.argv.slice(2);
 if (archiveArguments.length !== 4) {
-  throw new Error("Expected core, pixi7, pixi8, and native package archives");
+  throw new Error("Expected core, pixi7, pixi8, and one native package archive");
 }
 
 const archives = new Map(
   archiveArguments.map((argument) => {
     const path = resolve(argument);
     const filename = basename(path);
-    const key = filename.includes("native-win32-x64")
+    const key = filename.includes("native-win32-x64") || filename.includes("native-linux-x64")
       ? "native"
       : filename.includes("pixi7")
         ? "pixi7"
@@ -32,6 +33,12 @@ for (const key of ["core", "pixi7", "pixi8", "native"]) {
 }
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const nativeArchiveName = basename(archives.get("native"));
+const nativePackageName = nativeArchiveName.includes("native-linux-x64")
+  ? "@pixi-native/native-linux-x64"
+  : "@pixi-native/native-win32-x64";
+const nativeTarget = nativePackageName.includes("linux") ? "linux-x64" : "win32-x64";
+const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
 const temporaryRoot = resolve(repositoryRoot, ".tmp");
 await mkdir(temporaryRoot, { recursive: true });
 const testDirectory = await mkdtemp(
@@ -50,7 +57,7 @@ try {
       "@pixi-native/core": toFileSpecifier(archives.get("core")),
       "@pixi-native/pixi7": toFileSpecifier(archives.get("pixi7")),
       "@pixi-native/pixi8": toFileSpecifier(archives.get("pixi8")),
-      "@pixi-native/native-win32-x64": toFileSpecifier(archives.get("native")),
+      [nativePackageName]: toFileSpecifier(archives.get("native")),
     },
     devDependencies: { typescript: "7.0.2" },
   };
@@ -72,9 +79,9 @@ try {
     [
       'import assert from "node:assert/strict";',
       'import { existsSync } from "node:fs";',
-      'import native from "@pixi-native/native-win32-x64";',
-      'assert.equal(native.target, "win32-x64");',
-      "for (const path of [native.gpuModule, native.windowModule, native.videoModule, native.audioBinding, native.ffmpeg, native.ffprobe]) assert.equal(existsSync(path), true, path);",
+      `import native from "${nativePackageName}";`,
+      `assert.equal(native.target, "${nativeTarget}");`,
+      "for (const path of [native.gpuModule, native.windowModule, native.videoModule, native.audioBinding, native.ffmpeg, native.ffprobe].filter(Boolean)) assert.equal(existsSync(path), true, path);",
       "console.log(native.ffmpeg);",
       "",
     ].join("\n"),
@@ -177,14 +184,19 @@ try {
 
   const ffmpegPath = nativeOutput.trimEnd().split(/\r?\n/).at(-1);
   const ffmpegDirectory = dirname(ffmpegPath);
-  await validateFfmpegChecksums(ffmpegDirectory);
-  await validateFfmpegIdentity(ffmpegDirectory, true);
-  await runFfmpegSmokeTests(
+  await validateFfmpegChecksums(
     ffmpegDirectory,
-    resolve(repositoryRoot, "src/demo/assets/Big_Buck_Bunny_1080_30s.mp4"),
-    resolve(repositoryRoot, "src/demo/assets/audio/howler-test.wav"),
-    resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
+    ffmpegDistribution.packagedFiles,
+    ffmpegDistribution.checksumFile,
   );
+  await validateFfmpegIdentity(ffmpegDirectory, true, ffmpegDistribution);
+  await runFfmpegSmokeTests(
+      ffmpegDirectory,
+      resolve(repositoryRoot, "src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4"),
+      resolve(repositoryRoot, "src/demo/assets/audio/howler-test.wav"),
+      resolve(repositoryRoot, "tests/fixtures/hevc-one-frame.mp4"),
+      ffmpegDistribution,
+    );
 
   execSync("pnpm install --no-frozen-lockfile --ignore-workspace", {
     cwd: testDirectory,

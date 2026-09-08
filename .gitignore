@@ -7,6 +7,12 @@ build/
 /dist/
 /packages/*/dist/
 /packages/native-win32-x64/THIRD_PARTY_NOTICES.md
+
+# Local demo movie library; only the two lightweight test videos are versioned
+/src/demo/assets/*.mp4
+!/src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4
+!/src/demo/assets/Sync_Check-720p30fps.mp4
+/src/demo/assets/transparent-video/*.mp4
 /artifacts/.npm-cache
 
 # Coverage and temporary caches

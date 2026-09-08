@@ -24,7 +24,7 @@ test("video asset validation rejects Git LFS pointers", async () => {
 
 test("video asset validation accepts actual MP4 bytes", () => {
   assert.equal(
-    isUsableVideoAsset(asset("transparent-video/video_combined_0.5.mp4")),
+    isUsableVideoAsset(asset("Big_Buck_Bunny_720_10s_20MB.mp4")),
     true,
   );
 });

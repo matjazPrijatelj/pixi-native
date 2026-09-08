@@ -2,27 +2,31 @@ import { access } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  FFMPEG_CHECKSUM_FILE,
-  FFMPEG_PACKAGED_FILES,
-  FFMPEG_TARGET_DIRECTORY,
   runFfmpegSmokeTests,
   validateFfmpegCapabilities,
   validateFfmpegChecksums,
   validateFfmpegIdentity,
+  getFfmpegDistribution,
 } from "./ffmpeg-distribution.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const target = `${process.platform}-${process.arch}`;
+const ffmpegDistribution = getFfmpegDistribution(target);
 const REQUIRED_NATIVE_ARTIFACTS = [
-  "native/gpu/dist/win32-x64/pixi_native_gpu.node",
-  "native/gpu/dist/win32-x64/d3dcompiler_47.dll",
-  "native/window/dist/win32-x64/native_window.node",
-  "native/audio/dist/win32-x64/native_audio.node",
-  "native/video/dist/win32-x64/native_video.node",
+  `native/gpu/dist/${target}/pixi_native_gpu.node`,
+  ...(target === "win32-x64"
+    ? [`native/gpu/dist/${target}/d3dcompiler_47.dll`]
+    : []),
+  `native/window/dist/${target}/native_window.node`,
+  ...(target === "win32-x64"
+    ? [`native/audio/dist/${target}/native_audio.node`]
+    : []),
+  `native/video/dist/${target}/native_video.node`,
 ];
 const REQUIRED_FFMPEG_ARTIFACTS = [
-  ...FFMPEG_PACKAGED_FILES,
-  FFMPEG_CHECKSUM_FILE,
-].map((filename) => `${FFMPEG_TARGET_DIRECTORY}/${filename}`);
+  ...ffmpegDistribution.packagedFiles,
+  ffmpegDistribution.checksumFile,
+].map((filename) => `${ffmpegDistribution.targetDirectory}/${filename}`);
 
 const missing = [];
 for (const relativePath of [
@@ -42,19 +46,28 @@ if (missing.length > 0) {
   );
 }
 
-const ffmpegDirectory = resolve(root, FFMPEG_TARGET_DIRECTORY);
-await validateFfmpegChecksums(ffmpegDirectory);
-await validateFfmpegIdentity(ffmpegDirectory, process.platform === "win32");
-if (process.platform === "win32") {
-  validateFfmpegCapabilities(ffmpegDirectory);
+const ffmpegDirectory = resolve(root, ffmpegDistribution.targetDirectory);
+await validateFfmpegChecksums(
+  ffmpegDirectory,
+  ffmpegDistribution.packagedFiles,
+  ffmpegDistribution.checksumFile,
+);
+await validateFfmpegIdentity(
+  ffmpegDirectory,
+  process.platform === "win32" || process.platform === "linux",
+  ffmpegDistribution,
+);
+if (process.platform === "win32" || process.platform === "linux") {
+  validateFfmpegCapabilities(ffmpegDirectory, ffmpegDistribution);
   await runFfmpegSmokeTests(
     ffmpegDirectory,
-    resolve(root, "src/demo/assets/Big_Buck_Bunny_1080_30s.mp4"),
+    resolve(root, "src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4"),
     resolve(root, "src/demo/assets/audio/howler-test.wav"),
     resolve(root, "tests/fixtures/hevc-one-frame.mp4"),
+    ffmpegDistribution,
   );
 }
 
 console.log(
-  `Validated ${REQUIRED_NATIVE_ARTIFACTS.length} native artifacts and ${REQUIRED_FFMPEG_ARTIFACTS.length} FFmpeg distribution files.`,
+  `Validated ${REQUIRED_NATIVE_ARTIFACTS.length} native artifacts and ${ffmpegDistribution.packagedFiles.length + 1} FFmpeg distribution files for ${target}.`,
 );
