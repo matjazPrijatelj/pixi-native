@@ -2,6 +2,11 @@
 
 ## 2026-09-09
 
+- Added `@matjazprijatelj/create-pixi-native`, a PixiJS 7/8 TypeScript project
+  generator with WebGPU/WebGL selection, Node.js watch reloads, production
+  TypeScript builds, Prettier commands, and a small Sprite/Graphics/Text smoke
+  application. Added the generator to the guarded four-package `0.1.1` release
+  flow without invoking a native build.
 - Fixed the Windows GitHub Packages publisher to invoke npm through Node's
   `npm-cli.js` instead of spawning the `npm.cmd` shim. Publisher subprocesses
   now use the Windows system CA store and report their actual spawn, TLS, or

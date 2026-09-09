@@ -1,6 +1,6 @@
 {
   "name": "@pixi-native/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -34,8 +34,8 @@
     "@node-3d/glfw": "7.3.1"
   },
   "peerDependencies": {
-    "@matjazprijatelj/pixi-native-linux-x64": "0.1.0",
-    "@matjazprijatelj/pixi-native-win32-x64": "0.1.0"
+    "@matjazprijatelj/pixi-native-linux-x64": "0.1.1",
+    "@matjazprijatelj/pixi-native-win32-x64": "0.1.1"
   },
   "peerDependenciesMeta": {
     "@matjazprijatelj/pixi-native-linux-x64": {

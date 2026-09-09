@@ -6,7 +6,7 @@ WebGL rendering, window input, Canvas2D, audio, video, and file access. Display
 applications do not need a browser, WebView, or CEF process.
 
 > [!NOTE]
-> Version 0.1.0 is a pre-release. The API and native package layout may change
+> Version 0.1.1 is a pre-release. The API and native package layout may change
 > before 1.0.
 
 ## What is included
@@ -38,7 +38,7 @@ Repository source paths and unexported `dist/` files are internal.
 
 ## Support matrix
 
-Version 0.1.0 targets PixiJS 8.20.0 and PixiJS 7.4.3.
+Version 0.1.1 targets PixiJS 8.20.0 and PixiJS 7.4.3.
 
 | Platform       | PixiJS 8 WebGPU | PixiJS 8 WebGL | PixiJS 7 WebGL | Audio         | Video                  |
 | -------------- | --------------- | -------------- | -------------- | ------------- | ---------------------- |
@@ -71,6 +71,26 @@ pnpm add @matjazprijatelj/pixi-native
 npm selects the matching x64 native package. A launcher can use both Pixi
 majors from one installation, but each display must run in a separate Node.js
 process and import one Pixi major.
+
+## Create a starter project
+
+The quickboot package creates a small TypeScript project with Sprite, Graphics,
+Text, ticker animation, resize handling, and managed teardown:
+
+```sh
+pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu
+cd my-display
+pnpm install
+pnpm dev
+```
+
+Use `--backend webgl` for PixiJS 8 WebGL. Create a PixiJS 7 project with
+`--pixi 7`; its backend is WebGL. Omit options in an interactive terminal to
+answer prompts.
+
+The generated project uses Node.js watch mode for source reloads, `tsc` for the
+production build, and Prettier for formatting. The generator writes the files
+and prints the next commands without installing dependencies.
 
 ## PixiJS 8 quick start
 

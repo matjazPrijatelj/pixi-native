@@ -20,6 +20,9 @@ import {
 import { computeSourceFingerprint } from "./release-source-fingerprint.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const releaseVersion = JSON.parse(
+  await readFile(resolve(root, "package.json"), "utf8"),
+).version;
 const artifactsDirectory = resolve(root, "artifacts");
 const temporaryRoot = resolve(root, ".tmp");
 const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
@@ -35,7 +38,7 @@ if (!nativePackageName) {
   throw new Error(`Distribution packing supports only ${nativeTarget}.`);
 }
 const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
-const PACKAGE_NAMES = ["pixi-native", nativePackageName];
+const PACKAGE_NAMES = ["pixi-native", "create-pixi-native", nativePackageName];
 const DOCUMENTATION_FILES = [
   "README.md",
   "HISTORY.md",
@@ -81,6 +84,14 @@ try {
       await cp(resolve(root, "docs"), resolve(stagePackageRoot, "docs"), {
         recursive: true,
       });
+    } else if (packageName === "create-pixi-native") {
+      for (const filename of ["dist", "templates", "README.md"]) {
+        await cp(
+          resolve(packageRoot, filename),
+          resolve(stagePackageRoot, filename),
+          { recursive: true },
+        );
+      }
     } else {
       for (const filename of [
         "index.cjs",
@@ -164,19 +175,21 @@ execFileSync(
 // An isolated cross-OS checkout can receive the fingerprint from the source checkout.
 const sourceFingerprint =
   process.env.PIXI_NATIVE_SOURCE_FINGERPRINT ?? computeSourceFingerprint(root);
-// The facade is platform-neutral and is published from the Windows manifest.
-// Linux still packs and tests it locally, but contributes only its native archive.
+// Platform-neutral packages are published from the Windows manifest. Linux
+// still packs and tests them locally, but contributes only its native archive.
 const releaseArchives =
   nativeTarget === "linux-x64"
-    ? archives.filter(
-        (archive) => archive.packageName !== "@matjazprijatelj/pixi-native",
+    ? archives.filter((archive) =>
+        archive.packageName.startsWith(
+          "@matjazprijatelj/pixi-native-linux-",
+        ),
       )
     : archives;
 await writeFile(
   resolve(artifactsDirectory, `release-manifest-${nativeTarget}.json`),
   `${JSON.stringify(
     {
-      version: "0.1.0",
+      version: releaseVersion,
       target: nativeTarget,
       sourceFingerprint,
       archives: releaseArchives.map(({ filename, packageName, sha256 }) => ({
@@ -198,7 +211,25 @@ console.log(`FFmpeg source SHA-256: ${sourceChecksum}`);
 
 function validatePackedFiles(packageName, files) {
   const fileSet = new Set(files);
-  const required = packageName.startsWith("native-")
+  const required = packageName === "create-pixi-native"
+    ? [
+        "dist/cli.js",
+        "dist/cli.d.ts",
+        "dist/generator.js",
+        "templates/common/.prettierrc.json",
+        "templates/common/gitignore.template",
+        "templates/common/npmrc.template",
+        "templates/common/package.json.template",
+        "templates/common/prettierignore.template",
+        "templates/common/README.md",
+        "templates/common/tsconfig.build.json",
+        "templates/common/tsconfig.json",
+        "templates/pixi7/src/main.ts",
+        "templates/pixi8/src/main.ts",
+        "README.md",
+        "LICENSE",
+      ]
+    : packageName.startsWith("native-")
     ? [
         "index.cjs",
         "index.d.ts",
@@ -235,11 +266,14 @@ function validatePackedFiles(packageName, files) {
       `${packageName} tarball is missing:\n- ${missing.join("\n- ")}`,
     );
   }
-  const forbidden = files.filter(
-    (filename) =>
-      filename.startsWith("src/") ||
-      (filename.endsWith(".ts") && !filename.endsWith(".d.ts")),
-  );
+  const forbidden = files.filter((filename) => {
+    if (filename.startsWith("src/")) return true;
+    if (!filename.endsWith(".ts") || filename.endsWith(".d.ts")) return false;
+    return !(
+      packageName === "create-pixi-native" &&
+      filename.startsWith("templates/")
+    );
+  });
   if (forbidden.length > 0) {
     throw new Error(
       `${packageName} tarball contains source files:\n- ${forbidden.join("\n- ")}`,

@@ -1,0 +1,34 @@
+{
+  "name": "@matjazprijatelj/create-pixi-native",
+  "version": "0.1.1",
+  "description": "Create a minimal Pixi Native project for PixiJS 7 or 8",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Matjaz Prijatelj"
+  },
+  "engines": {
+    "node": ">=24.13.0 <25"
+  },
+  "bin": {
+    "create-pixi-native": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matjazPrijatelj/pixi-native.git",
+    "directory": "packages/create-pixi-native"
+  },
+  "homepage": "https://github.com/matjazPrijatelj/pixi-native#readme",
+  "bugs": {
+    "url": "https://github.com/matjazPrijatelj/pixi-native/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

@@ -2,14 +2,19 @@
 
 ## Package set
 
-A release publishes one facade package and two platform packages:
+A release publishes a project generator, one facade package, and two platform
+packages:
 
+- `@matjazprijatelj/create-pixi-native`
 - `@matjazprijatelj/pixi-native`
 - `@matjazprijatelj/pixi-native-win32-x64`
 - `@matjazprijatelj/pixi-native-linux-x64`
 
 Install the facade package. Its optional dependencies select the native package
 for the current operating system and x64 architecture.
+
+The generator creates PixiJS 7 or 8 TypeScript projects. It has no runtime
+dependencies and works on both supported platforms.
 
 ## GitHub Packages installation
 
@@ -26,6 +31,12 @@ Install the package in the launcher root:
 
 ```sh
 pnpm add @matjazprijatelj/pixi-native
+```
+
+Create a starter project:
+
+```sh
+pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu
 ```
 
 The root import and `/pixi8` use PixiJS 8. `/pixi7` uses PixiJS 7. Run displays
@@ -46,10 +57,10 @@ native artifacts, creates npm archives and SHA-256 files, and installs the
 archives into a fresh production consumer. It uses existing native addons and
 FFmpeg binaries. It does not run a native build.
 
-Windows produces the facade and Windows native archives. Linux produces the
-facade and Linux native archives. The platform manifests must contain the same
-version and source fingerprint before publication. Use the facade archive from
-the release host and test that same archive with each native package.
+Each host builds and tests the generator, facade, and its native archive. The
+Windows manifest contributes both platform-neutral archives and the Windows
+native archive. The Linux manifest contributes the Linux native archive. Both
+manifests must contain the same version and source fingerprint.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
 checkout after the Windows archive exists:
@@ -80,8 +91,8 @@ pnpm publish:github:check
 ```
 
 Set a classic personal access token with `write:packages` in
-`GITHUB_PACKAGES_TOKEN`. The publisher requires a clean `v0.1.0` release commit,
-both platform manifests, all three archives, and matching checksums. It uses an
+`GITHUB_PACKAGES_TOKEN`. The publisher requires a clean `v0.1.1` release commit,
+both platform manifests, all four archives, and matching checksums. It uses an
 isolated npm configuration and does not print the token.
 
 Publish with an explicit command:
@@ -90,7 +101,7 @@ Publish with an explicit command:
 pnpm publish:github
 ```
 
-GitHub creates new packages as private. Change all three package pages to
+GitHub creates new packages as private. Change all four package pages to
 Public after publication. The source repository may remain private; package
 consumers still need a token for GitHub's npm registry.
 

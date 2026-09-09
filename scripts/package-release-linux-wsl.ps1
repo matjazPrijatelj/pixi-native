@@ -13,9 +13,11 @@ $nodeVersion = "24.15.0"
 $nodeArchive = "node-v$nodeVersion-linux-x64.tar.xz"
 $nodeArchiveSha256 = "472655581fb851559730c48763e0c9d3bc25975c59d518003fc0849d3e4ba0f6"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$version = (Get-Content -LiteralPath (Join-Path $repositoryRoot "package.json") -Raw | ConvertFrom-Json).version
 $temporaryDirectory = Join-Path $repositoryRoot ".tmp"
 $sourceArchive = Join-Path $temporaryDirectory "linux-release-source.tar"
-$facadeArchive = Join-Path $repositoryRoot "artifacts\matjazprijatelj-pixi-native-0.1.0.tgz"
+$facadeArchive = Join-Path $repositoryRoot "artifacts\matjazprijatelj-pixi-native-$version.tgz"
+$generatorArchive = Join-Path $repositoryRoot "artifacts\matjazprijatelj-create-pixi-native-$version.tgz"
 $ffmpegSourceArchive = Join-Path $repositoryRoot "artifacts\ffmpeg-source-8.0-140fd653ae.tar.gz"
 $ffmpegSourceChecksum = "$ffmpegSourceArchive.sha256"
 $wslArguments = @()
@@ -45,8 +47,27 @@ function Invoke-WslCommand {
     }
 }
 
+function Get-Sha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 foreach ($requiredFile in @(
     $facadeArchive,
+    $generatorArchive,
     $ffmpegSourceArchive,
     $ffmpegSourceChecksum
 )) {
@@ -102,7 +123,8 @@ try {
         "packages/native-linux-x64/native" `
         "artifacts/ffmpeg-source-8.0-140fd653ae.tar.gz" `
         "artifacts/ffmpeg-source-8.0-140fd653ae.tar.gz.sha256" `
-        "artifacts/matjazprijatelj-pixi-native-0.1.0.tgz"
+        "artifacts/matjazprijatelj-pixi-native-$version.tgz" `
+        "artifacts/matjazprijatelj-create-pixi-native-$version.tgz"
     if ($LASTEXITCODE -ne 0) {
         throw "Could not add Linux native and release inputs to the WSL archive."
     }
@@ -152,7 +174,6 @@ env $environment corepack pnpm install --frozen-lockfile
 env $environment corepack pnpm pack:dist
 "@
 
-    $version = (Get-Content -LiteralPath (Join-Path $repositoryRoot "package.json") -Raw | ConvertFrom-Json).version
     $linuxArchiveName = "matjazprijatelj-pixi-native-linux-x64-$version.tgz"
     Invoke-WslCommand @"
 set -e
@@ -161,15 +182,22 @@ cp $quotedCheckout/artifacts/$linuxArchiveName.sha256 $(ConvertTo-BashLiteral "$
 cp $quotedCheckout/artifacts/release-manifest-linux-x64.json $(ConvertTo-BashLiteral "$wslRepositoryRoot/artifacts/release-manifest-linux-x64.json")
 "@
 
-    $windowsFacadeHash = (Get-FileHash -LiteralPath $facadeArchive -Algorithm SHA256).Hash
+    $windowsFacadeHash = Get-Sha256 $facadeArchive
     $linuxFacadeHash = (& wsl.exe @wslArguments -- sha256sum "$Checkout/artifacts/matjazprijatelj-pixi-native-$version.tgz").Split()[0]
     if ($LASTEXITCODE -ne 0 -or $windowsFacadeHash -ne $linuxFacadeHash) {
         throw "Windows and Linux produced different facade archives."
     }
 
+    $windowsGeneratorHash = Get-Sha256 $generatorArchive
+    $linuxGeneratorHash = (& wsl.exe @wslArguments -- sha256sum "$Checkout/artifacts/matjazprijatelj-create-pixi-native-$version.tgz").Split()[0]
+    if ($LASTEXITCODE -ne 0 -or $windowsGeneratorHash -ne $linuxGeneratorHash) {
+        throw "Windows and Linux produced different generator archives."
+    }
+
     Write-Host "Linux release package and manifest copied to artifacts/."
     Write-Host "Source fingerprint: $sourceFingerprint"
     Write-Host "Shared facade SHA-256: $($windowsFacadeHash.ToLowerInvariant())"
+    Write-Host "Shared generator SHA-256: $($windowsGeneratorHash.ToLowerInvariant())"
 }
 finally {
     Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue

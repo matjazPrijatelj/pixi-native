@@ -24,6 +24,21 @@ npm selects the matching Windows or Linux x64 native dependency. The root
 import uses PixiJS 8. Use `/pixi7` for a PixiJS 7 display. A launcher can run
 both generations from one installation when each display has its own process.
 
+## Generate a project
+
+Create a PixiJS 8 WebGPU starter after configuring GitHub Packages:
+
+```sh
+pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu
+cd my-display
+pnpm install
+pnpm dev
+```
+
+The generator also accepts `--backend webgl`. Use `--pixi 7` for the PixiJS 7
+WebGL template. Generated projects use Node watch mode during development,
+TypeScript for compiled output, and Prettier for formatting.
+
 ## PixiJS 8
 
 Import Pixi and the native helpers from the same facade:

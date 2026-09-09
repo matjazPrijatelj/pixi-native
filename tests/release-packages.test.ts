@@ -10,8 +10,9 @@ import {
 
 const REPOSITORY_ROOT = new URL("..", import.meta.url);
 
-test("public package metadata defines one facade and two native packages", async () => {
+test("public package metadata defines the generator, facade, and native packages", async () => {
   const packagePaths = [
+    "packages/create-pixi-native/package.json",
     "packages/pixi-native/package.json",
     "packages/native-win32-x64/package.json",
     "packages/native-linux-x64/package.json",
@@ -28,6 +29,7 @@ test("public package metadata defines one facade and two native packages", async
     });
   }
   assert.deepEqual(names, [
+    "@matjazprijatelj/create-pixi-native",
     "@matjazprijatelj/pixi-native",
     "@matjazprijatelj/pixi-native-win32-x64",
     "@matjazprijatelj/pixi-native-linux-x64",
@@ -49,8 +51,8 @@ test("facade exports root Pixi 8 and explicit version and core paths", async () 
     assert.ok(manifest.exports[path], path);
   }
   assert.deepEqual(manifest.optionalDependencies, {
-    "@matjazprijatelj/pixi-native-linux-x64": "0.1.0",
-    "@matjazprijatelj/pixi-native-win32-x64": "0.1.0",
+    "@matjazprijatelj/pixi-native-linux-x64": "0.1.1",
+    "@matjazprijatelj/pixi-native-win32-x64": "0.1.1",
   });
 });
 

@@ -2,19 +2,22 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { computeSourceFingerprint } from "./release-source-fingerprint.mjs";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS_DIRECTORY = resolve(REPOSITORY_ROOT, "artifacts");
 const REGISTRY = "https://npm.pkg.github.com";
-const VERSION = "0.1.0";
+const VERSION = JSON.parse(
+  await readFile(resolve(REPOSITORY_ROOT, "package.json"), "utf8"),
+).version;
 const TAG = `v${VERSION}`;
 const EXPECTED_PACKAGES = [
   "@matjazprijatelj/pixi-native-win32-x64",
   "@matjazprijatelj/pixi-native-linux-x64",
   "@matjazprijatelj/pixi-native",
+  "@matjazprijatelj/create-pixi-native",
 ];
 const NPM_INVOCATION = getNpmInvocation();
 
@@ -29,7 +32,13 @@ export function getNpmInvocation(
     command: execPath,
     argumentPrefix: [
       "--use-system-ca",
-      resolve(dirname(execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+      win32.resolve(
+        win32.dirname(execPath),
+        "node_modules",
+        "npm",
+        "bin",
+        "npm-cli.js",
+      ),
     ],
   };
 }
@@ -186,7 +195,7 @@ async function loadReleaseArchives() {
     EXPECTED_PACKAGES.some((name) => !entries.has(name))
   ) {
     throw new Error(
-      "Release manifests do not contain the three expected packages.",
+      "Release manifests do not contain the four expected packages.",
     );
   }
 

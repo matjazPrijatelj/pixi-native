@@ -83,6 +83,8 @@ importers:
 
   packages/native-linux-x64: {}
 
+  packages/create-pixi-native: {}
+
   packages/pixi-native:
     dependencies:
       "@kmamal/sdl":
@@ -105,10 +107,10 @@ importers:
         version: pixi.js@7.4.3
     optionalDependencies:
       "@matjazprijatelj/pixi-native-linux-x64":
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../native-linux-x64
       "@matjazprijatelj/pixi-native-win32-x64":
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../native-win32-x64
 
   packages/pixi7:

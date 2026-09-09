@@ -27,7 +27,7 @@ guarantee.
 
 ## Release status
 
-Version 0.1.0 is a pre-release under the MIT License.
+Version 0.1.1 is a pre-release under the MIT License.
 
 Return to the [project README](../README.md). The package archive includes this
 documentation because the GitHub repository may require access.

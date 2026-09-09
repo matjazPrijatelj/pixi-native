@@ -1,0 +1,26 @@
+{
+  "name": "{{PROJECT_NAME}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --watch-kill-signal=SIGTERM --enable-source-maps src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --enable-source-maps dist/main.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@matjazprijatelj/pixi-native": "{{PACKAGE_VERSION}}"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.21",
+    "prettier": "3.9.6",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=24.13.0 <25"
+  },
+  "packageManager": "pnpm@9.15.9"
+}

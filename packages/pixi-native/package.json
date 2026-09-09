@@ -1,6 +1,6 @@
 {
   "name": "@matjazprijatelj/pixi-native",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PixiJS 7 and 8 rendering in native Node.js windows with WebGPU, WebGL, audio, and video",
   "type": "module",
   "license": "MIT",
@@ -118,8 +118,8 @@
     "pixi.js-v7": "npm:pixi.js@7.4.3"
   },
   "optionalDependencies": {
-    "@matjazprijatelj/pixi-native-linux-x64": "0.1.0",
-    "@matjazprijatelj/pixi-native-win32-x64": "0.1.0"
+    "@matjazprijatelj/pixi-native-linux-x64": "0.1.1",
+    "@matjazprijatelj/pixi-native-win32-x64": "0.1.1"
   },
   "repository": {
     "type": "git",

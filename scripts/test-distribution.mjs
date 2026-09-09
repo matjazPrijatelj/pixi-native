@@ -1,5 +1,5 @@
-import { execSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFileSync, execSync } from "node:child_process";
+import { access, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,23 +18,24 @@ const installCommand = [
 ]
   .filter(Boolean)
   .join(" ");
-if (archiveArguments.length !== 2) {
-  throw new Error("Expected the facade and one native package archive");
+if (archiveArguments.length !== 3) {
+  throw new Error("Expected the generator, facade, and one native package archive");
 }
 
 const archives = new Map(
   archiveArguments.map((argument) => {
     const path = resolve(argument);
     const filename = basename(path);
-    const key =
-      filename.includes("native-win32-x64") ||
-      filename.includes("native-linux-x64")
+    const key = filename.includes("create-pixi-native")
+      ? "generator"
+      : filename.includes("native-win32-x64") ||
+          filename.includes("native-linux-x64")
         ? "native"
         : "facade";
     return [key, path];
   }),
 );
-for (const key of ["facade", "native"]) {
+for (const key of ["generator", "facade", "native"]) {
   if (!archives.has(key)) throw new Error(`Missing ${key} archive`);
 }
 
@@ -56,8 +57,10 @@ const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
 const testDirectory = await mkdtemp(join(tmpdir(), "pn-"));
 const localFacadeArchive = join(testDirectory, "p.tgz");
 const localNativeArchive = join(testDirectory, "n.tgz");
+const localGeneratorArchive = join(testDirectory, "g.tgz");
 await cp(archives.get("facade"), localFacadeArchive);
 await cp(archives.get("native"), localNativeArchive);
+await cp(archives.get("generator"), localGeneratorArchive);
 const toFileSpecifier = (path) =>
   `file:${relative(testDirectory, path).replaceAll("\\", "/")}`;
 
@@ -69,7 +72,7 @@ try {
     `${JSON.stringify(
       {
         name: oppositeNativePackageName,
-        version: "0.1.0",
+        version: "0.1.1",
         os: [oppositeNativeTarget.split("-")[0]],
         cpu: ["x64"],
       },
@@ -83,6 +86,9 @@ try {
     type: "module",
     packageManager: "pnpm@9.15.9",
     dependencies: {
+      "@matjazprijatelj/create-pixi-native": toFileSpecifier(
+        localGeneratorArchive,
+      ),
       "@matjazprijatelj/pixi-native": toFileSpecifier(localFacadeArchive),
       [nativePackageName]: toFileSpecifier(localNativeArchive),
     },
@@ -201,6 +207,49 @@ try {
   );
   if (containsPackage(productionGraph, "gsap")) {
     throw new Error("GSAP must not be installed in the production fixture");
+  }
+  const generatorEntry = resolve(
+    testDirectory,
+    "node_modules",
+    "@matjazprijatelj",
+    "create-pixi-native",
+    "dist",
+    "cli.js",
+  );
+  const generatedProjects = [
+    { directory: "generated-v7", arguments: ["--pixi", "7"] },
+    {
+      directory: "generated-v8",
+      arguments: ["--pixi", "8", "--backend", "webgpu"],
+    },
+  ];
+  for (const project of generatedProjects) {
+    execFileSync(
+      process.execPath,
+      [generatorEntry, project.directory, ...project.arguments],
+      { cwd: testDirectory, stdio: "inherit" },
+    );
+    const projectDirectory = resolve(testDirectory, project.directory);
+    execFileSync(
+      process.execPath,
+      [
+        resolve(repositoryRoot, "node_modules/typescript/bin/tsc"),
+        "-p",
+        "tsconfig.build.json",
+      ],
+      { cwd: projectDirectory, stdio: "inherit" },
+    );
+    execFileSync(
+      process.execPath,
+      [
+        resolve(repositoryRoot, "node_modules/prettier/bin/prettier.cjs"),
+        "--check",
+        ".",
+      ],
+      { cwd: projectDirectory, stdio: "inherit" },
+    );
+    await access(resolve(projectDirectory, "dist", "main.js"));
+    await access(resolve(projectDirectory, "assets", "pixi-native.png"));
   }
   execSync("node smoke-root.mjs", { cwd: testDirectory, stdio: "inherit" });
   execSync("node smoke-v7.mjs", { cwd: testDirectory, stdio: "inherit" });

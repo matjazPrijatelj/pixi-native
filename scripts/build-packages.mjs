@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tsc = resolve(root, "node_modules", "typescript", "bin", "tsc");
-const packageNames = ["core", "pixi7", "pixi8"];
+const packageNames = ["core", "pixi7", "pixi8", "create-pixi-native"];
 
 for (const packageName of packageNames) {
   const packageRoot = resolve(root, "packages", packageName);

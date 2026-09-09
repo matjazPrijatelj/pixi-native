@@ -1,12 +1,12 @@
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "target": "linux-x64",
-  "sourceFingerprint": "416b3dfb0de45f17e6834d1bb8a691d44903d6e9f21e7ed715f785d5e7cdff62",
+  "sourceFingerprint": "a97ddd502edf5018da35f39abe5037547f7b5eea777279d71dead55cca7aacf2",
   "archives": [
     {
-      "filename": "matjazprijatelj-pixi-native-linux-x64-0.1.0.tgz",
+      "filename": "matjazprijatelj-pixi-native-linux-x64-0.1.1.tgz",
       "packageName": "@matjazprijatelj/pixi-native-linux-x64",
-      "sha256": "2205183ac578b8acef37338529973fd27eb7e05784016d271ebacf154d8192ad"
+      "sha256": "b03a89667215d1a7d798904d09ef67c60a4b2a43b8ac12163d46f05c79de7157"
     }
   ],
   "ffmpegSource": {

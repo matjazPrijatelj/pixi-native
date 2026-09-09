@@ -20,5 +20,6 @@
     "src/**/*.d.ts",
     "packages/**/*.ts",
     "tests/**/*.ts"
-  ]
+  ],
+  "exclude": ["packages/create-pixi-native/templates/**"]
 }
