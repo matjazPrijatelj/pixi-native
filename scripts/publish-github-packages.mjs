@@ -9,17 +9,47 @@ import { computeSourceFingerprint } from "./release-source-fingerprint.mjs";
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS_DIRECTORY = resolve(REPOSITORY_ROOT, "artifacts");
 const REGISTRY = "https://npm.pkg.github.com";
-const VERSION = JSON.parse(
+const generatorMode = process.argv.slice(2).includes("--generator");
+const runtimeVersion = JSON.parse(
   await readFile(resolve(REPOSITORY_ROOT, "package.json"), "utf8"),
 ).version;
-const TAG = `v${VERSION}`;
-const EXPECTED_PACKAGES = [
-  "@matjazprijatelj/pixi-native-win32-x64",
-  "@matjazprijatelj/pixi-native-linux-x64",
-  "@matjazprijatelj/pixi-native",
-  "@matjazprijatelj/create-pixi-native",
-];
+const generatorVersion = JSON.parse(
+  await readFile(
+    resolve(REPOSITORY_ROOT, "packages/create-pixi-native/package.json"),
+    "utf8",
+  ),
+).version;
+const releaseConfiguration = getReleaseConfiguration(
+  generatorMode,
+  runtimeVersion,
+  generatorVersion,
+);
+const VERSION = releaseConfiguration.version;
+const TAG = releaseConfiguration.tag;
+const EXPECTED_PACKAGES = releaseConfiguration.expectedPackages;
 const NPM_INVOCATION = getNpmInvocation();
+
+export function getReleaseConfiguration(
+  useGenerator,
+  runtimePackageVersion,
+  generatorPackageVersion,
+) {
+  return useGenerator
+    ? {
+        version: generatorPackageVersion,
+        tag: `create-pixi-native-v${generatorPackageVersion}`,
+        expectedPackages: ["@matjazprijatelj/create-pixi-native"],
+      }
+    : {
+        version: runtimePackageVersion,
+        tag: `v${runtimePackageVersion}`,
+        expectedPackages: [
+          "@matjazprijatelj/pixi-native-win32-x64",
+          "@matjazprijatelj/pixi-native-linux-x64",
+          "@matjazprijatelj/pixi-native",
+        ],
+      };
+}
 
 export function getNpmInvocation(
   platform = process.platform,
@@ -156,6 +186,25 @@ function assertGitReleaseState() {
 }
 
 async function loadReleaseArchives() {
+  if (generatorMode) {
+    const releaseManifest = JSON.parse(
+      await readFile(
+        resolve(
+          ARTIFACTS_DIRECTORY,
+          "release-manifest-create-pixi-native.json",
+        ),
+        "utf8",
+      ),
+    );
+    if (
+      releaseManifest.version !== VERSION ||
+      releaseManifest.sourceFingerprint !==
+        computeSourceFingerprint(REPOSITORY_ROOT)
+    ) {
+      throw new Error("Invalid generator release manifest.");
+    }
+    return loadArchiveEntries([releaseManifest.archive]);
+  }
   const manifests = await Promise.all(
     ["win32-x64", "linux-x64"].map(async (target) => {
       const path = resolve(
@@ -190,13 +239,18 @@ async function loadReleaseArchives() {
       entries.set(archive.packageName, archive);
     }
   }
+  return loadArchiveEntries([...entries.values()]);
+}
+
+async function loadArchiveEntries(archiveEntries) {
+  const entries = new Map(
+    archiveEntries.map((entry) => [entry.packageName, entry]),
+  );
   if (
     entries.size !== EXPECTED_PACKAGES.length ||
     EXPECTED_PACKAGES.some((name) => !entries.has(name))
   ) {
-    throw new Error(
-      "Release manifests do not contain the four expected packages.",
-    );
+    throw new Error("Release manifests do not contain the expected packages.");
   }
 
   const archives = [];

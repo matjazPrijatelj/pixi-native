@@ -2,16 +2,25 @@
 
 ## Package set
 
-A release publishes a project generator, one facade package, and two platform
-packages:
+Runtime releases publish one facade package and two platform packages in
+lockstep:
 
-- `@matjazprijatelj/create-pixi-native`
 - `@matjazprijatelj/pixi-native`
 - `@matjazprijatelj/pixi-native-win32-x64`
 - `@matjazprijatelj/pixi-native-linux-x64`
 
-Install the facade package. Its optional dependencies select the native package
-for the current operating system and x64 architecture.
+`@matjazprijatelj/create-pixi-native` has an independent release version and
+release tag.
+
+Install the facade and the selected Pixi peer. The facade's optional native
+dependencies select the package for the current operating system and x64
+architecture:
+
+```sh
+pnpm add @matjazprijatelj/pixi-native pixi.js@^8.20.0
+# PixiJS 7 instead:
+pnpm add @matjazprijatelj/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
+```
 
 The generator creates PixiJS 7 or 8 TypeScript projects. It has no runtime
 dependencies and works on both supported platforms.
@@ -25,12 +34,6 @@ personal access token with `read:packages` and expose it as
 ```ini
 @matjazprijatelj:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
-```
-
-Install the package in the launcher root:
-
-```sh
-pnpm add @matjazprijatelj/pixi-native
 ```
 
 Create a starter project:
@@ -57,10 +60,22 @@ native artifacts, creates npm archives and SHA-256 files, and installs the
 archives into a fresh production consumer. It uses existing native addons and
 FFmpeg binaries. It does not run a native build.
 
-Each host builds and tests the generator, facade, and its native archive. The
-Windows manifest contributes both platform-neutral archives and the Windows
-native archive. The Linux manifest contributes the Linux native archive. Both
-manifests must contain the same version and source fingerprint.
+Each host builds and tests the facade and its native archive. The Windows
+manifest contributes the facade and Windows native archive. The Linux manifest
+contributes the Linux native archive. Both manifests must contain the same
+runtime version and source fingerprint.
+
+Pack and validate the independently versioned generator separately:
+
+```sh
+pnpm pack:generator
+```
+
+This produces the `0.1.0` generator archive and its package-specific release
+manifest, checks the packed CLI version, and verifies that PixiJS 7 and 8
+templates contain only their selected Pixi dependency while both target runtime
+`0.1.1`. It installs, typechecks, and builds both projects in fresh temporary
+consumers outside the workspace.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
 checkout after the Windows archive exists:
@@ -91,9 +106,10 @@ pnpm publish:github:check
 ```
 
 Set a classic personal access token with `write:packages` in
-`GITHUB_PACKAGES_TOKEN`. The publisher requires a clean `v0.1.1` release commit,
-both platform manifests, all four archives, and matching checksums. It uses an
-isolated npm configuration and does not print the token.
+`GITHUB_PACKAGES_TOKEN`. The runtime publisher requires a clean `v0.1.1`
+release commit, both platform manifests, all three runtime archives, and
+matching checksums. It uses an isolated npm configuration and does not print
+the token.
 
 Publish with an explicit command:
 
@@ -101,9 +117,16 @@ Publish with an explicit command:
 pnpm publish:github
 ```
 
-GitHub creates new packages as private. Change all four package pages to
-Public after publication. The source repository may remain private; package
-consumers still need a token for GitHub's npm registry.
+The generator uses its own `create-pixi-native-v0.1.0` tag and preflight:
+
+```sh
+pnpm publish:generator:github:check
+pnpm publish:generator:github
+```
+
+GitHub creates new packages as private. Change each package page to Public
+after publication. The source repository may remain private; package consumers
+still need a token for GitHub's npm registry.
 
 ## Platform contents
 

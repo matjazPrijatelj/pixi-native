@@ -22,22 +22,16 @@ importers:
       "@node-3d/glfw":
         specifier: 7.3.1
         version: 7.3.1
-      pixi.js:
-        specifier: 8.20.0
-        version: 8.20.0
-      pixi.js-v7:
-        specifier: npm:pixi.js@7.4.3
-        version: pixi.js@7.4.3
     devDependencies:
-      "@pixi-native/core":
-        specifier: workspace:*
-        version: link:packages/core
       "@matjazprijatelj/pixi-native-linux-x64":
         specifier: workspace:*
         version: link:packages/native-linux-x64
       "@matjazprijatelj/pixi-native-win32-x64":
         specifier: workspace:*
         version: link:packages/native-win32-x64
+      "@pixi-native/core":
+        specifier: workspace:*
+        version: link:packages/core
       "@pixi-native/pixi7":
         specifier: workspace:*
         version: link:packages/pixi7
@@ -50,6 +44,12 @@ importers:
       gsap:
         specifier: ^3.15.0
         version: 3.15.0
+      pixi.js:
+        specifier: 8.20.0
+        version: 8.20.0
+      pixi.js-v7:
+        specifier: npm:pixi.js@7.4.3
+        version: pixi.js@7.4.3
       prettier:
         specifier: 3.2.5
         version: 3.2.5
@@ -79,11 +79,11 @@ importers:
         specifier: workspace:*
         version: link:../native-win32-x64
 
-  packages/native-win32-x64: {}
+  packages/create-pixi-native: {}
 
   packages/native-linux-x64: {}
 
-  packages/create-pixi-native: {}
+  packages/native-win32-x64: {}
 
   packages/pixi-native:
     dependencies:
@@ -100,10 +100,10 @@ importers:
         specifier: 7.3.1
         version: 7.3.1
       pixi.js:
-        specifier: 8.20.0
+        specifier: ^8.20.0
         version: 8.20.0
       pixi.js-v7:
-        specifier: npm:pixi.js@7.4.3
+        specifier: npm:pixi.js@^7.4.3
         version: pixi.js@7.4.3
     optionalDependencies:
       "@matjazprijatelj/pixi-native-linux-x64":
@@ -118,13 +118,13 @@ importers:
       "@napi-rs/canvas":
         specifier: 1.0.8
         version: 1.0.8
-      pixi.js-v7:
-        specifier: npm:pixi.js@7.4.3
-        version: pixi.js@7.4.3
     devDependencies:
       "@pixi-native/core":
         specifier: workspace:*
         version: link:../core
+      pixi.js-v7:
+        specifier: npm:pixi.js@7.4.3
+        version: pixi.js@7.4.3
 
   packages/pixi8:
     dependencies:
@@ -134,13 +134,13 @@ importers:
       "@napi-rs/canvas":
         specifier: 1.0.8
         version: 1.0.8
-      pixi.js:
-        specifier: 8.20.0
-        version: 8.20.0
     devDependencies:
       "@pixi-native/core":
         specifier: workspace:*
         version: link:../core
+      pixi.js:
+        specifier: 8.20.0
+        version: 8.20.0
 
 packages:
   "@isaacs/fs-minipass@4.0.1":

@@ -16,6 +16,7 @@
     "docs",
     "LICENSE",
     "README.md",
+    "pixi-hero.png",
     "HISTORY.md",
     "THIRD_PARTY_NOTICES.md"
   ],
@@ -113,9 +114,19 @@
     "@kmamal/sdl": "0.11.13",
     "@napi-rs/canvas": "1.0.8",
     "@node-3d/core": "6.3.0",
-    "@node-3d/glfw": "7.3.1",
-    "pixi.js": "8.20.0",
-    "pixi.js-v7": "npm:pixi.js@7.4.3"
+    "@node-3d/glfw": "7.3.1"
+  },
+  "peerDependencies": {
+    "pixi.js": "^8.20.0",
+    "pixi.js-v7": "npm:pixi.js@^7.4.3"
+  },
+  "peerDependenciesMeta": {
+    "pixi.js": {
+      "optional": true
+    },
+    "pixi.js-v7": {
+      "optional": true
+    }
   },
   "optionalDependencies": {
     "@matjazprijatelj/pixi-native-linux-x64": "0.1.1",

@@ -6,7 +6,7 @@ import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-    PACKAGE_VERSION,
+    GENERATOR_VERSION,
     createProject,
     type PixiMajor,
     type RendererBackend,
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
         return;
     }
     if (parsed.version) {
-        console.log(PACKAGE_VERSION);
+        console.log(GENERATOR_VERSION);
         return;
     }
 

@@ -17,12 +17,16 @@ Use a classic GitHub personal access token with `read:packages`, then install
 the facade package:
 
 ```sh
-pnpm add @matjazprijatelj/pixi-native
+pnpm add @matjazprijatelj/pixi-native pixi.js@^8.20.0
+# PixiJS 7 instead:
+pnpm add @matjazprijatelj/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
 ```
 
-npm selects the matching Windows or Linux x64 native dependency. The root
-import uses PixiJS 8. Use `/pixi7` for a PixiJS 7 display. A launcher can run
-both generations from one installation when each display has its own process.
+npm selects the matching Windows or Linux x64 native dependency. Pixi itself is
+an optional peer: install only the major used by the display. The root import
+uses PixiJS 8. Use `/pixi7` for a PixiJS 7 display. A launcher can install both
+Pixi dependencies and run both generations when each display has its own
+process.
 
 ## Generate a project
 

@@ -17,7 +17,6 @@ $version = (Get-Content -LiteralPath (Join-Path $repositoryRoot "package.json") 
 $temporaryDirectory = Join-Path $repositoryRoot ".tmp"
 $sourceArchive = Join-Path $temporaryDirectory "linux-release-source.tar"
 $facadeArchive = Join-Path $repositoryRoot "artifacts\matjazprijatelj-pixi-native-$version.tgz"
-$generatorArchive = Join-Path $repositoryRoot "artifacts\matjazprijatelj-create-pixi-native-$version.tgz"
 $ffmpegSourceArchive = Join-Path $repositoryRoot "artifacts\ffmpeg-source-8.0-140fd653ae.tar.gz"
 $ffmpegSourceChecksum = "$ffmpegSourceArchive.sha256"
 $wslArguments = @()
@@ -67,7 +66,6 @@ function Get-Sha256 {
 
 foreach ($requiredFile in @(
     $facadeArchive,
-    $generatorArchive,
     $ffmpegSourceArchive,
     $ffmpegSourceChecksum
 )) {
@@ -123,8 +121,7 @@ try {
         "packages/native-linux-x64/native" `
         "artifacts/ffmpeg-source-8.0-140fd653ae.tar.gz" `
         "artifacts/ffmpeg-source-8.0-140fd653ae.tar.gz.sha256" `
-        "artifacts/matjazprijatelj-pixi-native-$version.tgz" `
-        "artifacts/matjazprijatelj-create-pixi-native-$version.tgz"
+        "artifacts/matjazprijatelj-pixi-native-$version.tgz"
     if ($LASTEXITCODE -ne 0) {
         throw "Could not add Linux native and release inputs to the WSL archive."
     }
@@ -188,16 +185,9 @@ cp $quotedCheckout/artifacts/release-manifest-linux-x64.json $(ConvertTo-BashLit
         throw "Windows and Linux produced different facade archives."
     }
 
-    $windowsGeneratorHash = Get-Sha256 $generatorArchive
-    $linuxGeneratorHash = (& wsl.exe @wslArguments -- sha256sum "$Checkout/artifacts/matjazprijatelj-create-pixi-native-$version.tgz").Split()[0]
-    if ($LASTEXITCODE -ne 0 -or $windowsGeneratorHash -ne $linuxGeneratorHash) {
-        throw "Windows and Linux produced different generator archives."
-    }
-
     Write-Host "Linux release package and manifest copied to artifacts/."
     Write-Host "Source fingerprint: $sourceFingerprint"
     Write-Host "Shared facade SHA-256: $($windowsFacadeHash.ToLowerInvariant())"
-    Write-Host "Shared generator SHA-256: $($windowsGeneratorHash.ToLowerInvariant())"
 }
 finally {
     Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue

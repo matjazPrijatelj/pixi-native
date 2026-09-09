@@ -14,7 +14,7 @@ if (!(globalThis as any).navigator) {
     configurable: true,
   });
 }
-const { Assets, BitmapFont } = await import("pixi.js");
+const { Assets, BitmapFont, Sprite } = await import("pixi.js");
 const { createApp } = await import("@pixi-native/pixi8");
 const backend = process.argv[2];
 if (backend !== "webgpu" && backend !== "webgl") {
@@ -76,6 +76,9 @@ const drumTexturePath = fileURLToPath(
 const rainDropTexturePath = fileURLToPath(
   new URL("../assets/rain-drop-30.png", import.meta.url),
 );
+const backgroundTexturePath = fileURLToPath(
+  new URL("../assets/pixi-hero.png", import.meta.url),
+);
 const transparentVideoPath = fileURLToPath(
   new URL(
     "../assets/transparent-video/video_combined_0.5.mp4",
@@ -89,6 +92,23 @@ const spriteTextures = (await Promise.all(
 )) as [Texture, Texture, Texture];
 const drumTexture = await Assets.load(drumTexturePath);
 const rainDropTexture = await Assets.load(rainDropTexturePath);
+const background = new Sprite(await Assets.load(backgroundTexturePath));
+background.anchor.set(0.5);
+background.alpha = 0.28;
+background.eventMode = "none";
+background.zIndex = -100;
+
+const resizeBackground = (): void => {
+  const scale = Math.max(
+    native.canvas.width / background.texture.width,
+    native.canvas.height / background.texture.height,
+  );
+  background.position.set(native.canvas.width / 2, native.canvas.height / 2);
+  background.scale.set(scale);
+};
+
+resizeBackground();
+app.stage.addChild(background);
 
 const videos = [
   { file: "jerneja_en_doubleZero.mp4", fps: 30 },
@@ -108,7 +128,9 @@ const videos = [
 
 const videoPaths = filterVideoAssets(videos, (file) =>
   fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
-).map(({ file }) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)));
+).map(({ file }) =>
+  fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
+);
 const availableVideos = videos.filter((_video) =>
   videoPaths.includes(
     fileURLToPath(new URL(`../assets/${_video.file}`, import.meta.url)),
@@ -228,6 +250,7 @@ const selectVideo = (nextVideoIndex: number): void => {
 };
 
 const resizeActiveScene = (): void => {
+  resizeBackground();
   const resizable = scene as typeof scene & {
     resize?: (width: number, height: number) => void;
   };
@@ -340,10 +363,13 @@ const stopActiveScene = (): void => {
   (scene as typeof scene & { dispose?: () => void }).dispose?.();
 };
 
-addDestroyListener(() => {
+addDestroyListener(async () => {
   stopActiveScene();
   particleEmitter.destroy();
   Howler.unload();
+  app.stage.removeChild(background);
+  background.destroy();
+  await Assets.unload(backgroundTexturePath);
 });
 
 const RESTART_EXIT_CODE = 75;

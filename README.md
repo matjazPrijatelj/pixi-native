@@ -9,6 +9,8 @@ applications do not need a browser, WebView, or CEF process.
 > Version 0.1.1 is a pre-release. The API and native package layout may change
 > before 1.0.
 
+![Pixi Native architecture and supported platforms](pixi-hero.png)
+
 ## What is included
 
 - PixiJS 8 with WebGPU or WebGL, plus PixiJS 7 with WebGL.
@@ -62,15 +64,18 @@ Add the registry to the consumer's `.npmrc`:
 //npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
 ```
 
-Install the facade package:
+Install the facade package together with the Pixi major used by the display:
 
 ```sh
-pnpm add @matjazprijatelj/pixi-native
+pnpm add @matjazprijatelj/pixi-native pixi.js@^8.20.0
+# PixiJS 7 instead:
+pnpm add @matjazprijatelj/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
 ```
 
-npm selects the matching x64 native package. A launcher can use both Pixi
-majors from one installation, but each display must run in a separate Node.js
-process and import one Pixi major.
+npm selects the matching x64 native package. The facade declares both Pixi
+majors as optional peers and does not install either one. A launcher that uses
+both majors can install both commands' Pixi dependencies, but each display must
+run in a separate Node.js process and import one Pixi major.
 
 ## Create a starter project
 

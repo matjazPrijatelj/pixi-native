@@ -23,13 +23,14 @@
   },
   "dependencies": {
     "@kmamal/sdl": "0.11.13",
-    "@napi-rs/canvas": "1.0.8",
-    "pixi.js": "8.20.0"
+    "@napi-rs/canvas": "1.0.8"
   },
   "peerDependencies": {
-    "@pixi-native/core": "0.1.1"
+    "@pixi-native/core": "0.1.1",
+    "pixi.js": "^8.20.0"
   },
   "devDependencies": {
-    "@pixi-native/core": "workspace:*"
+    "@pixi-native/core": "workspace:*",
+    "pixi.js": "8.20.0"
   }
 }

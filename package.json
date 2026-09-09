@@ -26,9 +26,12 @@
     "test": "node --test tests/*.test.ts",
     "package:prepare": "pnpm typecheck && pnpm test && pnpm build && node scripts/validate-native-artifacts.mjs",
     "pack:dist": "node scripts/pack-distribution.mjs",
+    "pack:generator": "node scripts/pack-generator.mjs",
     "pack:dist:linux:wsl": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release-linux-wsl.ps1",
     "publish:github:check": "node scripts/publish-github-packages.mjs --check",
     "publish:github": "node scripts/publish-github-packages.mjs",
+    "publish:generator:github:check": "node scripts/publish-github-packages.mjs --generator --check",
+    "publish:generator:github": "node scripts/publish-github-packages.mjs --generator",
     "prepack": "node scripts/reject-workspace-pack.mjs",
     "format": "prettier --write ."
   },
@@ -36,9 +39,7 @@
     "@kmamal/sdl": "0.11.13",
     "@napi-rs/canvas": "1.0.8",
     "@node-3d/core": "6.3.0",
-    "@node-3d/glfw": "7.3.1",
-    "pixi.js": "8.20.0",
-    "pixi.js-v7": "npm:pixi.js@7.4.3"
+    "@node-3d/glfw": "7.3.1"
   },
   "devDependencies": {
     "@pixi-native/core": "workspace:*",
@@ -48,6 +49,8 @@
     "@pixi-native/pixi8": "workspace:*",
     "@types/node": "22.15.21",
     "gsap": "^3.15.0",
+    "pixi.js": "8.20.0",
+    "pixi.js-v7": "npm:pixi.js@7.4.3",
     "prettier": "3.2.5",
     "typescript": "7.0.2"
   },

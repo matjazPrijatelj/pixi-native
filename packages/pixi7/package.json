@@ -22,13 +22,14 @@
     "./canvas": "./src/canvas.ts"
   },
   "dependencies": {
-    "@napi-rs/canvas": "1.0.8",
-    "pixi.js-v7": "npm:pixi.js@7.4.3"
+    "@napi-rs/canvas": "1.0.8"
   },
   "peerDependencies": {
-    "@pixi-native/core": "0.1.1"
+    "@pixi-native/core": "0.1.1",
+    "pixi.js-v7": "npm:pixi.js@^7.4.3"
   },
   "devDependencies": {
-    "@pixi-native/core": "workspace:*"
+    "@pixi-native/core": "workspace:*",
+    "pixi.js-v7": "npm:pixi.js@7.4.3"
   }
 }

@@ -12,7 +12,8 @@ export interface CreateProjectOptions {
     readonly cwd?: string;
 }
 
-export const PACKAGE_VERSION = "0.1.1";
+export const GENERATOR_VERSION = "0.1.0";
+export const PIXI_NATIVE_VERSION = "0.1.1";
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 const PROJECT_NAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const GENERATED_ASSET = Buffer.from(
@@ -49,7 +50,10 @@ export async function createProject(options: CreateProjectOptions): Promise<stri
         PROJECT_NAME: projectName,
         PIXI_MAJOR: options.pixi,
         BACKEND: options.backend,
-        PACKAGE_VERSION,
+        PIXI_NATIVE_VERSION,
+        PIXI_PACKAGE_NAME: options.pixi === "7" ? "pixi.js-v7" : "pixi.js",
+        PIXI_PACKAGE_VERSION:
+            options.pixi === "7" ? "npm:pixi.js@^7.4.3" : "^8.20.0",
     });
     return targetDirectory;
 }

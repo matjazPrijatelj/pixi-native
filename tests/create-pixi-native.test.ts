@@ -9,7 +9,11 @@ import {
     parseCliArguments,
     resolveCliArguments,
 } from "../packages/create-pixi-native/src/cli.ts";
-import { createProject } from "../packages/create-pixi-native/src/generator.ts";
+import {
+    GENERATOR_VERSION,
+    PIXI_NATIVE_VERSION,
+    createProject,
+} from "../packages/create-pixi-native/src/generator.ts";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -27,6 +31,25 @@ test("quickboot parses explicit Pixi and backend options", () => {
     assert.throws(
         () => parseCliArguments(["display", "--pixi", "9"]),
         /--pixi must be 7 or 8/,
+    );
+});
+
+test("quickboot keeps generator and runtime versions independent", () => {
+    assert.equal(GENERATOR_VERSION, "0.1.0");
+    assert.equal(PIXI_NATIVE_VERSION, "0.1.1");
+    assert.equal(
+        execFileSync(
+            process.execPath,
+            [
+                resolve(
+                    REPOSITORY_ROOT,
+                    "packages/create-pixi-native/src/cli.ts",
+                ),
+                "--version",
+            ],
+            { encoding: "utf8" },
+        ).trim(),
+        GENERATOR_VERSION,
     );
 });
 
@@ -79,9 +102,30 @@ test("quickboot fixes PixiJS 7 to WebGL", async () => {
 test("quickboot generates version-specific projects without credentials", async () => {
     const fixture = await mkdtemp(join(tmpdir(), "create-pixi-native-"));
     try {
-        for (const [directory, pixi, backend, importPath] of [
-            ["display-v8", "8", "webgl", "@matjazprijatelj/pixi-native"],
-            ["display-v7", "7", "webgl", "@matjazprijatelj/pixi-native/pixi7"],
+        for (const [
+            directory,
+            pixi,
+            backend,
+            importPath,
+            pixiPackage,
+            pixiVersion,
+        ] of [
+            [
+                "display-v8",
+                "8",
+                "webgl",
+                "@matjazprijatelj/pixi-native",
+                "pixi.js",
+                "^8.20.0",
+            ],
+            [
+                "display-v7",
+                "7",
+                "webgl",
+                "@matjazprijatelj/pixi-native/pixi7",
+                "pixi.js-v7",
+                "npm:pixi.js@^7.4.3",
+            ],
         ] as const) {
             const target = await createProject({
                 targetDirectory: directory,
@@ -94,7 +138,17 @@ test("quickboot generates version-specific projects without credentials", async 
             );
             const source = await readFile(join(target, "src", "main.ts"), "utf8");
             const npmrc = await readFile(join(target, ".npmrc"), "utf8");
-            assert.equal(manifest.dependencies["@matjazprijatelj/pixi-native"], "0.1.1");
+            assert.equal(
+                manifest.dependencies["@matjazprijatelj/pixi-native"],
+                PIXI_NATIVE_VERSION,
+            );
+            assert.equal(manifest.dependencies[pixiPackage], pixiVersion);
+            assert.deepEqual(
+                Object.keys(manifest.dependencies).filter((name) =>
+                    name.startsWith("pixi.js"),
+                ),
+                [pixiPackage],
+            );
             assert.equal(manifest.devDependencies.prettier, "3.9.6");
             assert.match(manifest.scripts.dev, /node --watch .*src\/main\.ts/);
             assert.ok(source.includes(`from "${importPath}"`));

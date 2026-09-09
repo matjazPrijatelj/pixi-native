@@ -13,6 +13,18 @@ export interface NpmInvocation {
   readonly argumentPrefix: readonly string[];
 }
 
+export interface ReleaseConfiguration {
+  readonly version: string;
+  readonly tag: string;
+  readonly expectedPackages: readonly string[];
+}
+
+export function getReleaseConfiguration(
+  useGenerator: boolean,
+  runtimePackageVersion: string,
+  generatorPackageVersion: string,
+): ReleaseConfiguration;
+
 export function getNpmInvocation(
   platform?: NodeJS.Platform,
   execPath?: string,

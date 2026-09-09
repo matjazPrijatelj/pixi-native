@@ -38,9 +38,10 @@ if (!nativePackageName) {
   throw new Error(`Distribution packing supports only ${nativeTarget}.`);
 }
 const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
-const PACKAGE_NAMES = ["pixi-native", "create-pixi-native", nativePackageName];
+const PACKAGE_NAMES = ["pixi-native", nativePackageName];
 const DOCUMENTATION_FILES = [
   "README.md",
+  "pixi-hero.png",
   "HISTORY.md",
   "THIRD_PARTY_NOTICES.md",
 ];
@@ -84,14 +85,6 @@ try {
       await cp(resolve(root, "docs"), resolve(stagePackageRoot, "docs"), {
         recursive: true,
       });
-    } else if (packageName === "create-pixi-native") {
-      for (const filename of ["dist", "templates", "README.md"]) {
-        await cp(
-          resolve(packageRoot, filename),
-          resolve(stagePackageRoot, filename),
-          { recursive: true },
-        );
-      }
     } else {
       for (const filename of [
         "index.cjs",
@@ -180,9 +173,7 @@ const sourceFingerprint =
 const releaseArchives =
   nativeTarget === "linux-x64"
     ? archives.filter((archive) =>
-        archive.packageName.startsWith(
-          "@matjazprijatelj/pixi-native-linux-",
-        ),
+        archive.packageName.startsWith("@matjazprijatelj/pixi-native-linux-"),
       )
     : archives;
 await writeFile(
@@ -211,25 +202,7 @@ console.log(`FFmpeg source SHA-256: ${sourceChecksum}`);
 
 function validatePackedFiles(packageName, files) {
   const fileSet = new Set(files);
-  const required = packageName === "create-pixi-native"
-    ? [
-        "dist/cli.js",
-        "dist/cli.d.ts",
-        "dist/generator.js",
-        "templates/common/.prettierrc.json",
-        "templates/common/gitignore.template",
-        "templates/common/npmrc.template",
-        "templates/common/package.json.template",
-        "templates/common/prettierignore.template",
-        "templates/common/README.md",
-        "templates/common/tsconfig.build.json",
-        "templates/common/tsconfig.json",
-        "templates/pixi7/src/main.ts",
-        "templates/pixi8/src/main.ts",
-        "README.md",
-        "LICENSE",
-      ]
-    : packageName.startsWith("native-")
+  const required = packageName.startsWith("native-")
     ? [
         "index.cjs",
         "index.d.ts",
@@ -253,6 +226,7 @@ function validatePackedFiles(packageName, files) {
         "dist/pixi7/index.d.ts",
         "dist/pixi8/index.js",
         "dist/pixi8/index.d.ts",
+        "pixi-hero.png",
         "docs/README.md",
         "docs/getting-started.md",
         "docs/application-and-api.md",
@@ -269,10 +243,7 @@ function validatePackedFiles(packageName, files) {
   const forbidden = files.filter((filename) => {
     if (filename.startsWith("src/")) return true;
     if (!filename.endsWith(".ts") || filename.endsWith(".d.ts")) return false;
-    return !(
-      packageName === "create-pixi-native" &&
-      filename.startsWith("templates/")
-    );
+    return true;
   });
   if (forbidden.length > 0) {
     throw new Error(

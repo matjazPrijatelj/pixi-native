@@ -1,6 +1,6 @@
 {
   "name": "@matjazprijatelj/create-pixi-native",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Create a minimal Pixi Native project for PixiJS 7 or 8",
   "type": "module",
   "license": "MIT",

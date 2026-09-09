@@ -1,5 +1,13 @@
 import { execFileSync, execSync } from "node:child_process";
-import { access, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,24 +26,23 @@ const installCommand = [
 ]
   .filter(Boolean)
   .join(" ");
-if (archiveArguments.length !== 3) {
-  throw new Error("Expected the generator, facade, and one native package archive");
+if (archiveArguments.length !== 2) {
+  throw new Error("Expected the facade and one native package archive");
 }
 
 const archives = new Map(
   archiveArguments.map((argument) => {
     const path = resolve(argument);
     const filename = basename(path);
-    const key = filename.includes("create-pixi-native")
-      ? "generator"
-      : filename.includes("native-win32-x64") ||
-          filename.includes("native-linux-x64")
+    const key =
+      filename.includes("native-win32-x64") ||
+      filename.includes("native-linux-x64")
         ? "native"
         : "facade";
     return [key, path];
   }),
 );
-for (const key of ["generator", "facade", "native"]) {
+for (const key of ["facade", "native"]) {
   if (!archives.has(key)) throw new Error(`Missing ${key} archive`);
 }
 
@@ -55,12 +62,11 @@ const oppositeNativeTarget =
   nativeTarget === "linux-x64" ? "win32-x64" : "linux-x64";
 const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
 const testDirectory = await mkdtemp(join(tmpdir(), "pn-"));
+const generatedRoot = await mkdtemp(join(tmpdir(), "pixi-native-generated-"));
 const localFacadeArchive = join(testDirectory, "p.tgz");
 const localNativeArchive = join(testDirectory, "n.tgz");
-const localGeneratorArchive = join(testDirectory, "g.tgz");
 await cp(archives.get("facade"), localFacadeArchive);
 await cp(archives.get("native"), localNativeArchive);
-await cp(archives.get("generator"), localGeneratorArchive);
 const toFileSpecifier = (path) =>
   `file:${relative(testDirectory, path).replaceAll("\\", "/")}`;
 
@@ -86,10 +92,9 @@ try {
     type: "module",
     packageManager: "pnpm@9.15.9",
     dependencies: {
-      "@matjazprijatelj/create-pixi-native": toFileSpecifier(
-        localGeneratorArchive,
-      ),
       "@matjazprijatelj/pixi-native": toFileSpecifier(localFacadeArchive),
+      "pixi.js": "8.20.0",
+      "pixi.js-v7": "npm:pixi.js@7.4.3",
       [nativePackageName]: toFileSpecifier(localNativeArchive),
     },
     pnpm: {
@@ -208,48 +213,52 @@ try {
   if (containsPackage(productionGraph, "gsap")) {
     throw new Error("GSAP must not be installed in the production fixture");
   }
-  const generatorEntry = resolve(
-    testDirectory,
-    "node_modules",
-    "@matjazprijatelj",
-    "create-pixi-native",
-    "dist",
-    "cli.js",
-  );
-  const generatedProjects = [
-    { directory: "generated-v7", arguments: ["--pixi", "7"] },
+  for (const project of [
+    {
+      directory: "generated-v7",
+      pixiPackage: "pixi.js-v7",
+      arguments: ["--pixi", "7"],
+    },
     {
       directory: "generated-v8",
+      pixiPackage: "pixi.js",
       arguments: ["--pixi", "8", "--backend", "webgpu"],
     },
-  ];
-  for (const project of generatedProjects) {
-    execFileSync(
-      process.execPath,
-      [generatorEntry, project.directory, ...project.arguments],
-      { cwd: testDirectory, stdio: "inherit" },
-    );
-    const projectDirectory = resolve(testDirectory, project.directory);
+  ]) {
     execFileSync(
       process.execPath,
       [
-        resolve(repositoryRoot, "node_modules/typescript/bin/tsc"),
-        "-p",
-        "tsconfig.build.json",
+        resolve(repositoryRoot, "packages/create-pixi-native/src/cli.ts"),
+        project.directory,
+        ...project.arguments,
       ],
-      { cwd: projectDirectory, stdio: "inherit" },
+      { cwd: generatedRoot, stdio: "inherit" },
     );
-    execFileSync(
-      process.execPath,
-      [
-        resolve(repositoryRoot, "node_modules/prettier/bin/prettier.cjs"),
-        "--check",
-        ".",
-      ],
-      { cwd: projectDirectory, stdio: "inherit" },
+    const projectDirectory = resolve(generatedRoot, project.directory);
+    const manifestPath = resolve(projectDirectory, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const pixiDependencies = Object.keys(manifest.dependencies).filter((name) =>
+      name.startsWith("pixi.js"),
     );
+    if (
+      manifest.dependencies["@matjazprijatelj/pixi-native"] !== "0.1.1" ||
+      pixiDependencies.length !== 1 ||
+      pixiDependencies[0] !== project.pixiPackage
+    ) {
+      throw new Error(`${project.directory} has invalid runtime dependencies`);
+    }
+    manifest.pnpm = {
+      overrides: {
+        "@matjazprijatelj/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
+        [nativePackageName]: `file:${localNativeArchive.replaceAll("\\", "/")}`,
+        [oppositeNativePackageName]: `file:${oppositeNativeStub.replaceAll("\\", "/")}`,
+      },
+    };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    execSync(installCommand, { cwd: projectDirectory, stdio: "inherit" });
+    execSync("pnpm typecheck", { cwd: projectDirectory, stdio: "inherit" });
+    execSync("pnpm build", { cwd: projectDirectory, stdio: "inherit" });
     await access(resolve(projectDirectory, "dist", "main.js"));
-    await access(resolve(projectDirectory, "assets", "pixi-native.png"));
   }
   execSync("node smoke-root.mjs", { cwd: testDirectory, stdio: "inherit" });
   execSync("node smoke-v7.mjs", { cwd: testDirectory, stdio: "inherit" });
@@ -296,6 +305,7 @@ try {
   console.log("Verified the facade package with both Pixi majors.");
 } finally {
   await rm(testDirectory, { recursive: true, force: true });
+  await rm(generatedRoot, { recursive: true, force: true });
 }
 
 function createRuntimeSmoke(packageName, major) {

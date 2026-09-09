@@ -2,11 +2,21 @@
 
 ## 2026-09-09
 
+- Added the Pixi Native hero artwork to the main documentation and packaged
+  facade. PixiJS 7 and 8 demos now use the supplied demo copy as a dimmed,
+  cover-scaled background that follows native window resizing.
+- Split PixiJS from the published facade's runtime dependencies into optional
+  peers (`pixi.js@^8.20.0` and the `pixi.js-v7` alias for `^7.4.3`). Generated
+  projects now install only their selected Pixi major. The development workspace
+  and private facades retain exact tested Pixi versions.
+- Gave `@matjazprijatelj/create-pixi-native` its independent `0.1.0` version,
+  archive, release manifest, publisher preflight, and
+  `create-pixi-native-v0.1.0` tag while runtime/native packages remain lockstep
+  at `0.1.1` under the existing runtime release flow.
 - Added `@matjazprijatelj/create-pixi-native`, a PixiJS 7/8 TypeScript project
   generator with WebGPU/WebGL selection, Node.js watch reloads, production
   TypeScript builds, Prettier commands, and a small Sprite/Graphics/Text smoke
-  application. Added the generator to the guarded four-package `0.1.1` release
-  flow without invoking a native build.
+  application. Its packaging does not invoke a native build.
 - Fixed the Windows GitHub Packages publisher to invoke npm through Node's
   `npm-cli.js` instead of spawning the `npm.cmd` shim. Publisher subprocesses
   now use the Windows system CA store and report their actual spawn, TLS, or

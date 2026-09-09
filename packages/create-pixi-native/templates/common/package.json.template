@@ -12,7 +12,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@matjazprijatelj/pixi-native": "{{PACKAGE_VERSION}}"
+    "@matjazprijatelj/pixi-native": "{{PIXI_NATIVE_VERSION}}",
+    "{{PIXI_PACKAGE_NAME}}": "{{PIXI_PACKAGE_VERSION}}"
   },
   "devDependencies": {
     "@types/node": "22.15.21",
