@@ -1,9 +1,9 @@
 {
-  "version": "0.1.1",
-  "sourceFingerprint": "76c214c59838d2e109786f24ec549996980850eb0074dab5b650a53cfd71c4c6",
+  "version": "0.1.2",
+  "sourceFingerprint": "db995ae796dc9e4f3fd91b6813cc4b8bb5584384fdf28845f13071d5ebe64a40",
   "archive": {
-    "filename": "matjazprijatelj-create-pixi-native-0.1.1.tgz",
+    "filename": "matjazprijatelj-create-pixi-native-0.1.2.tgz",
     "packageName": "@matjazprijatelj/create-pixi-native",
-    "sha256": "2fce8c62ec7df61ca340087bfe86e72e4fae253322e17417dbc62a9d2e744102"
+    "sha256": "0f5df54bff97b9bdc8d9f918aaf5e6b94bf77ee9d5671e2640e1a318707abc18"
   }
 }

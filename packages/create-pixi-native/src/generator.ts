@@ -14,16 +14,11 @@ export interface CreateProjectOptions {
     readonly cwd?: string;
 }
 
-export const GENERATOR_VERSION = "0.1.1";
+export const GENERATOR_VERSION = "0.1.2";
 export const PIXI_NATIVE_VERSION = "0.1.1";
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 const PROJECT_NAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const TEXT_TEMPLATE_EXTENSIONS = new Set([".json", ".md", ".template", ".ts"]);
-const GENERATED_ASSET = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZB8sAAAAASUVORK5CYII=",
-    "base64",
-);
-
 const TEMPLATE_RENAMES = new Map([
     ["gitignore.template", ".gitignore"],
     ["npmrc.template", ".npmrc"],
@@ -46,8 +41,6 @@ export async function createProject(options: CreateProjectOptions): Promise<stri
     await copyTemplateDirectory(resolve(TEMPLATE_ROOT, "common"), targetDirectory);
     await copyTemplateDirectory(resolve(TEMPLATE_ROOT, `pixi${options.pixi}`), targetDirectory);
     await copyTemplateDirectory(resolve(TEMPLATE_ROOT, "animation", animation), targetDirectory);
-    await mkdir(resolve(targetDirectory, "assets"), { recursive: true });
-    await writeFile(resolve(targetDirectory, "assets", "pixi-native.png"), GENERATED_ASSET);
     await replaceTemplateTokens(targetDirectory, {
         PROJECT_NAME: projectName,
         PIXI_MAJOR: options.pixi,

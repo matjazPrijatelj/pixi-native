@@ -2,6 +2,10 @@
 
 ## 2026-09-09
 
+- Removed the incompatible generated `pixi-native.png` placeholder from
+  `create-pixi-native` 0.1.2. Generated PixiJS 7 and 8 projects now load only
+  the packaged `pixi-hero.png`, with regression coverage through the same
+  `@node-3d/image` decoder used by the WebGL renderer.
 - Fixed generated binary assets being decoded and rewritten as UTF-8 during
   template token replacement. `create-pixi-native` 0.1.1 now preserves the
   hero PNG byte-for-byte so PixiJS 8 WebGL can load it through

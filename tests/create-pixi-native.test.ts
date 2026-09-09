@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadImage } from "@napi-rs/canvas";
+import { Image as Node3DImage } from "@node-3d/core";
 import { parseCliArguments, resolveCliArguments } from "../packages/create-pixi-native/src/cli.ts";
 import {
     GENERATOR_VERSION,
@@ -33,7 +33,7 @@ test("quickboot parses explicit Pixi and backend options", () => {
 });
 
 test("quickboot keeps generator and runtime versions independent", () => {
-    assert.equal(GENERATOR_VERSION, "0.1.1");
+    assert.equal(GENERATOR_VERSION, "0.1.2");
     assert.equal(PIXI_NATIVE_VERSION, "0.1.1");
     assert.equal(
         execFileSync(
@@ -176,13 +176,15 @@ test("quickboot generates version-specific projects without credentials", async 
             }
             assert.match(npmrc, /\$\{GITHUB_PACKAGES_TOKEN\}/);
             assert.doesNotMatch(npmrc, /github_pat_|ghp_/);
-            assert.ok((await readFile(join(target, "assets", "pixi-native.png"))).length > 0);
+            assert.deepEqual(await readdir(join(target, "assets")), ["pixi-hero.png"]);
             assert.deepEqual(
                 await readFile(join(target, "assets", "pixi-hero.png")),
                 await readFile(join(REPOSITORY_ROOT, "pixi-hero.png")),
             );
             if (pixi === "8" && backend === "webgl" && animation === "ticker") {
-                const hero = await loadImage(join(target, "assets", "pixi-hero.png"));
+                const hero = await Node3DImage.loadAsync(
+                    join(target, "assets", "pixi-hero.png"),
+                );
                 assert.equal(hero.width, 1279);
                 assert.equal(hero.height, 720);
             }
