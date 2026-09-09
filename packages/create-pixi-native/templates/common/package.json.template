@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@matjazprijatelj/pixi-native": "{{PIXI_NATIVE_VERSION}}",
-    "{{PIXI_PACKAGE_NAME}}": "{{PIXI_PACKAGE_VERSION}}"
+    "{{PIXI_PACKAGE_NAME}}": "{{PIXI_PACKAGE_VERSION}}"{{GSAP_DEPENDENCY}}
   },
   "devDependencies": {
     "@types/node": "22.15.21",

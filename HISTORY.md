@@ -2,6 +2,11 @@
 
 ## 2026-09-09
 
+- Added the hero artwork as the generated `create-pixi-native` background with
+  a centered 0.5-to-1.0 yoyo scale animation. The new
+  `--animation <ticker|gsap>` option defaults to the dependency-free Pixi
+  ticker and can generate an optional GSAP example with native modal-frame
+  ticking and managed cleanup for PixiJS 7 or 8.
 - Made the Windows-to-WSL release helper execute multiline Bash commands from
   temporary UTF-8/LF script files. This prevents Windows PowerShell argument
   handling from opening the default interactive WSL shell during Linux

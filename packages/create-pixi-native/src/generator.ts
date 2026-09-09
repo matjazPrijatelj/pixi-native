@@ -4,11 +4,13 @@ import { fileURLToPath } from "node:url";
 
 export type PixiMajor = "7" | "8";
 export type RendererBackend = "webgpu" | "webgl";
+export type AnimationEngine = "ticker" | "gsap";
 
 export interface CreateProjectOptions {
     readonly targetDirectory: string;
     readonly pixi: PixiMajor;
     readonly backend: RendererBackend;
+    readonly animation?: AnimationEngine;
     readonly cwd?: string;
 }
 
@@ -34,16 +36,15 @@ export async function createProject(options: CreateProjectOptions): Promise<stri
     }
 
     const cwd = options.cwd ?? process.cwd();
+    const animation = options.animation ?? "ticker";
     const targetDirectory = resolve(cwd, options.targetDirectory);
     const projectName = basename(targetDirectory);
     validateProjectName(projectName);
     await assertEmptyTarget(targetDirectory);
     await mkdir(targetDirectory, { recursive: true });
     await copyTemplateDirectory(resolve(TEMPLATE_ROOT, "common"), targetDirectory);
-    await copyTemplateDirectory(
-        resolve(TEMPLATE_ROOT, `pixi${options.pixi}`),
-        targetDirectory,
-    );
+    await copyTemplateDirectory(resolve(TEMPLATE_ROOT, `pixi${options.pixi}`), targetDirectory);
+    await copyTemplateDirectory(resolve(TEMPLATE_ROOT, "animation", animation), targetDirectory);
     await mkdir(resolve(targetDirectory, "assets"), { recursive: true });
     await writeFile(resolve(targetDirectory, "assets", "pixi-native.png"), GENERATED_ASSET);
     await replaceTemplateTokens(targetDirectory, {
@@ -52,8 +53,13 @@ export async function createProject(options: CreateProjectOptions): Promise<stri
         BACKEND: options.backend,
         PIXI_NATIVE_VERSION,
         PIXI_PACKAGE_NAME: options.pixi === "7" ? "pixi.js-v7" : "pixi.js",
-        PIXI_PACKAGE_VERSION:
-            options.pixi === "7" ? "npm:pixi.js@^7.4.3" : "^8.20.0",
+        PIXI_PACKAGE_VERSION: options.pixi === "7" ? "npm:pixi.js@^7.4.3" : "^8.20.0",
+        PIXI_IMPORT_PATH:
+            options.pixi === "7"
+                ? "@matjazprijatelj/pixi-native/pixi7"
+                : "@matjazprijatelj/pixi-native",
+        ANIMATION_ENGINE: animation,
+        GSAP_DEPENDENCY: animation === "gsap" ? ',\n    "gsap": "^3.15.0"' : "",
     });
     return targetDirectory;
 }
@@ -98,7 +104,7 @@ async function replaceTemplateTokens(
             await replaceTemplateTokens(sourcePath, values);
             continue;
         }
-        if (entry.name === "pixi-native.png") continue;
+        if (entry.name.endsWith(".png")) continue;
 
         let contents = await readFile(sourcePath, "utf8");
         for (const [name, value] of Object.entries(values)) {

@@ -26,6 +26,7 @@ const expectedFiles = new Set([
   "dist/cli.d.ts",
   "dist/generator.js",
   "templates/common/.prettierrc.json",
+  "templates/common/assets/pixi-hero.png",
   "templates/common/gitignore.template",
   "templates/common/npmrc.template",
   "templates/common/package.json.template",
@@ -35,6 +36,8 @@ const expectedFiles = new Set([
   "templates/common/tsconfig.json",
   "templates/pixi7/src/main.ts",
   "templates/pixi8/src/main.ts",
+  "templates/animation/gsap/src/backgroundAnimation.ts",
+  "templates/animation/ticker/src/backgroundAnimation.ts",
   "README.md",
   "LICENSE",
 ]);
@@ -188,11 +191,20 @@ try {
     );
     nativeOverrides[packageName] = `file:${stubRoot.replaceAll("\\", "/")}`;
   }
-  for (const [directory, pixi, expectedDependency] of [
-    ["pixi7-app", "7", "pixi.js-v7"],
-    ["pixi8-app", "8", "pixi.js"],
+  for (const [directory, pixi, animation, expectedDependency] of [
+    ["pixi7-ticker-app", "7", "ticker", "pixi.js-v7"],
+    ["pixi8-ticker-app", "8", "ticker", "pixi.js"],
+    ["pixi7-gsap-app", "7", "gsap", "pixi.js-v7"],
+    ["pixi8-gsap-app", "8", "gsap", "pixi.js"],
   ]) {
-    const arguments_ = [cliPath, directory, "--pixi", pixi];
+    const arguments_ = [
+      cliPath,
+      directory,
+      "--pixi",
+      pixi,
+      "--animation",
+      animation,
+    ];
     if (pixi === "8") arguments_.push("--backend", "webgpu");
     execFileSync(process.execPath, arguments_, {
       cwd: consumerRoot,
@@ -208,7 +220,9 @@ try {
       generatedManifest.dependencies["@matjazprijatelj/pixi-native"] !==
         "0.1.1" ||
       pixiDependencies.length !== 1 ||
-      pixiDependencies[0] !== expectedDependency
+      pixiDependencies[0] !== expectedDependency ||
+      generatedManifest.dependencies.gsap !==
+        (animation === "gsap" ? "^3.15.0" : undefined)
     ) {
       throw new Error(`${directory} has invalid generated dependencies.`);
     }

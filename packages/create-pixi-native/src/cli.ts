@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import {
     GENERATOR_VERSION,
     createProject,
+    type AnimationEngine,
     type PixiMajor,
     type RendererBackend,
 } from "./generator.ts";
@@ -16,6 +17,7 @@ export interface ParsedCliArguments {
     readonly targetDirectory?: string;
     readonly pixi?: PixiMajor;
     readonly backend?: RendererBackend;
+    readonly animation?: AnimationEngine;
     readonly help: boolean;
     readonly version: boolean;
 }
@@ -29,6 +31,7 @@ export function parseCliArguments(arguments_: readonly string[]): ParsedCliArgum
     let targetDirectory: string | undefined;
     let pixi: PixiMajor | undefined;
     let backend: RendererBackend | undefined;
+    let animation: AnimationEngine | undefined;
     let help = false;
     let version = false;
 
@@ -46,6 +49,10 @@ export function parseCliArguments(arguments_: readonly string[]): ParsedCliArgum
             const value = readOptionValue(argument, arguments_, index);
             if (argument === "--backend") index++;
             backend = parseBackend(value);
+        } else if (argument === "--animation" || argument.startsWith("--animation=")) {
+            const value = readOptionValue(argument, arguments_, index);
+            if (argument === "--animation") index++;
+            animation = parseAnimationEngine(value);
         } else if (argument.startsWith("-")) {
             throw new Error(`Unknown option: ${argument}`);
         } else if (targetDirectory) {
@@ -55,17 +62,23 @@ export function parseCliArguments(arguments_: readonly string[]): ParsedCliArgum
         }
     }
 
-    return { targetDirectory, pixi, backend, help, version };
+    return { targetDirectory, pixi, backend, animation, help, version };
 }
 
 export async function resolveCliArguments(
     parsed: ParsedCliArguments,
     interactive: boolean,
     prompt?: Prompt,
-): Promise<{ targetDirectory: string; pixi: PixiMajor; backend: RendererBackend }> {
+): Promise<{
+    targetDirectory: string;
+    pixi: PixiMajor;
+    backend: RendererBackend;
+    animation: AnimationEngine;
+}> {
     let targetDirectory = parsed.targetDirectory;
     let pixi = parsed.pixi;
     let backend = parsed.backend;
+    let animation = parsed.animation;
 
     if (!interactive && (!targetDirectory || !pixi || (!backend && pixi === "8"))) {
         throw new Error(
@@ -76,11 +89,9 @@ export async function resolveCliArguments(
         throw new Error("Interactive input is unavailable.");
     }
 
-    targetDirectory ||= (await prompt?.question("Project directory [pixi-native-app]: ")) ||
-        "pixi-native-app";
-    pixi ||= parsePixiMajor(
-        (await prompt?.question("PixiJS version (7/8) [8]: ")) || "8",
-    );
+    targetDirectory ||=
+        (await prompt?.question("Project directory [pixi-native-app]: ")) || "pixi-native-app";
+    pixi ||= parsePixiMajor((await prompt?.question("PixiJS version (7/8) [8]: ")) || "8");
     if (pixi === "7") {
         if (backend && backend !== "webgl") {
             throw new Error("PixiJS 7 supports only the WebGL backend.");
@@ -88,11 +99,15 @@ export async function resolveCliArguments(
         backend = "webgl";
     } else {
         backend ||= parseBackend(
-            (await prompt?.question("Renderer backend (webgpu/webgl) [webgpu]: ")) ||
-                "webgpu",
+            (await prompt?.question("Renderer backend (webgpu/webgl) [webgpu]: ")) || "webgpu",
         );
     }
-    return { targetDirectory, pixi, backend };
+    animation ||= parseAnimationEngine(
+        (interactive
+            ? await prompt?.question("Background animation (ticker/gsap) [ticker]: ")
+            : "") || "ticker",
+    );
+    return { targetDirectory, pixi, backend, animation };
 }
 
 async function main(): Promise<void> {
@@ -121,11 +136,7 @@ async function main(): Promise<void> {
     }
 }
 
-function readOptionValue(
-    argument: string,
-    arguments_: readonly string[],
-    index: number,
-): string {
+function readOptionValue(argument: string, arguments_: readonly string[], index: number): string {
     const equalsIndex = argument.indexOf("=");
     const value = equalsIndex >= 0 ? argument.slice(equalsIndex + 1) : arguments_[index + 1];
     if (!value || value.startsWith("-")) {
@@ -148,12 +159,20 @@ function parseBackend(value: string): RendererBackend {
     return value;
 }
 
+function parseAnimationEngine(value: string): AnimationEngine {
+    if (value !== "ticker" && value !== "gsap") {
+        throw new Error("--animation must be ticker or gsap.");
+    }
+    return value;
+}
+
 function printHelp(): void {
     console.log(`Usage: create-pixi-native <directory> [options]
 
 Options:
   --pixi <7|8>                 PixiJS major version
   --backend <webgpu|webgl>     Renderer backend; PixiJS 7 uses WebGL
+  --animation <ticker|gsap>    Background animation; defaults to ticker
   -h, --help                   Show this help
   -v, --version                Show the package version`);
 }

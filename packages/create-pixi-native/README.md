@@ -12,6 +12,14 @@ pnpm dev
 The generator supports PixiJS 8 with WebGPU or WebGL. PixiJS 7 uses WebGL.
 Run the command in a terminal to answer any omitted options interactively.
 
+The generated hero background uses the Pixi ticker by default. Pass
+`--animation gsap` to generate the same 0.5-to-1.0 yoyo animation with GSAP and
+include GSAP as an application dependency:
+
+```sh
+pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu --animation gsap
+```
+
 The generated project uses Node.js 24 watch mode during development, TypeScript
 for production output, and Prettier for formatting. The generator writes no
 credentials and does not install dependencies.

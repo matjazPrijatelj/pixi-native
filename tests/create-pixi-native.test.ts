@@ -5,10 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-    parseCliArguments,
-    resolveCliArguments,
-} from "../packages/create-pixi-native/src/cli.ts";
+import { parseCliArguments, resolveCliArguments } from "../packages/create-pixi-native/src/cli.ts";
 import {
     GENERATOR_VERSION,
     PIXI_NATIVE_VERSION,
@@ -18,20 +15,20 @@ import {
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 test("quickboot parses explicit Pixi and backend options", () => {
-    assert.deepEqual(
-        parseCliArguments(["display", "--pixi", "8", "--backend=webgpu"]),
-        {
-            targetDirectory: "display",
-            pixi: "8",
-            backend: "webgpu",
-            help: false,
-            version: false,
-        },
-    );
+    assert.deepEqual(parseCliArguments(["display", "--pixi", "8", "--backend=webgpu"]), {
+        targetDirectory: "display",
+        pixi: "8",
+        backend: "webgpu",
+        animation: undefined,
+        help: false,
+        version: false,
+    });
+    assert.throws(() => parseCliArguments(["display", "--pixi", "9"]), /--pixi must be 7 or 8/);
     assert.throws(
-        () => parseCliArguments(["display", "--pixi", "9"]),
-        /--pixi must be 7 or 8/,
+        () => parseCliArguments(["display", "--animation", "css"]),
+        /--animation must be ticker or gsap/,
     );
+    assert.equal(parseCliArguments(["display", "--animation=gsap"]).animation, "gsap");
 });
 
 test("quickboot keeps generator and runtime versions independent", () => {
@@ -40,13 +37,7 @@ test("quickboot keeps generator and runtime versions independent", () => {
     assert.equal(
         execFileSync(
             process.execPath,
-            [
-                resolve(
-                    REPOSITORY_ROOT,
-                    "packages/create-pixi-native/src/cli.ts",
-                ),
-                "--version",
-            ],
+            [resolve(REPOSITORY_ROOT, "packages/create-pixi-native/src/cli.ts"), "--version"],
             { encoding: "utf8" },
         ).trim(),
         GENERATOR_VERSION,
@@ -55,18 +46,15 @@ test("quickboot keeps generator and runtime versions independent", () => {
 
 test("quickboot interactive defaults select PixiJS 8 WebGPU", async () => {
     const answers = ["", "", ""];
-    const options = await resolveCliArguments(
-        { help: false, version: false },
-        true,
-        {
-            question: async () => answers.shift() ?? "",
-            close: () => undefined,
-        },
-    );
+    const options = await resolveCliArguments({ help: false, version: false }, true, {
+        question: async () => answers.shift() ?? "",
+        close: () => undefined,
+    });
     assert.deepEqual(options, {
         targetDirectory: "pixi-native-app",
         pixi: "8",
         backend: "webgpu",
+        animation: "ticker",
     });
 });
 
@@ -82,7 +70,12 @@ test("quickboot fixes PixiJS 7 to WebGL", async () => {
             true,
             { question: async () => "", close: () => undefined },
         ),
-        { targetDirectory: "display", pixi: "7", backend: "webgl" },
+        {
+            targetDirectory: "display",
+            pixi: "7",
+            backend: "webgl",
+            animation: "ticker",
+        },
     );
     await assert.rejects(
         resolveCliArguments(
@@ -102,18 +95,12 @@ test("quickboot fixes PixiJS 7 to WebGL", async () => {
 test("quickboot generates version-specific projects without credentials", async () => {
     const fixture = await mkdtemp(join(tmpdir(), "create-pixi-native-"));
     try {
-        for (const [
-            directory,
-            pixi,
-            backend,
-            importPath,
-            pixiPackage,
-            pixiVersion,
-        ] of [
+        for (const [directory, pixi, backend, animation, importPath, pixiPackage, pixiVersion] of [
             [
                 "display-v8",
                 "8",
                 "webgl",
+                "ticker",
                 "@matjazprijatelj/pixi-native",
                 "pixi.js",
                 "^8.20.0",
@@ -122,6 +109,25 @@ test("quickboot generates version-specific projects without credentials", async 
                 "display-v7",
                 "7",
                 "webgl",
+                "ticker",
+                "@matjazprijatelj/pixi-native/pixi7",
+                "pixi.js-v7",
+                "npm:pixi.js@^7.4.3",
+            ],
+            [
+                "display-v8-gsap",
+                "8",
+                "webgpu",
+                "gsap",
+                "@matjazprijatelj/pixi-native",
+                "pixi.js",
+                "^8.20.0",
+            ],
+            [
+                "display-v7-gsap",
+                "7",
+                "webgl",
+                "gsap",
                 "@matjazprijatelj/pixi-native/pixi7",
                 "pixi.js-v7",
                 "npm:pixi.js@^7.4.3",
@@ -131,42 +137,51 @@ test("quickboot generates version-specific projects without credentials", async 
                 targetDirectory: directory,
                 pixi,
                 backend,
+                animation,
                 cwd: fixture,
             });
-            const manifest = JSON.parse(
-                await readFile(join(target, "package.json"), "utf8"),
-            );
+            const manifest = JSON.parse(await readFile(join(target, "package.json"), "utf8"));
             const source = await readFile(join(target, "src", "main.ts"), "utf8");
+            const animationSource = await readFile(
+                join(target, "src", "backgroundAnimation.ts"),
+                "utf8",
+            );
             const npmrc = await readFile(join(target, ".npmrc"), "utf8");
             assert.equal(
                 manifest.dependencies["@matjazprijatelj/pixi-native"],
                 PIXI_NATIVE_VERSION,
             );
             assert.equal(manifest.dependencies[pixiPackage], pixiVersion);
+            assert.equal(manifest.dependencies.gsap, animation === "gsap" ? "^3.15.0" : undefined);
             assert.deepEqual(
-                Object.keys(manifest.dependencies).filter((name) =>
-                    name.startsWith("pixi.js"),
-                ),
+                Object.keys(manifest.dependencies).filter((name) => name.startsWith("pixi.js")),
                 [pixiPackage],
             );
             assert.equal(manifest.devDependencies.prettier, "3.9.6");
             assert.match(manifest.scripts.dev, /node --watch .*src\/main\.ts/);
             assert.ok(source.includes(`from "${importPath}"`));
+            assert.match(source, /assets\/pixi-hero\.png/);
+            assert.ok(animationSource.includes(`from "${importPath}"`));
+            if (animation === "gsap") {
+                assert.match(animationSource, /import\("gsap"\)/);
+                assert.match(animationSource, /addModalFrameListener/);
+            } else {
+                assert.doesNotMatch(animationSource, /gsap/i);
+                assert.match(animationSource, /ANIMATION_PERIOD_MS = 12_000/);
+            }
             assert.match(npmrc, /\$\{GITHUB_PACKAGES_TOKEN\}/);
             assert.doesNotMatch(npmrc, /github_pat_|ghp_/);
-            assert.ok(
-                (await readFile(join(target, "assets", "pixi-native.png"))).length > 0,
-            );
-            execFileSync(
-                process.execPath,
-                [
-                    resolve(REPOSITORY_ROOT, "node_modules/prettier/bin/prettier.cjs"),
-                    "--check",
-                    ".",
-                ],
-                { cwd: target, stdio: "pipe" },
+            assert.ok((await readFile(join(target, "assets", "pixi-native.png"))).length > 0);
+            assert.deepEqual(
+                await readFile(join(target, "assets", "pixi-hero.png")),
+                await readFile(join(REPOSITORY_ROOT, "pixi-hero.png")),
             );
         }
+        execFileSync(
+            process.execPath,
+            [resolve(REPOSITORY_ROOT, "node_modules/prettier/bin/prettier.cjs"), "--check", "."],
+            { cwd: fixture, stdio: "pipe" },
+        );
     } finally {
         await rm(fixture, { recursive: true, force: true });
     }
