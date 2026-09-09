@@ -19,5 +19,7 @@ export function startBackgroundAnimation(runtime: PixiRuntime, background: Sprit
 
     background.scale.set(MINIMUM_SCALE);
     runtime.app.ticker.add(update);
-    runtime.addDestroyListener(() => runtime.app.ticker.remove(update));
+    runtime.addDestroyListener(() => {
+        runtime.app.ticker.remove(update);
+    });
 }

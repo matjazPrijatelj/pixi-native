@@ -2,6 +2,10 @@
 
 ## 2026-09-09
 
+- Fixed generated binary assets being decoded and rewritten as UTF-8 during
+  template token replacement. `create-pixi-native` 0.1.1 now preserves the
+  hero PNG byte-for-byte so PixiJS 8 WebGL can load it through
+  `@node-3d/image` on Windows and Linux.
 - Added the hero artwork as the generated `create-pixi-native` background with
   a centered 0.5-to-1.0 yoyo scale animation. The new
   `--animation <ticker|gsap>` option defaults to the dependency-free Pixi

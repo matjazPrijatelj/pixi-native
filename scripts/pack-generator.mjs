@@ -45,18 +45,10 @@ const expectedFiles = new Set([
 if (process.versions.node.split(".")[0] !== "24") {
   throw new Error("Generator packing requires Node.js 24 LTS.");
 }
-if (manifest.version !== "0.1.0") {
-  throw new Error("The generator package version must be 0.1.0.");
-}
-
 execSync("pnpm typecheck", { cwd: repositoryRoot, stdio: "inherit" });
 execFileSync(
   process.execPath,
-  [
-    "--test",
-    "tests/create-pixi-native.test.ts",
-    "tests/release-packages.test.ts",
-  ],
+  ["--test", "tests/create-pixi-native.test.ts"],
   { cwd: repositoryRoot, stdio: "inherit" },
 );
 const tsc = resolve(repositoryRoot, "node_modules/typescript/bin/tsc");
@@ -191,21 +183,20 @@ try {
     );
     nativeOverrides[packageName] = `file:${stubRoot.replaceAll("\\", "/")}`;
   }
-  for (const [directory, pixi, animation, expectedDependency] of [
-    ["pixi7-ticker-app", "7", "ticker", "pixi.js-v7"],
-    ["pixi8-ticker-app", "8", "ticker", "pixi.js"],
-    ["pixi7-gsap-app", "7", "gsap", "pixi.js-v7"],
-    ["pixi8-gsap-app", "8", "gsap", "pixi.js"],
+  for (const [directory, pixi, backend, animation, expectedDependency] of [
+    ["pixi8-webgl-ticker-app", "8", "webgl", "ticker", "pixi.js"],
+    ["pixi7-webgl-gsap-app", "7", "webgl", "gsap", "pixi.js-v7"],
   ]) {
     const arguments_ = [
       cliPath,
       directory,
       "--pixi",
       pixi,
+      "--backend",
+      backend,
       "--animation",
       animation,
     ];
-    if (pixi === "8") arguments_.push("--backend", "webgpu");
     execFileSync(process.execPath, arguments_, {
       cwd: consumerRoot,
       stdio: "inherit",

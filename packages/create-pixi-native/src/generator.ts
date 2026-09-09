@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type PixiMajor = "7" | "8";
@@ -14,10 +14,11 @@ export interface CreateProjectOptions {
     readonly cwd?: string;
 }
 
-export const GENERATOR_VERSION = "0.1.0";
+export const GENERATOR_VERSION = "0.1.1";
 export const PIXI_NATIVE_VERSION = "0.1.1";
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 const PROJECT_NAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+const TEXT_TEMPLATE_EXTENSIONS = new Set([".json", ".md", ".template", ".ts"]);
 const GENERATED_ASSET = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZB8sAAAAASUVORK5CYII=",
     "base64",
@@ -104,7 +105,8 @@ async function replaceTemplateTokens(
             await replaceTemplateTokens(sourcePath, values);
             continue;
         }
-        if (entry.name.endsWith(".png")) continue;
+        // Only decode known text templates so copied binary assets retain their exact bytes.
+        if (!TEXT_TEMPLATE_EXTENSIONS.has(extname(entry.name))) continue;
 
         let contents = await readFile(sourcePath, "utf8");
         for (const [name, value] of Object.entries(values)) {

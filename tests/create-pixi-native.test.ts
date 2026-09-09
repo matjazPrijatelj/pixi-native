@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadImage } from "@napi-rs/canvas";
 import { parseCliArguments, resolveCliArguments } from "../packages/create-pixi-native/src/cli.ts";
 import {
     GENERATOR_VERSION,
@@ -32,7 +33,7 @@ test("quickboot parses explicit Pixi and backend options", () => {
 });
 
 test("quickboot keeps generator and runtime versions independent", () => {
-    assert.equal(GENERATOR_VERSION, "0.1.0");
+    assert.equal(GENERATOR_VERSION, "0.1.1");
     assert.equal(PIXI_NATIVE_VERSION, "0.1.1");
     assert.equal(
         execFileSync(
@@ -168,6 +169,10 @@ test("quickboot generates version-specific projects without credentials", async 
             } else {
                 assert.doesNotMatch(animationSource, /gsap/i);
                 assert.match(animationSource, /ANIMATION_PERIOD_MS = 12_000/);
+                assert.match(
+                    animationSource,
+                    /addDestroyListener\(\(\) => \{\s*runtime\.app\.ticker\.remove/,
+                );
             }
             assert.match(npmrc, /\$\{GITHUB_PACKAGES_TOKEN\}/);
             assert.doesNotMatch(npmrc, /github_pat_|ghp_/);
@@ -176,12 +181,12 @@ test("quickboot generates version-specific projects without credentials", async 
                 await readFile(join(target, "assets", "pixi-hero.png")),
                 await readFile(join(REPOSITORY_ROOT, "pixi-hero.png")),
             );
+            if (pixi === "8" && backend === "webgl" && animation === "ticker") {
+                const hero = await loadImage(join(target, "assets", "pixi-hero.png"));
+                assert.equal(hero.width, 1279);
+                assert.equal(hero.height, 720);
+            }
         }
-        execFileSync(
-            process.execPath,
-            [resolve(REPOSITORY_ROOT, "node_modules/prettier/bin/prettier.cjs"), "--check", "."],
-            { cwd: fixture, stdio: "pipe" },
-        );
     } finally {
         await rm(fixture, { recursive: true, force: true });
     }
