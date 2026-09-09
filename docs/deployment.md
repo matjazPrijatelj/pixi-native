@@ -2,91 +2,112 @@
 
 ## Package set
 
-A release contains three platform-neutral packages and one native package for
-the operating system used to create it:
+A release publishes one facade package and two platform packages:
 
-- `@pixi-native/core`
-- `@pixi-native/pixi7`
-- `@pixi-native/pixi8`
-- `@pixi-native/native-win32-x64` or `@pixi-native/native-linux-x64`
+- `@matjazprijatelj/pixi-native`
+- `@matjazprijatelj/pixi-native-win32-x64`
+- `@matjazprijatelj/pixi-native-linux-x64`
 
-Install the core, each Pixi facade required by the displays, and one matching
-native package. Node rejects a native package on the wrong operating system or
-architecture.
+Install the facade package. Its optional dependencies select the native package
+for the current operating system and x64 architecture.
 
-## Shared launcher layout
+## GitHub Packages installation
 
-A launcher can host displays built with either Pixi major. Install the shared
-runtime and platform binaries once in the launcher dependency root, then run
-each display as a separate Node.js process:
+GitHub Packages requires authentication for npm installs. Create a classic
+personal access token with `read:packages` and expose it as
+`GITHUB_PACKAGES_TOKEN`. Add this configuration to the consumer's `.npmrc`:
 
-```text
-launcher/
-├─ node_modules/
-│  ├─ @pixi-native/core
-│  ├─ @pixi-native/pixi7
-│  ├─ @pixi-native/pixi8
-│  └─ @pixi-native/native-<platform>-x64
-└─ displays/
-   ├─ legacy-pixi7/
-   └─ current-pixi8/
+```ini
+@matjazprijatelj:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
 ```
 
-Each display imports one version facade. Separate processes keep Pixi
-singletons, extensions, caches, and plugins from crossing major versions while
-sharing one physical copy of the native binaries.
-
-## Registry installation
-
-After the project publishes the packages, install them together in the launcher
-root. For a Windows launcher that uses both Pixi versions:
+Install the package in the launcher root:
 
 ```sh
-pnpm add @pixi-native/core @pixi-native/pixi7 @pixi-native/pixi8 @pixi-native/native-win32-x64
+pnpm add @matjazprijatelj/pixi-native
 ```
 
-Use `@pixi-native/native-linux-x64` on Linux.
-
-The project has not published version 0.1.0 to a public registry, and its
-packages remain `UNLICENSED`. Choose a project license and update package
-publication metadata before an open-source release.
+The root import and `/pixi8` use PixiJS 8. `/pixi7` uses PixiJS 7. Run displays
+that use different Pixi majors in separate Node.js processes so their Pixi
+singletons, extensions, caches, and plugins cannot cross process boundaries.
 
 ## Release archives
 
-Run packaging on the target operating system from the full development
+Run packaging on each target operating system from the full development
 installation:
 
 ```sh
 pnpm pack:dist
 ```
 
-The command runs type checking and tests, compiles the TypeScript packages,
-validates native artifacts, creates npm archives and SHA-256 files, and installs
-the archives into a fresh production consumer. It uses existing native addons
-and FFmpeg binaries. It does not run a native build.
+The command checks types and tests, compiles the TypeScript packages, validates
+native artifacts, creates npm archives and SHA-256 files, and installs the
+archives into a fresh production consumer. It uses existing native addons and
+FFmpeg binaries. It does not run a native build.
 
-Install every generated `.tgz` required by the launcher in one `pnpm add`
-command. Keep the archive versions aligned across core, both Pixi facades, and
-the native package.
+Windows produces the facade and Windows native archives. Linux produces the
+facade and Linux native archives. The platform manifests must contain the same
+version and source fingerprint before publication. Use the facade archive from
+the release host and test that same archive with each native package.
+
+From Windows, the complete Linux pass can be repeated in an isolated WSL
+checkout after the Windows archive exists:
+
+```powershell
+pnpm pack:dist
+pnpm pack:dist:linux:wsl
+```
+
+The WSL helper downloads a pinned Node.js 24 binary when necessary, copies the
+current tracked and untracked source files, stages the existing Linux native
+artifacts, installs Linux dependencies, and runs the same package validation.
+It copies the Linux archive and manifest back to `artifacts/` and requires the
+Linux-built facade to match the Windows facade byte for byte. If FFmpeg reports
+missing shared libraries, install them in WSL or pass their directory with
+`-LinuxLibraryPath`. The helper never invokes `native:build`.
 
 Do not copy the development checkout's pnpm-linked `node_modules` into a
 release. Create a fresh production installation so JavaScript, `.node` addons,
 DLLs, and FFmpeg programs are physical files under the launcher root.
 
+## Publishing
+
+Run the guarded preflight before uploading:
+
+```sh
+pnpm publish:github:check
+```
+
+Set a classic personal access token with `write:packages` in
+`GITHUB_PACKAGES_TOKEN`. The publisher requires a clean `v0.1.0` release commit,
+both platform manifests, all three archives, and matching checksums. It uses an
+isolated npm configuration and does not print the token.
+
+Publish with an explicit command:
+
+```sh
+pnpm publish:github
+```
+
+GitHub creates new packages as private. Change all three package pages to
+Public after publication. The source repository may remain private; package
+consumers still need a token for GitHub's npm registry.
+
 ## Platform contents
 
-| Capability         | Windows 11 x64                           | Linux x64                       |
-| ------------------ | ---------------------------------------- | ------------------------------- |
-| PixiJS 8 WebGPU    | D3D12                                    | Vulkan                          |
-| PixiJS 8 WebGL     | GLFW/OpenGL ES                           | GLFW/OpenGL ES                  |
-| PixiJS 7 WebGL     | GLFW/OpenGL ES                           | GLFW/OpenGL ES                  |
-| Window bridge      | Native window addon                      | Native window addon             |
-| Audio output       | Native WASAPI addon                      | SDL playback                    |
-| Video acceleration | D3D11VA with CPU fallback                | VA-API with CPU fallback        |
-| Media tools        | Packaged `ffmpeg.exe` and `ffprobe.exe`  | Packaged `ffmpeg` and `ffprobe` |
+| Capability         | Windows 11 x64                          | Linux x64                       |
+| ------------------ | --------------------------------------- | ------------------------------- |
+| PixiJS 8 WebGPU    | D3D12                                   | Vulkan                          |
+| PixiJS 8 WebGL     | GLFW/OpenGL ES                          | GLFW/OpenGL ES                  |
+| PixiJS 7 WebGL     | GLFW/OpenGL ES                          | GLFW/OpenGL ES                  |
+| Window bridge      | Native window addon                     | Native window addon             |
+| Audio output       | Native WASAPI addon                     | SDL playback                    |
+| Video acceleration | D3D11VA with CPU fallback               | VA-API with CPU fallback        |
+| Media tools        | Packaged `ffmpeg.exe` and `ffprobe.exe` | Packaged `ffmpeg` and `ffprobe` |
 
-The native resolver fails with a target-specific error when the package or a
-required addon is missing. It does not load an addon for another platform.
+Each native package includes the pinned FFmpeg corresponding-source archive and
+its SHA-256 checksum under `third_party/`.
 
 ## Current limitations
 
@@ -98,5 +119,5 @@ required addon is missing. It does not load an addon for another platform.
 - Live video is non-seekable and supports playback rate `1`.
 - The runtime provides no WebView or browser renderer fallback.
 
-See [Third-party notices](../THIRD_PARTY_NOTICES.md) for the native binary and
+See [Third-party notices](../THIRD_PARTY_NOTICES.md) for native binary and
 FFmpeg redistribution terms.

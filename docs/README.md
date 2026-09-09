@@ -17,9 +17,9 @@ layout.
 - [Deployment](deployment.md) describes release archives, platform packages,
   and a shared launcher installation.
 
-Use `@pixi-native/pixi7` or `@pixi-native/pixi8` as the main import for a
-display. Each process must load one Pixi major. The launcher may install both
-facades because it starts displays as separate Node.js processes.
+Use `@matjazprijatelj/pixi-native/pixi7` or the package root for PixiJS 8 as
+the main import. Each process must load one Pixi major. A launcher may use both
+facades when it starts displays as separate Node.js processes.
 
 The TypeScript declarations shipped with each package define the public API.
 Paths below `dist/` and unexported repository source paths have no compatibility
@@ -27,9 +27,7 @@ guarantee.
 
 ## Release status
 
-Version 0.1.0 is a pre-release and remains `UNLICENSED`. The documentation
-describes the current packages, but an open-source publication still requires a
-chosen license and matching package metadata.
+Version 0.1.0 is a pre-release under the MIT License.
 
-Return to the [project README](../README.md) or open the
-[canonical docs directory](https://github.com/matjazPrijatelj/pixi-native/tree/main/docs).
+Return to the [project README](../README.md). The package archive includes this
+documentation because the GitHub repository may require access.

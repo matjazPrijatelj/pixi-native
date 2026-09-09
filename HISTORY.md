@@ -2,13 +2,31 @@
 
 ## 2026-09-09
 
+- Prepared the 0.1.0 GitHub Packages release under the MIT License. The public
+  API now ships as `@matjazprijatelj/pixi-native`, with PixiJS 8 at the package
+  root and explicit `/pixi8`, `/pixi7`, and `/core` subpaths.
+- Added Windows and Linux x64 optional native packages, facade tarball staging,
+  platform release manifests, FFmpeg corresponding source inside each native
+  archive, and a guarded local GitHub Packages publisher. The publisher checks
+  the release tag, source fingerprint, checksums, metadata, authentication, and
+  immutable registry digests before uploading.
 - Reworked the public README and packaged guides for the 0.1.0 pre-release with
   package contents, Windows/Linux support matrices, registry and tarball setup,
   copyable PixiJS 7/8 examples, API ownership, media limits, deployment, and a
   canonical documentation link.
 - Added dependency acknowledgements, updated the third-party notices for the
-  project-owned GPU addon and both bundled FFmpeg targets, and documented the
-  current `UNLICENSED` publication blocker without changing package metadata.
+  project-owned GPU addon and both bundled FFmpeg targets, and applied the MIT
+  license to the repository and all publication manifests.
+- Verified the Linux x64 build, native addon loading, FFmpeg runtime, and full
+  headless test suite in an isolated WSL checkout. The fresh production install
+  downloads Linux dependencies, loads the packaged addons, and exercises the
+  packaged FFmpeg programs. Both hosts produce the same facade archive.
+- Added a repeatable Windows-to-WSL release helper that provisions pinned
+  Node.js 24 tooling, transfers the current source and existing Linux native
+  artifacts, runs the Linux package checks, and returns the archive and
+  manifest without starting a native build. The source-switch clock test now
+  derives its bound from elapsed time so a loaded clean install remains
+  deterministic.
 - Fixed the Windows distribution audio regression by using the tracked
   120-second AAC fixture for the 15-second streaming test. Audio play waits now
   report native and FFmpeg `playerror` details instead of timing out.

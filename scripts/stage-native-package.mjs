@@ -1,10 +1,22 @@
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = resolve(root, "packages/native-win32-x64");
 const stagedNativeRoot = resolve(packageRoot, "native");
+const temporaryRoot = resolve(root, ".tmp");
 const target = "win32-x64";
 const nativeBinaries = [
   `gpu/dist/${target}/pixi_native_gpu.node`,
@@ -35,25 +47,53 @@ for (const relativePath of nativeBinaries) {
   if (isNativeBinary(binary)) packagedBinaries.set(relativePath, binary);
 }
 
-await rm(stagedNativeRoot, { recursive: true, force: true });
-for (const [source, destination] of sources) {
-  const sourcePath = resolve(root, source);
-  await access(sourcePath);
-  const destinationPath = resolve(packageRoot, destination);
-  await mkdir(dirname(destinationPath), { recursive: true });
-  await cp(sourcePath, destinationPath, { recursive: true });
-}
-for (const relativePath of nativeBinaries) {
-  const destinationPath = resolve(stagedNativeRoot, relativePath);
-  const stagedBinary = await readFile(destinationPath);
-  if (isNativeBinary(stagedBinary)) continue;
-  const packagedBinary = packagedBinaries.get(relativePath);
-  if (!packagedBinary) {
-    throw new Error(
-      `Native artifact is not a Windows binary: ${relativePath}. Run git lfs pull or rebuild it.`,
-    );
+await mkdir(temporaryRoot, { recursive: true });
+const temporaryPackageRoot = await mkdtemp(
+  resolve(temporaryRoot, "stage-native-package-"),
+);
+const temporaryNativeRoot = resolve(temporaryPackageRoot, "native");
+const backupNativeRoot = resolve(temporaryPackageRoot, "previous-native");
+let previousNativeMoved = false;
+try {
+  for (const [source, destination] of sources) {
+    const sourcePath = resolve(root, source);
+    await access(sourcePath);
+    const destinationPath = resolve(temporaryPackageRoot, destination);
+    await mkdir(dirname(destinationPath), { recursive: true });
+    await cp(sourcePath, destinationPath, { recursive: true });
   }
-  await writeFile(destinationPath, packagedBinary);
+  for (const relativePath of nativeBinaries) {
+    const destinationPath = resolve(temporaryNativeRoot, relativePath);
+    const stagedBinary = await readFile(destinationPath);
+    if (isNativeBinary(stagedBinary)) continue;
+    const packagedBinary = packagedBinaries.get(relativePath);
+    if (!packagedBinary) {
+      throw new Error(
+        `Native artifact is not a Windows binary: ${relativePath}. Run git lfs pull or rebuild it.`,
+      );
+    }
+    await writeFile(destinationPath, packagedBinary);
+  }
+  const stagedFingerprint = await fingerprintDirectory(stagedNativeRoot);
+  const candidateFingerprint = await fingerprintDirectory(temporaryNativeRoot);
+  if (stagedFingerprint !== candidateFingerprint) {
+    await rename(stagedNativeRoot, backupNativeRoot);
+    previousNativeMoved = true;
+    try {
+      await rename(temporaryNativeRoot, stagedNativeRoot);
+    } catch (error) {
+      await rename(backupNativeRoot, stagedNativeRoot);
+      previousNativeMoved = false;
+      throw error;
+    }
+    previousNativeMoved = false;
+    await rm(backupNativeRoot, { recursive: true, force: true });
+  }
+} finally {
+  if (previousNativeMoved) {
+    await rename(backupNativeRoot, stagedNativeRoot).catch(() => undefined);
+  }
+  await rm(temporaryPackageRoot, { recursive: true, force: true });
 }
 await cp(
   resolve(root, "THIRD_PARTY_NOTICES.md"),
@@ -62,4 +102,33 @@ await cp(
 
 function isNativeBinary(binary) {
   return binary.length >= 2 && binary[0] === 0x4d && binary[1] === 0x5a;
+}
+
+/** Hashes a staged tree so an identical, possibly loaded Windows tree is left untouched. */
+async function fingerprintDirectory(directory) {
+  const hash = createHash("sha256");
+  await appendDirectory(directory, "", hash);
+  return hash.digest("hex");
+}
+
+async function appendDirectory(directory, relativeDirectory, hash) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    const relativePath = relativeDirectory
+      ? `${relativeDirectory}/${entry.name}`
+      : entry.name;
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await appendDirectory(path, relativePath, hash);
+      continue;
+    }
+    if (!entry.isFile()) {
+      throw new Error(`Unsupported staged native entry: ${relativePath}`);
+    }
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(await readFile(path));
+    hash.update("\0");
+  }
 }

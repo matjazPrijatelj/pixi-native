@@ -1,10 +1,10 @@
 {
   "name": "pixi-native-workspace",
   "version": "0.1.0",
-  "private": false,
+  "private": true,
   "type": "module",
   "author": {
-    "name": "MatjazP",
+    "name": "Matjaz Prijatelj",
     "email": "matjash@gmail.com"
   },
   "scripts": {
@@ -26,6 +26,9 @@
     "test": "node --test tests/*.test.ts",
     "package:prepare": "pnpm typecheck && pnpm test && pnpm build && node scripts/validate-native-artifacts.mjs",
     "pack:dist": "node scripts/pack-distribution.mjs",
+    "pack:dist:linux:wsl": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release-linux-wsl.ps1",
+    "publish:github:check": "node scripts/publish-github-packages.mjs --check",
+    "publish:github": "node scripts/publish-github-packages.mjs",
     "prepack": "node scripts/reject-workspace-pack.mjs",
     "format": "prettier --write ."
   },
@@ -39,8 +42,8 @@
   },
   "devDependencies": {
     "@pixi-native/core": "workspace:*",
-    "@pixi-native/native-linux-x64": "workspace:*",
-    "@pixi-native/native-win32-x64": "workspace:*",
+    "@matjazprijatelj/pixi-native-linux-x64": "workspace:*",
+    "@matjazprijatelj/pixi-native-win32-x64": "workspace:*",
     "@pixi-native/pixi7": "workspace:*",
     "@pixi-native/pixi8": "workspace:*",
     "@types/node": "22.15.21",
@@ -51,7 +54,7 @@
   "engines": {
     "node": ">=24.13.0 <25"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {

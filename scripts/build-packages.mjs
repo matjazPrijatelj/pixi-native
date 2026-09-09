@@ -16,11 +16,13 @@ for (const packageName of packageNames) {
   });
 }
 
-execFileSync(
-  process.execPath,
-  [resolve(root, "scripts/stage-native-package.mjs")],
-  {
-    cwd: root,
-    stdio: "inherit",
-  },
-);
+if (process.platform === "win32") {
+  execFileSync(
+    process.execPath,
+    [resolve(root, "scripts/stage-native-package.mjs")],
+    {
+      cwd: root,
+      stdio: "inherit",
+    },
+  );
+}

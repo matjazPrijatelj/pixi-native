@@ -5,7 +5,7 @@
 Resolve packaged assets from `import.meta.url` instead of `process.cwd()`:
 
 ```ts
-import { createModuleFileAccess } from "@pixi-native/pixi8/files";
+import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";
 
 const files = createModuleFileAccess(import.meta.url);
 const settings = await files.readJson<{ renderer: "webgpu" | "webgl" }>(
@@ -28,7 +28,7 @@ native window.
 Use the standard Pixi asset pipeline after either initializer completes:
 
 ```ts
-import { Assets, Sprite, createApp } from "@pixi-native/pixi8";
+import { Assets, Sprite, createApp } from "@matjazprijatelj/pixi-native";
 
 const runtime = await createApp({ backend: "webgpu" });
 const texture = await Assets.load(imagePath);
@@ -53,7 +53,7 @@ import {
   VideoSprite,
   createApp,
   createModuleFileAccess,
-} from "@pixi-native/pixi8";
+} from "@matjazprijatelj/pixi-native";
 
 const files = createModuleFileAccess(import.meta.url);
 const runtime = await createApp({ backend: "webgpu" });
@@ -108,8 +108,8 @@ RGBA on the CPU.
 The `/audio` entrypoint provides Howler-style `Howl` and `Howler` objects:
 
 ```ts
-import { Howl } from "@pixi-native/pixi8/audio";
-import { createModuleFileAccess } from "@pixi-native/pixi8/files";
+import { Howl } from "@matjazprijatelj/pixi-native/pixi8/audio";
+import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";
 
 const files = createModuleFileAccess(import.meta.url);
 const effects = new Howl({

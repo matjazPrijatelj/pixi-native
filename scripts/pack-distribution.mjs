@@ -5,22 +5,19 @@ import {
   cp,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  FFMPEG_CHECKSUM_FILE,
-  FFMPEG_PACKAGED_FILES,
-  FFMPEG_TARGET_DIRECTORY,
-  getFfmpegDistribution,
-} from "./ffmpeg-distribution.mjs";
+import { getFfmpegDistribution } from "./ffmpeg-distribution.mjs";
 import {
   FFMPEG_SOURCE_ARCHIVE,
   FFMPEG_SOURCE_REVISION,
 } from "./ffmpeg-build-config.mjs";
+import { computeSourceFingerprint } from "./release-source-fingerprint.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsDirectory = resolve(root, "artifacts");
@@ -38,74 +35,24 @@ if (!nativePackageName) {
   throw new Error(`Distribution packing supports only ${nativeTarget}.`);
 }
 const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
-const PACKAGE_NAMES = ["core", "pixi7", "pixi8", nativePackageName];
+const PACKAGE_NAMES = ["pixi-native", nativePackageName];
 const DOCUMENTATION_FILES = [
   "README.md",
   "HISTORY.md",
   "THIRD_PARTY_NOTICES.md",
 ];
 
-const publishedExports = {
-  core: {
-    ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
-    "./audio": {
-      types: "./dist/audio/index.d.ts",
-      default: "./dist/audio/index.js",
-    },
-    "./files": { types: "./dist/files.d.ts", default: "./dist/files.js" },
-    "./runtime": {
-      types: "./dist/runtime.d.ts",
-      default: "./dist/runtime.js",
-    },
-    "./canvas": {
-      types: "./dist/canvas.d.ts",
-      default: "./dist/canvas.js",
-    },
-    "./application/*.js": {
-      types: "./dist/application/*.d.ts",
-      default: "./dist/application/*.js",
-    },
-    "./audio/*.js": {
-      types: "./dist/audio/*.d.ts",
-      default: "./dist/audio/*.js",
-    },
-    "./canvas/*.js": {
-      types: "./dist/canvas/*.d.ts",
-      default: "./dist/canvas/*.js",
-    },
-    "./renderers/*.js": {
-      types: "./dist/renderers/*.d.ts",
-      default: "./dist/renderers/*.js",
-    },
-    "./runtime/*.js": {
-      types: "./dist/runtime/*.d.ts",
-      default: "./dist/runtime/*.js",
-    },
-    "./video/*.js": {
-      types: "./dist/video/*.d.ts",
-      default: "./dist/video/*.js",
-    },
-  },
-  pixi7: createVersionExports(),
-  pixi8: createVersionExports(),
-};
-
-function createVersionExports() {
-  return {
-    ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
-    "./audio": { types: "./dist/audio.d.ts", default: "./dist/audio.js" },
-    "./files": { types: "./dist/files.d.ts", default: "./dist/files.js" },
-    "./runtime": {
-      types: "./dist/runtime.d.ts",
-      default: "./dist/runtime.js",
-    },
-    "./canvas": { types: "./dist/canvas.d.ts", default: "./dist/canvas.js" },
-  };
-}
-
 await mkdir(artifactsDirectory, { recursive: true });
 await mkdir(temporaryRoot, { recursive: true });
 await validateFfmpegSourceArchive();
+const sourceArchivePath = resolve(artifactsDirectory, FFMPEG_SOURCE_ARCHIVE);
+const sourceChecksum = createHash("sha256")
+  .update(await readFile(sourceArchivePath))
+  .digest("hex");
+await writeFile(
+  `${sourceArchivePath}.sha256`,
+  `${sourceChecksum}  ${FFMPEG_SOURCE_ARCHIVE}\n`,
+);
 execSync("pnpm package:prepare", { cwd: root, stdio: "inherit" });
 
 const stageRoot = await mkdtemp(join(temporaryRoot, "pixi-native-pack-"));
@@ -119,15 +66,15 @@ try {
       await readFile(resolve(packageRoot, "package.json"), "utf8"),
     );
     delete manifest.devDependencies;
-    if (publishedExports[packageName]) {
-      manifest.exports = publishedExports[packageName];
-      await cp(
-        resolve(packageRoot, "dist"),
-        resolve(stagePackageRoot, "dist"),
-        {
-          recursive: true,
-        },
-      );
+    if (packageName === "pixi-native") {
+      for (const buildPackageName of ["core", "pixi7", "pixi8"]) {
+        await cp(
+          resolve(root, "packages", buildPackageName, "dist"),
+          resolve(stagePackageRoot, "dist", buildPackageName),
+          { recursive: true },
+        );
+      }
+      await rewriteFacadeImports(resolve(stagePackageRoot, "dist"));
       for (const filename of DOCUMENTATION_FILES) {
         await cp(resolve(root, filename), resolve(stagePackageRoot, filename));
       }
@@ -149,7 +96,18 @@ try {
           },
         );
       }
+      const thirdPartyDirectory = resolve(stagePackageRoot, "third_party");
+      await mkdir(thirdPartyDirectory, { recursive: true });
+      await cp(
+        sourceArchivePath,
+        resolve(thirdPartyDirectory, FFMPEG_SOURCE_ARCHIVE),
+      );
+      await cp(
+        `${sourceArchivePath}.sha256`,
+        resolve(thirdPartyDirectory, `${FFMPEG_SOURCE_ARCHIVE}.sha256`),
+      );
     }
+    await cp(resolve(root, "LICENSE"), resolve(stagePackageRoot, "LICENSE"));
     await writeFile(
       resolve(stagePackageRoot, "package.json"),
       `${JSON.stringify(manifest, null, 2)}\n`,
@@ -164,7 +122,7 @@ try {
     );
     if (packResult.unpackedSize > MAX_UNPACKED_BYTES) {
       throw new Error(
-      `${manifest.name} is too large: ${packResult.unpackedSize} bytes`,
+        `${manifest.name} is too large: ${packResult.unpackedSize} bytes`,
       );
     }
     validatePackedFiles(
@@ -181,7 +139,12 @@ try {
       `${archivePath}.sha256`,
       `${checksum}  ${packResult.filename}\n`,
     );
-    archives.push(archivePath);
+    archives.push({
+      path: archivePath,
+      filename: packResult.filename,
+      packageName: manifest.name,
+      sha256: checksum,
+    });
     console.log(`Created ${archivePath}`);
     console.log(`SHA-256: ${checksum}`);
   }
@@ -191,49 +154,81 @@ try {
 
 execFileSync(
   process.execPath,
-  [resolve(root, "scripts/test-distribution.mjs"), ...archives],
+  [
+    resolve(root, "scripts/test-distribution.mjs"),
+    ...archives.map((archive) => archive.path),
+  ],
   { cwd: root, stdio: "inherit" },
 );
 
-const sourceArchivePath = resolve(artifactsDirectory, FFMPEG_SOURCE_ARCHIVE);
-const sourceChecksum = createHash("sha256")
-  .update(await readFile(sourceArchivePath))
-  .digest("hex");
+// An isolated cross-OS checkout can receive the fingerprint from the source checkout.
+const sourceFingerprint =
+  process.env.PIXI_NATIVE_SOURCE_FINGERPRINT ?? computeSourceFingerprint(root);
+// The facade is platform-neutral and is published from the Windows manifest.
+// Linux still packs and tests it locally, but contributes only its native archive.
+const releaseArchives =
+  nativeTarget === "linux-x64"
+    ? archives.filter(
+        (archive) => archive.packageName !== "@matjazprijatelj/pixi-native",
+      )
+    : archives;
 await writeFile(
-  `${sourceArchivePath}.sha256`,
-  `${sourceChecksum}  ${FFMPEG_SOURCE_ARCHIVE}\n`,
+  resolve(artifactsDirectory, `release-manifest-${nativeTarget}.json`),
+  `${JSON.stringify(
+    {
+      version: "0.1.0",
+      target: nativeTarget,
+      sourceFingerprint,
+      archives: releaseArchives.map(({ filename, packageName, sha256 }) => ({
+        filename,
+        packageName,
+        sha256,
+      })),
+      ffmpegSource: {
+        filename: FFMPEG_SOURCE_ARCHIVE,
+        sha256: sourceChecksum,
+      },
+    },
+    null,
+    2,
+  )}\n`,
 );
 console.log(`FFmpeg source: ${sourceArchivePath}`);
 console.log(`FFmpeg source SHA-256: ${sourceChecksum}`);
 
 function validatePackedFiles(packageName, files) {
   const fileSet = new Set(files);
-  const required =
-    packageName.startsWith("native-")
-      ? [
-          "index.cjs",
-          "index.d.ts",
-          `native/gpu/dist/${nativeTarget}/pixi_native_gpu.node`,
-          `native/window/dist/${nativeTarget}/native_window.node`,
-          ...(nativeTarget === "win32-x64"
-            ? [`native/audio/dist/${nativeTarget}/native_audio.node`]
-            : []),
-          `native/video/dist/${nativeTarget}/native_video.node`,
-          ...ffmpegDistribution.packagedFiles.map(
-            (filename) => `${ffmpegDistribution.targetDirectory}/${filename}`,
-          ),
-          `${ffmpegDistribution.targetDirectory}/${ffmpegDistribution.checksumFile}`,
-        ]
-      : [
-          "dist/index.js",
-          "dist/index.d.ts",
-          "docs/README.md",
-          "docs/getting-started.md",
-          "docs/application-and-api.md",
-          "docs/media-and-files.md",
-          "docs/integrations/gsap.md",
-          "docs/deployment.md",
-        ];
+  const required = packageName.startsWith("native-")
+    ? [
+        "index.cjs",
+        "index.d.ts",
+        `native/gpu/dist/${nativeTarget}/pixi_native_gpu.node`,
+        `native/window/dist/${nativeTarget}/native_window.node`,
+        ...(nativeTarget === "win32-x64"
+          ? [`native/audio/dist/${nativeTarget}/native_audio.node`]
+          : []),
+        `native/video/dist/${nativeTarget}/native_video.node`,
+        ...ffmpegDistribution.packagedFiles.map(
+          (filename) => `${ffmpegDistribution.targetDirectory}/${filename}`,
+        ),
+        `${ffmpegDistribution.targetDirectory}/${ffmpegDistribution.checksumFile}`,
+        `third_party/${FFMPEG_SOURCE_ARCHIVE}`,
+        `third_party/${FFMPEG_SOURCE_ARCHIVE}.sha256`,
+      ]
+    : [
+        "dist/core/index.js",
+        "dist/core/index.d.ts",
+        "dist/pixi7/index.js",
+        "dist/pixi7/index.d.ts",
+        "dist/pixi8/index.js",
+        "dist/pixi8/index.d.ts",
+        "docs/README.md",
+        "docs/getting-started.md",
+        "docs/application-and-api.md",
+        "docs/media-and-files.md",
+        "docs/integrations/gsap.md",
+        "docs/deployment.md",
+      ];
   const missing = required.filter((filename) => !fileSet.has(filename));
   if (missing.length > 0) {
     throw new Error(
@@ -249,6 +244,25 @@ function validatePackedFiles(packageName, files) {
     throw new Error(
       `${packageName} tarball contains source files:\n- ${forbidden.join("\n- ")}`,
     );
+  }
+}
+
+async function rewriteFacadeImports(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await rewriteFacadeImports(path);
+      continue;
+    }
+    if (!entry.name.endsWith(".js") && !entry.name.endsWith(".d.ts")) {
+      continue;
+    }
+    const source = await readFile(path, "utf8");
+    const rewritten = source.replaceAll(
+      "@pixi-native/core",
+      "@matjazprijatelj/pixi-native/core",
+    );
+    if (rewritten !== source) await writeFile(path, rewritten);
   }
 }
 

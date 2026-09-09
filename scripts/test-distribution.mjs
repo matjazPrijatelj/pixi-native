@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,10 +11,15 @@ import {
 } from "./ffmpeg-distribution.mjs";
 
 const archiveArguments = process.argv.slice(2);
-if (archiveArguments.length !== 4) {
-  throw new Error(
-    "Expected core, pixi7, pixi8, and one native package archive",
-  );
+const installCommand = [
+  "pnpm install",
+  process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline" : "",
+  "--no-frozen-lockfile --ignore-workspace",
+]
+  .filter(Boolean)
+  .join(" ");
+if (archiveArguments.length !== 2) {
+  throw new Error("Expected the facade and one native package archive");
 }
 
 const archives = new Map(
@@ -24,48 +30,68 @@ const archives = new Map(
       filename.includes("native-win32-x64") ||
       filename.includes("native-linux-x64")
         ? "native"
-        : filename.includes("pixi7")
-          ? "pixi7"
-          : filename.includes("pixi8")
-            ? "pixi8"
-            : "core";
+        : "facade";
     return [key, path];
   }),
 );
-for (const key of ["core", "pixi7", "pixi8", "native"]) {
+for (const key of ["facade", "native"]) {
   if (!archives.has(key)) throw new Error(`Missing ${key} archive`);
 }
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nativeArchiveName = basename(archives.get("native"));
 const nativePackageName = nativeArchiveName.includes("native-linux-x64")
-  ? "@pixi-native/native-linux-x64"
-  : "@pixi-native/native-win32-x64";
+  ? "@matjazprijatelj/pixi-native-linux-x64"
+  : "@matjazprijatelj/pixi-native-win32-x64";
 const nativeTarget = nativePackageName.includes("linux")
   ? "linux-x64"
   : "win32-x64";
+const oppositeNativePackageName =
+  nativeTarget === "linux-x64"
+    ? "@matjazprijatelj/pixi-native-win32-x64"
+    : "@matjazprijatelj/pixi-native-linux-x64";
+const oppositeNativeTarget =
+  nativeTarget === "linux-x64" ? "win32-x64" : "linux-x64";
 const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
-const temporaryRoot = resolve(repositoryRoot, ".tmp");
-await mkdir(temporaryRoot, { recursive: true });
-const testDirectory = await mkdtemp(
-  join(temporaryRoot, "pixi-native-packages-"),
-);
+const testDirectory = await mkdtemp(join(tmpdir(), "pn-"));
+const localFacadeArchive = join(testDirectory, "p.tgz");
+const localNativeArchive = join(testDirectory, "n.tgz");
+await cp(archives.get("facade"), localFacadeArchive);
+await cp(archives.get("native"), localNativeArchive);
 const toFileSpecifier = (path) =>
   `file:${relative(testDirectory, path).replaceAll("\\", "/")}`;
 
 try {
+  const oppositeNativeStub = join(testDirectory, "opposite-native-stub");
+  await mkdir(oppositeNativeStub, { recursive: true });
+  await writeFile(
+    join(oppositeNativeStub, "package.json"),
+    `${JSON.stringify(
+      {
+        name: oppositeNativePackageName,
+        version: "0.1.0",
+        os: [oppositeNativeTarget.split("-")[0]],
+        cpu: ["x64"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
   const packageJson = {
     name: "pixi-native-launcher-smoke",
     private: true,
     type: "module",
     packageManager: "pnpm@9.15.9",
     dependencies: {
-      "@pixi-native/core": toFileSpecifier(archives.get("core")),
-      "@pixi-native/pixi7": toFileSpecifier(archives.get("pixi7")),
-      "@pixi-native/pixi8": toFileSpecifier(archives.get("pixi8")),
-      [nativePackageName]: toFileSpecifier(archives.get("native")),
+      "@matjazprijatelj/pixi-native": toFileSpecifier(localFacadeArchive),
+      [nativePackageName]: toFileSpecifier(localNativeArchive),
     },
-    devDependencies: { typescript: "7.0.2" },
+    pnpm: {
+      overrides: {
+        [nativePackageName]: toFileSpecifier(localNativeArchive),
+        [oppositeNativePackageName]: "file:./opposite-native-stub",
+      },
+    },
   };
   await writeFile(
     join(testDirectory, "package.json"),
@@ -73,12 +99,16 @@ try {
   );
 
   await writeFile(
+    join(testDirectory, "smoke-root.mjs"),
+    createRuntimeSmoke("@matjazprijatelj/pixi-native", 8),
+  );
+  await writeFile(
     join(testDirectory, "smoke-v7.mjs"),
-    createRuntimeSmoke("@pixi-native/pixi7", 7),
+    createRuntimeSmoke("@matjazprijatelj/pixi-native/pixi7", 7),
   );
   await writeFile(
     join(testDirectory, "smoke-v8.mjs"),
-    createRuntimeSmoke("@pixi-native/pixi8", 8),
+    createRuntimeSmoke("@matjazprijatelj/pixi-native/pixi8", 8),
   );
   await writeFile(
     join(testDirectory, "smoke-native.mjs"),
@@ -99,12 +129,10 @@ try {
       'import { existsSync } from "node:fs";',
       'import { dirname, resolve } from "node:path";',
       'import { fileURLToPath } from "node:url";',
-      'for (const packageName of ["@pixi-native/core", "@pixi-native/pixi7", "@pixi-native/pixi8"]) {',
-      "  const entryPath = fileURLToPath(import.meta.resolve(packageName));",
-      '  const packageRoot = resolve(dirname(entryPath), "..");',
-      '  for (const documentationPath of ["docs/README.md", "docs/getting-started.md", "docs/application-and-api.md", "docs/media-and-files.md", "docs/integrations/gsap.md", "docs/deployment.md"]) {',
-      "    assert.equal(existsSync(resolve(packageRoot, documentationPath)), true, `${packageName}/${documentationPath}`);",
-      "  }",
+      'const entryPath = fileURLToPath(import.meta.resolve("@matjazprijatelj/pixi-native"));',
+      'const packageRoot = resolve(dirname(entryPath), "../..");',
+      'for (const documentationPath of ["docs/README.md", "docs/getting-started.md", "docs/application-and-api.md", "docs/media-and-files.md", "docs/integrations/gsap.md", "docs/deployment.md"]) {',
+      "  assert.equal(existsSync(resolve(packageRoot, documentationPath)), true, documentationPath);",
       "}",
       "",
     ].join("\n"),
@@ -121,7 +149,7 @@ try {
     join(displayDirectory, "dist", "file-smoke.mjs"),
     [
       'import assert from "node:assert/strict";',
-      'import { createModuleFileAccess } from "@pixi-native/pixi8/files";',
+      'import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";',
       "const files = createModuleFileAccess(import.meta.url);",
       'assert.equal(await files.readText("../assets/config.json"), \'{"renderer":"webgpu"}\\n\');',
       "",
@@ -130,14 +158,16 @@ try {
   await writeFile(
     join(testDirectory, "smoke.ts"),
     [
-      'import { Container as Container7, NativeVideo as NativeVideo7, VideoSprite as VideoSprite7, createApp as createApp7, createRenderer as createRenderer7, type VideoSpriteOptions } from "@pixi-native/pixi7";',
-      'import { Container as Container8, NativeVideo as NativeVideo8, VideoSprite as VideoSprite8, createApp as createApp8, createRenderer as createRenderer8 } from "@pixi-native/pixi8";',
-      'import { Howl } from "@pixi-native/pixi8/audio";',
-      'import { createModuleFileAccess } from "@pixi-native/pixi8/files";',
-      'import { FrameScheduler } from "@pixi-native/pixi8/runtime";',
-      'import { NodeCanvas } from "@pixi-native/pixi8/canvas";',
+      'import { Container as ContainerRoot, createApp as createAppRoot } from "@matjazprijatelj/pixi-native";',
+      'import { Container as Container7, NativeVideo as NativeVideo7, VideoSprite as VideoSprite7, createApp as createApp7, createRenderer as createRenderer7, type VideoSpriteOptions } from "@matjazprijatelj/pixi-native/pixi7";',
+      'import { Container as Container8, NativeVideo as NativeVideo8, VideoSprite as VideoSprite8, createApp as createApp8, createRenderer as createRenderer8 } from "@matjazprijatelj/pixi-native/pixi8";',
+      'import { Howl } from "@matjazprijatelj/pixi-native/pixi8/audio";',
+      'import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";',
+      'import { FrameScheduler } from "@matjazprijatelj/pixi-native/pixi8/runtime";',
+      'import { NodeCanvas } from "@matjazprijatelj/pixi-native/pixi8/canvas";',
+      'import { NativeVideo } from "@matjazprijatelj/pixi-native/core";',
       "const options: VideoSpriteOptions = {};",
-      "void [Container7, NativeVideo7, VideoSprite7, createApp7, createRenderer7, Container8, NativeVideo8, VideoSprite8, createApp8, createRenderer8, Howl, createModuleFileAccess, FrameScheduler, NodeCanvas, options];",
+      "void [ContainerRoot, createAppRoot, Container7, NativeVideo7, VideoSprite7, createApp7, createRenderer7, Container8, NativeVideo8, VideoSprite8, createApp8, createRenderer8, Howl, createModuleFileAccess, FrameScheduler, NodeCanvas, NativeVideo, options];",
       "",
     ].join("\n"),
   );
@@ -159,7 +189,7 @@ try {
     )}\n`,
   );
 
-  execSync("pnpm install --prod --no-frozen-lockfile --ignore-workspace", {
+  execSync(`${installCommand} --prod`, {
     cwd: testDirectory,
     stdio: "inherit",
   });
@@ -172,6 +202,7 @@ try {
   if (containsPackage(productionGraph, "gsap")) {
     throw new Error("GSAP must not be installed in the production fixture");
   }
+  execSync("node smoke-root.mjs", { cwd: testDirectory, stdio: "inherit" });
   execSync("node smoke-v7.mjs", { cwd: testDirectory, stdio: "inherit" });
   execSync("node smoke-v8.mjs", { cwd: testDirectory, stdio: "inherit" });
   const nativeOutput = execSync("node smoke-native.mjs", {
@@ -204,15 +235,16 @@ try {
     ffmpegDistribution,
   );
 
-  execSync("pnpm install --no-frozen-lockfile --ignore-workspace", {
-    cwd: testDirectory,
-    stdio: "inherit",
-  });
-  execSync("pnpm exec tsc -p tsconfig.json", {
-    cwd: testDirectory,
-    stdio: "inherit",
-  });
-  console.log("Verified fresh launcher installation with both Pixi majors.");
+  execSync(
+    `${JSON.stringify(process.execPath)} ${JSON.stringify(
+      resolve(repositoryRoot, "node_modules/typescript/bin/tsc"),
+    )} -p tsconfig.json`,
+    {
+      cwd: testDirectory,
+      stdio: "inherit",
+    },
+  );
+  console.log("Verified the facade package with both Pixi majors.");
 } finally {
   await rm(testDirectory, { recursive: true, force: true });
 }

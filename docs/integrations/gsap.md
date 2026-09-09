@@ -14,10 +14,10 @@ initializer installs the animation-frame globals required by GSAP in this
 headless Node.js process.
 
 The example below uses PixiJS 8. For PixiJS 7, change the namespace import to
-`@pixi-native/pixi7` and omit the WebGPU backend option.
+`@matjazprijatelj/pixi-native/pixi7` and omit the WebGPU backend option.
 
 ```ts
-import * as PIXI from "@pixi-native/pixi8";
+import * as PIXI from "@matjazprijatelj/pixi-native";
 
 const runtime = await PIXI.createApp({ backend: "webgpu" });
 const [{ gsap }, { PixiPlugin }] = await Promise.all([

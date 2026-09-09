@@ -1,8 +1,9 @@
 {
-  "name": "@pixi-native/native-win32-x64",
+  "name": "@matjazprijatelj/pixi-native-win32-x64",
   "version": "0.1.0",
   "type": "commonjs",
-  "license": "UNLICENSED",
+  "description": "Windows x64 native binaries for @matjazprijatelj/pixi-native",
+  "license": "MIT",
   "os": [
     "win32"
   ],
@@ -13,7 +14,8 @@
     "index.cjs",
     "index.d.ts",
     "native",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "third_party"
   ],
   "main": "./index.cjs",
   "types": "./index.d.ts",
@@ -22,5 +24,17 @@
       "types": "./index.d.ts",
       "default": "./index.cjs"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matjazPrijatelj/pixi-native.git",
+    "directory": "packages/native-win32-x64"
+  },
+  "homepage": "https://github.com/matjazPrijatelj/pixi-native#readme",
+  "bugs": {
+    "url": "https://github.com/matjazPrijatelj/pixi-native/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   }
 }

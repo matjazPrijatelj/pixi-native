@@ -1,8 +1,9 @@
 {
   "name": "@pixi-native/core",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=24.13.0 <25"
   },
@@ -33,19 +34,19 @@
     "@node-3d/glfw": "7.3.1"
   },
   "peerDependencies": {
-    "@pixi-native/native-linux-x64": "0.1.0",
-    "@pixi-native/native-win32-x64": "0.1.0"
+    "@matjazprijatelj/pixi-native-linux-x64": "0.1.0",
+    "@matjazprijatelj/pixi-native-win32-x64": "0.1.0"
   },
   "peerDependenciesMeta": {
-    "@pixi-native/native-linux-x64": {
+    "@matjazprijatelj/pixi-native-linux-x64": {
       "optional": true
     },
-    "@pixi-native/native-win32-x64": {
+    "@matjazprijatelj/pixi-native-win32-x64": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@pixi-native/native-linux-x64": "workspace:*",
-    "@pixi-native/native-win32-x64": "workspace:*"
+    "@matjazprijatelj/pixi-native-linux-x64": "workspace:*",
+    "@matjazprijatelj/pixi-native-win32-x64": "workspace:*"
   }
 }

@@ -5,10 +5,9 @@ browser-shaped surface that Pixi needs, then connects Pixi to native WebGPU or
 WebGL rendering, window input, Canvas2D, audio, video, and file access. Display
 applications do not need a browser, WebView, or CEF process.
 
-> [!WARNING]
-> Version 0.1.0 is a pre-release. The repository and its packages remain
-> `UNLICENSED`, so the project is not ready for an open-source release until
-> the owner chooses and applies a license.
+> [!NOTE]
+> Version 0.1.0 is a pre-release. The API and native package layout may change
+> before 1.0.
 
 ## What is included
 
@@ -27,15 +26,12 @@ applications do not need a browser, WebView, or CEF process.
 Pixi Native implements the browser APIs that Pixi uses. It does not provide
 HTML layout, CSS, navigation, browser media elements, or a general-purpose DOM.
 
-## Packages
+## Package
 
-| Package                         | Contents                                                                                      |
-| ------------------------------- | --------------------------------------------------------------------------------------------- |
-| `@pixi-native/core`             | Pixi-neutral runtime, lifecycle, Canvas2D, audio, video, files, and WebGL integration         |
-| `@pixi-native/pixi7`            | PixiJS 7 facade, WebGL renderer, `createApp()`, `createRenderer()`, and `VideoSprite`         |
-| `@pixi-native/pixi8`            | PixiJS 8 facade, WebGPU/WebGL renderers, `createApp()`, `createRenderer()`, and `VideoSprite` |
-| `@pixi-native/native-win32-x64` | Windows x64 GPU, window, audio, video, D3DCompiler, and FFmpeg binaries                       |
-| `@pixi-native/native-linux-x64` | Linux x64 GPU, window, video, and FFmpeg binaries                                             |
+Install `@matjazprijatelj/pixi-native`. Its root export uses PixiJS 8. The
+`/pixi8`, `/pixi7`, and `/core` subpaths expose the explicit facades and the
+Pixi-neutral API. npm installs the matching Windows or Linux native package as
+an optional platform dependency.
 
 Applications should import Pixi and native helpers from one version facade.
 Repository source paths and unexported `dist/` files are internal.
@@ -45,9 +41,9 @@ Repository source paths and unexported `dist/` files are internal.
 Version 0.1.0 targets PixiJS 8.20.0 and PixiJS 7.4.3.
 
 | Platform       | PixiJS 8 WebGPU | PixiJS 8 WebGL | PixiJS 7 WebGL | Audio         | Video                  |
-| -------------- | ---------------- | --------------- | --------------- | ------------- | ---------------------- |
-| Windows 11 x64 | D3D12            | GLFW/OpenGL ES  | GLFW/OpenGL ES | Native WASAPI | FFmpeg, D3D11VA or CPU |
-| Linux x64      | Vulkan           | GLFW/OpenGL ES  | GLFW/OpenGL ES | SDL playback  | FFmpeg, VA-API or CPU  |
+| -------------- | --------------- | -------------- | -------------- | ------------- | ---------------------- |
+| Windows 11 x64 | D3D12           | GLFW/OpenGL ES | GLFW/OpenGL ES | Native WASAPI | FFmpeg, D3D11VA or CPU |
+| Linux x64      | Vulkan          | GLFW/OpenGL ES | GLFW/OpenGL ES | SDL playback  | FFmpeg, VA-API or CPU  |
 
 Both platforms use explicit renderer selection and fail when the requested
 backend or native package is unavailable. The runtime does not switch to a
@@ -58,20 +54,23 @@ browser renderer or another backend.
 Use Node.js 24.13 or newer from the Node.js 24 LTS line. The repository uses
 pnpm 9.15.9.
 
-Install the neutral runtime, one Pixi facade, and the native package for the
-target platform. This Windows example uses PixiJS 8:
+GitHub Packages requires a classic personal access token with `read:packages`.
+Add the registry to the consumer's `.npmrc`:
 
-```sh
-pnpm add @pixi-native/core @pixi-native/pixi8 @pixi-native/native-win32-x64
+```ini
+@matjazprijatelj:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
 ```
 
-Use `@pixi-native/native-linux-x64` on Linux. A launcher that runs PixiJS 7 and
-PixiJS 8 displays can install both version facades in one dependency root, but
-each display must run in a separate Node.js process and import one Pixi major.
+Install the facade package:
 
-The project has not published these packages to a public registry. Until then,
-install the matching `.tgz` files produced by `pnpm pack:dist`. See
-[Deployment](docs/deployment.md) for the archive and launcher layout.
+```sh
+pnpm add @matjazprijatelj/pixi-native
+```
+
+npm selects the matching x64 native package. A launcher can use both Pixi
+majors from one installation, but each display must run in a separate Node.js
+process and import one Pixi major.
 
 ## PixiJS 8 quick start
 
@@ -81,7 +80,7 @@ import {
   Sprite,
   createApp,
   createModuleFileAccess,
-} from "@pixi-native/pixi8";
+} from "@matjazprijatelj/pixi-native";
 
 const files = createModuleFileAccess(import.meta.url);
 const runtime = await createApp({
@@ -107,7 +106,7 @@ WebGL. Omitting `backend` selects WebGPU and still does not enable fallback.
 ## PixiJS 7 quick start
 
 ```ts
-import { Graphics, createApp } from "@pixi-native/pixi7";
+import { Graphics, createApp } from "@matjazprijatelj/pixi-native/pixi7";
 
 const runtime = await createApp({
   width: 1280,
@@ -132,9 +131,9 @@ Native version facade in the same display process.
 - [GSAP integration](docs/integrations/gsap.md)
 - [Deployment and release archives](docs/deployment.md)
 
-The [canonical documentation directory](https://github.com/matjazPrijatelj/pixi-native/tree/main/docs)
-lives in this repository. Package tarballs include the same guides. Shipped
-TypeScript declarations define the public API.
+Package tarballs include these guides and the public TypeScript declarations.
+The GitHub source and issue tracker require repository access while the
+repository remains private.
 
 ## Current limitations
 
@@ -195,9 +194,7 @@ the native renderer, window, canvas, audio, and media layers possible. See
 [Third-party notices](THIRD_PARTY_NOTICES.md) for license and redistribution
 details.
 
-## License status
+## License
 
-Pixi Native 0.1.0 is `UNLICENSED`. Source availability does not grant rights to
-use, modify, or redistribute the project. Third-party components retain their
-own licenses. Choose a project license and update all package manifests before
-publishing this as an open-source package.
+Pixi Native uses the [MIT License](LICENSE). Third-party components retain
+their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md).

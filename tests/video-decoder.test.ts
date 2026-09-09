@@ -164,6 +164,7 @@ test("changing src resets state and continues active playback on the new source"
   events.length = 0;
 
   monitor.beginSource("second.mp4", true);
+  const sourceChangeStartedAtMs = performance.now();
   video.src = "second.mp4#t=2,5";
   await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -175,7 +176,13 @@ test("changing src resets state and continues active playback on the new source"
   assert.equal(factory.options[1].endTime, 5);
   assert.equal(video.src, "second.mp4#t=2,5");
   assert.equal(video.currentSrc, "second.mp4");
-  assert.ok(Math.abs(video.currentTime - 2) < 0.1);
+  const currentTime = video.currentTime;
+  const maximumClockTime =
+    2 +
+    ((performance.now() - sourceChangeStartedAtMs) / 1000) *
+      video.playbackRate +
+    0.05;
+  assert.ok(currentTime >= 2 && currentTime <= maximumClockTime);
   assert.equal(video.paused, false);
   assert.equal(video.loop, true);
   assert.equal(video.playbackRate, 1.25);

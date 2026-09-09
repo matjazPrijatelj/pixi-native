@@ -32,10 +32,10 @@ importers:
       "@pixi-native/core":
         specifier: workspace:*
         version: link:packages/core
-      "@pixi-native/native-linux-x64":
+      "@matjazprijatelj/pixi-native-linux-x64":
         specifier: workspace:*
         version: link:packages/native-linux-x64
-      "@pixi-native/native-win32-x64":
+      "@matjazprijatelj/pixi-native-win32-x64":
         specifier: workspace:*
         version: link:packages/native-win32-x64
       "@pixi-native/pixi7":
@@ -72,16 +72,44 @@ importers:
         specifier: 7.3.1
         version: 7.3.1
     devDependencies:
-      "@pixi-native/native-linux-x64":
+      "@matjazprijatelj/pixi-native-linux-x64":
         specifier: workspace:*
         version: link:../native-linux-x64
-      "@pixi-native/native-win32-x64":
+      "@matjazprijatelj/pixi-native-win32-x64":
         specifier: workspace:*
         version: link:../native-win32-x64
 
   packages/native-win32-x64: {}
 
   packages/native-linux-x64: {}
+
+  packages/pixi-native:
+    dependencies:
+      "@kmamal/sdl":
+        specifier: 0.11.13
+        version: 0.11.13
+      "@napi-rs/canvas":
+        specifier: 1.0.8
+        version: 1.0.8
+      "@node-3d/core":
+        specifier: 6.3.0
+        version: 6.3.0(three@0.185.1)
+      "@node-3d/glfw":
+        specifier: 7.3.1
+        version: 7.3.1
+      pixi.js:
+        specifier: 8.20.0
+        version: 8.20.0
+      pixi.js-v7:
+        specifier: npm:pixi.js@7.4.3
+        version: pixi.js@7.4.3
+    optionalDependencies:
+      "@matjazprijatelj/pixi-native-linux-x64":
+        specifier: 0.1.0
+        version: link:../native-linux-x64
+      "@matjazprijatelj/pixi-native-win32-x64":
+        specifier: 0.1.0
+        version: link:../native-win32-x64
 
   packages/pixi7:
     dependencies:

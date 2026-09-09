@@ -1,7 +1,7 @@
 # Third-party notices
 
-Pixi Native is `UNLICENSED`. That project status does not replace or
-restrict the licenses of the third-party components listed below.
+Pixi Native uses the MIT License. The third-party components listed below keep
+their own license terms.
 
 ## JavaScript and native runtime projects
 
@@ -78,6 +78,6 @@ pipes.
 
 Each native package includes `FFMPEG_LICENSE.txt`, `FFMPEG_BUILD_INFO.txt`,
 and `FFMPEG_SHA256SUMS` beside its FFmpeg programs. Each release places the
-complete pinned corresponding-source archive and its SHA-256 file beside the npm
-archives. The LGPL terms apply to the bundled FFmpeg programs. H.264 and H.265
+complete pinned corresponding-source archive and its SHA-256 file under
+`third_party/`. The LGPL terms apply to the bundled FFmpeg programs. H.264 and H.265
 may require separate patent licenses that the LGPL does not grant.

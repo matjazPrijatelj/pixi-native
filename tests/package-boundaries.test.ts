@@ -64,9 +64,7 @@ test("GSAP remains an optional consumer integration", async () => {
     assert.equal(manifest.dependencies?.gsap, undefined, packageName);
     assert.equal(manifest.peerDependencies?.gsap, undefined, packageName);
     assert.doesNotMatch(
-      await readTypeScriptSources(
-        fileURLToPath(new URL("src", packageRoot)),
-      ),
+      await readTypeScriptSources(fileURLToPath(new URL("src", packageRoot))),
       /from ["']gsap(?:\/[^"']*)?["']|import\(["']gsap(?:\/[^"']*)?["']\)/,
       packageName,
     );
@@ -74,21 +72,26 @@ test("GSAP remains an optional consumer integration", async () => {
 });
 
 test("native platform resolver validates support, installation, and target", () => {
-  const linux = resolveNativePlatformModules("linux", "x64", () => ({
-    target: "linux-x64",
-    gpuModule: "gpu",
-    windowModule: "window",
-    videoModule: "video",
-    ffmpeg: "ffmpeg",
-    ffprobe: "ffprobe",
-  } as NativePlatformModules));
+  const linux = resolveNativePlatformModules(
+    "linux",
+    "x64",
+    () =>
+      ({
+        target: "linux-x64",
+        gpuModule: "gpu",
+        windowModule: "window",
+        videoModule: "video",
+        ffmpeg: "ffmpeg",
+        ffprobe: "ffprobe",
+      }) as NativePlatformModules,
+  );
   assert.equal(linux.target, "linux-x64");
   assert.throws(
     () =>
       resolveNativePlatformModules("win32", "x64", () => {
         throw new Error("not installed");
       }),
-    /Missing native package @pixi-native\/native-win32-x64/,
+    /Missing native package @matjazprijatelj\/pixi-native-win32-x64/,
   );
   const wrongTarget = {
     target: "linux-x64",

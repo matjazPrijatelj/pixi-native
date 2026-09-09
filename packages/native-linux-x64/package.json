@@ -1,11 +1,22 @@
 {
-  "name": "@pixi-native/native-linux-x64",
+  "name": "@matjazprijatelj/pixi-native-linux-x64",
   "version": "0.1.0",
   "type": "commonjs",
-  "license": "UNLICENSED",
-  "os": ["linux"],
-  "cpu": ["x64"],
-  "files": ["index.cjs", "index.d.ts", "native", "THIRD_PARTY_NOTICES.md"],
+  "description": "Linux x64 native binaries for @matjazprijatelj/pixi-native",
+  "license": "MIT",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "index.cjs",
+    "index.d.ts",
+    "native",
+    "THIRD_PARTY_NOTICES.md",
+    "third_party"
+  ],
   "main": "./index.cjs",
   "types": "./index.d.ts",
   "exports": {
@@ -13,5 +24,17 @@
       "types": "./index.d.ts",
       "default": "./index.cjs"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matjazPrijatelj/pixi-native.git",
+    "directory": "packages/native-linux-x64"
+  },
+  "homepage": "https://github.com/matjazPrijatelj/pixi-native#readme",
+  "bugs": {
+    "url": "https://github.com/matjazPrijatelj/pixi-native/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   }
 }

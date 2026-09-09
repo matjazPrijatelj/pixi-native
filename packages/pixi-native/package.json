@@ -1,0 +1,136 @@
+{
+  "name": "@matjazprijatelj/pixi-native",
+  "version": "0.1.0",
+  "description": "PixiJS 7 and 8 rendering in native Node.js windows with WebGPU, WebGL, audio, and video",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Matjaz Prijatelj",
+    "email": "matjash@gmail.com"
+  },
+  "engines": {
+    "node": ">=24.13.0 <25"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "LICENSE",
+    "README.md",
+    "HISTORY.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/pixi8/index.d.ts",
+      "default": "./dist/pixi8/index.js"
+    },
+    "./pixi8": {
+      "types": "./dist/pixi8/index.d.ts",
+      "default": "./dist/pixi8/index.js"
+    },
+    "./pixi8/audio": {
+      "types": "./dist/pixi8/audio.d.ts",
+      "default": "./dist/pixi8/audio.js"
+    },
+    "./pixi8/files": {
+      "types": "./dist/pixi8/files.d.ts",
+      "default": "./dist/pixi8/files.js"
+    },
+    "./pixi8/runtime": {
+      "types": "./dist/pixi8/runtime.d.ts",
+      "default": "./dist/pixi8/runtime.js"
+    },
+    "./pixi8/canvas": {
+      "types": "./dist/pixi8/canvas.d.ts",
+      "default": "./dist/pixi8/canvas.js"
+    },
+    "./pixi7": {
+      "types": "./dist/pixi7/index.d.ts",
+      "default": "./dist/pixi7/index.js"
+    },
+    "./pixi7/audio": {
+      "types": "./dist/pixi7/audio.d.ts",
+      "default": "./dist/pixi7/audio.js"
+    },
+    "./pixi7/files": {
+      "types": "./dist/pixi7/files.d.ts",
+      "default": "./dist/pixi7/files.js"
+    },
+    "./pixi7/runtime": {
+      "types": "./dist/pixi7/runtime.d.ts",
+      "default": "./dist/pixi7/runtime.js"
+    },
+    "./pixi7/canvas": {
+      "types": "./dist/pixi7/canvas.d.ts",
+      "default": "./dist/pixi7/canvas.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
+    },
+    "./core/audio": {
+      "types": "./dist/core/audio/index.d.ts",
+      "default": "./dist/core/audio/index.js"
+    },
+    "./core/files": {
+      "types": "./dist/core/files.d.ts",
+      "default": "./dist/core/files.js"
+    },
+    "./core/runtime": {
+      "types": "./dist/core/runtime.d.ts",
+      "default": "./dist/core/runtime.js"
+    },
+    "./core/canvas": {
+      "types": "./dist/core/canvas.d.ts",
+      "default": "./dist/core/canvas.js"
+    },
+    "./core/application/*.js": {
+      "types": "./dist/core/application/*.d.ts",
+      "default": "./dist/core/application/*.js"
+    },
+    "./core/audio/*.js": {
+      "types": "./dist/core/audio/*.d.ts",
+      "default": "./dist/core/audio/*.js"
+    },
+    "./core/canvas/*.js": {
+      "types": "./dist/core/canvas/*.d.ts",
+      "default": "./dist/core/canvas/*.js"
+    },
+    "./core/renderers/*.js": {
+      "types": "./dist/core/renderers/*.d.ts",
+      "default": "./dist/core/renderers/*.js"
+    },
+    "./core/runtime/*.js": {
+      "types": "./dist/core/runtime/*.d.ts",
+      "default": "./dist/core/runtime/*.js"
+    },
+    "./core/video/*.js": {
+      "types": "./dist/core/video/*.d.ts",
+      "default": "./dist/core/video/*.js"
+    }
+  },
+  "dependencies": {
+    "@kmamal/sdl": "0.11.13",
+    "@napi-rs/canvas": "1.0.8",
+    "@node-3d/core": "6.3.0",
+    "@node-3d/glfw": "7.3.1",
+    "pixi.js": "8.20.0",
+    "pixi.js-v7": "npm:pixi.js@7.4.3"
+  },
+  "optionalDependencies": {
+    "@matjazprijatelj/pixi-native-linux-x64": "0.1.0",
+    "@matjazprijatelj/pixi-native-win32-x64": "0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matjazPrijatelj/pixi-native.git",
+    "directory": "packages/pixi-native"
+  },
+  "homepage": "https://github.com/matjazPrijatelj/pixi-native#readme",
+  "bugs": {
+    "url": "https://github.com/matjazPrijatelj/pixi-native/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

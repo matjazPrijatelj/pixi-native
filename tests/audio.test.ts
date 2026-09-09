@@ -69,97 +69,103 @@ test("drum MP3 atlas maps eight keys to valid sprites and transparent hit region
   assert.ok(transparentPixels > pixels.length / 16);
 });
 
-test("Howler-compatible sprites overlap and fade through the native mixer", async () => {
-  process.env.SDL_AUDIODRIVER = "dummy";
-  const { Howl, Howler, nativeAudioEngine } = await import(
-    "@pixi-native/core/audio"
-  );
-  const howl = new Howl({
-    src: [source],
-    sprite: {
-      toneA: [0, 800],
-      toneB: [1000, 800],
-    },
-    preloadSprites: true,
-  });
-
-  try {
-    await waitForEvent(howl, "load", 5_000);
-    assert.equal(howl.state(), "loaded");
-    const first = howl.play("toneA");
-    const second = howl.play("toneB");
-    assert.notEqual(first, second);
-    await Promise.all([
-      waitForPlay(howl, 5_000, first),
-      waitForPlay(howl, 5_000, second),
-    ]);
-    assert.equal(howl.playing(first), true);
-    assert.equal(howl.playing(second), true);
-
-    let fadeEvents = 0;
-    howl.on(
-      "fade",
-      () => {
-        fadeEvents++;
-      },
-      first,
+test(
+  "Howler-compatible sprites overlap and fade through the native mixer",
+  {
+    skip: process.env.PIXI_NATIVE_HEADLESS === "1",
+  },
+  async () => {
+    process.env.SDL_AUDIODRIVER = "dummy";
+    const { Howl, Howler, nativeAudioEngine } = await import(
+      "@pixi-native/core/audio"
     );
-    howl.fade(0, 1, 300, first);
-    await delay(100);
-    const volumeBeforeRepeat = howl.volume(undefined, first);
-    assert.ok(volumeBeforeRepeat > 0.1);
-    const faded = waitForEvent(howl, "fade", 2_000, first);
-    howl.fade(0, 0.8, 250, first);
-    await delay(40);
-    const volumeAfterRepeat = howl.volume(undefined, first);
-    assert.ok(volumeAfterRepeat >= volumeBeforeRepeat * 0.7);
-    await faded;
-    await delay(100);
-    assert.equal(fadeEvents, 1);
-    assert.ok(Math.abs(howl.volume(undefined, first) - 0.8) < 0.05);
-    howl.stop();
-    assert.equal(howl.playing(), false);
-    assert.ok(nativeAudioEngine.diagnostics.queuedMs >= 0);
-
-    const stream = new Howl({
+    const howl = new Howl({
       src: [source],
-      sprite: { toneA: [0, 800] },
-      html5: true,
-      preload: false,
-    });
-    const streamId = stream.play("toneA");
-    await waitForPlay(stream, 5_000, streamId);
-    await waitForEvent(stream, "end", 5_000, streamId);
-    assert.equal(stream.playing(streamId), false);
-
-    const looping = new Howl({
-      src: [source],
-      sprite: { looping: [0, 800, true] },
+      sprite: {
+        toneA: [0, 800],
+        toneB: [1000, 800],
+      },
       preloadSprites: true,
     });
-    await waitForEvent(looping, "load", 5_000);
-    const loopingId = looping.play("looping");
-    await waitForPlay(looping, 5_000, loopingId);
-    const loopFade = waitForEvent(looping, "fade", 3_000, loopingId);
-    looping.fade(0, 1, 1_100, loopingId);
-    await loopFade;
-    assert.ok(Math.abs(looping.volume(undefined, loopingId) - 1) < 0.05);
-    looping.stop(loopingId);
 
-    const drums = new Howl({
-      src: [DRUM_SOURCE_PATH],
-      sprite: DRUM_ATLAS.sprite,
-    });
-    await waitForEvent(drums, "load", 5_000);
-    const drumIds = DRUM_PADS.map((pad) => drums.play(pad.sprite));
-    assert.equal(new Set(drumIds).size, DRUM_PADS.length);
-    await Promise.all(drumIds.map((id) => waitForPlay(drums, 5_000, id)));
-    assert.ok(drumIds.every((id) => drums.playing(id)));
-    drums.stop();
-  } finally {
-    Howler.unload();
-  }
-});
+    try {
+      await waitForEvent(howl, "load", 5_000);
+      assert.equal(howl.state(), "loaded");
+      const first = howl.play("toneA");
+      const second = howl.play("toneB");
+      assert.notEqual(first, second);
+      await Promise.all([
+        waitForPlay(howl, 5_000, first),
+        waitForPlay(howl, 5_000, second),
+      ]);
+      assert.equal(howl.playing(first), true);
+      assert.equal(howl.playing(second), true);
+
+      let fadeEvents = 0;
+      howl.on(
+        "fade",
+        () => {
+          fadeEvents++;
+        },
+        first,
+      );
+      howl.fade(0, 1, 300, first);
+      await delay(100);
+      const volumeBeforeRepeat = howl.volume(undefined, first);
+      assert.ok(volumeBeforeRepeat > 0.1);
+      const faded = waitForEvent(howl, "fade", 2_000, first);
+      howl.fade(0, 0.8, 250, first);
+      await delay(40);
+      const volumeAfterRepeat = howl.volume(undefined, first);
+      assert.ok(volumeAfterRepeat >= volumeBeforeRepeat * 0.7);
+      await faded;
+      await delay(100);
+      assert.equal(fadeEvents, 1);
+      assert.ok(Math.abs(howl.volume(undefined, first) - 0.8) < 0.05);
+      howl.stop();
+      assert.equal(howl.playing(), false);
+      assert.ok(nativeAudioEngine.diagnostics.queuedMs >= 0);
+
+      const stream = new Howl({
+        src: [source],
+        sprite: { toneA: [0, 800] },
+        html5: true,
+        preload: false,
+      });
+      const streamId = stream.play("toneA");
+      await waitForPlay(stream, 5_000, streamId);
+      await waitForEvent(stream, "end", 5_000, streamId);
+      assert.equal(stream.playing(streamId), false);
+
+      const looping = new Howl({
+        src: [source],
+        sprite: { looping: [0, 800, true] },
+        preloadSprites: true,
+      });
+      await waitForEvent(looping, "load", 5_000);
+      const loopingId = looping.play("looping");
+      await waitForPlay(looping, 5_000, loopingId);
+      const loopFade = waitForEvent(looping, "fade", 3_000, loopingId);
+      looping.fade(0, 1, 1_100, loopingId);
+      await loopFade;
+      assert.ok(Math.abs(looping.volume(undefined, loopingId) - 1) < 0.05);
+      looping.stop(loopingId);
+
+      const drums = new Howl({
+        src: [DRUM_SOURCE_PATH],
+        sprite: DRUM_ATLAS.sprite,
+      });
+      await waitForEvent(drums, "load", 5_000);
+      const drumIds = DRUM_PADS.map((pad) => drums.play(pad.sprite));
+      assert.equal(new Set(drumIds).size, DRUM_PADS.length);
+      await Promise.all(drumIds.map((id) => waitForPlay(drums, 5_000, id)));
+      assert.ok(drumIds.every((id) => drums.playing(id)));
+      drums.stop();
+    } finally {
+      Howler.unload();
+    }
+  },
+);
 
 test(
   "Windows native audio advances while JS is blocked and batches audible events once",

@@ -1,0 +1,21 @@
+{
+  "version": "0.1.0",
+  "target": "win32-x64",
+  "sourceFingerprint": "a8fe332e9422927123f1449c24e330e689470c0d32ae1604020f0003203fc295",
+  "archives": [
+    {
+      "filename": "matjazprijatelj-pixi-native-0.1.0.tgz",
+      "packageName": "@matjazprijatelj/pixi-native",
+      "sha256": "a4051d4ffe93f6afbe8f6470f99d3032edcb01081cb29701a7e3719763a957fe"
+    },
+    {
+      "filename": "matjazprijatelj-pixi-native-win32-x64-0.1.0.tgz",
+      "packageName": "@matjazprijatelj/pixi-native-win32-x64",
+      "sha256": "fb97208c39696e081ce4c1a7b898d0b4570ffcd01c7764c459b190a481da91c9"
+    }
+  ],
+  "ffmpegSource": {
+    "filename": "ffmpeg-source-8.0-140fd653ae.tar.gz",
+    "sha256": "083d0987eb7a1827187a6d4c6e5d37d71293a68eaecd7e0a03dccb38cc249b89"
+  }
+}

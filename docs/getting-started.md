@@ -6,28 +6,23 @@
 - Windows 11 x64 or Linux x64
 - pnpm 9.15.9 for repository development and the examples below
 
-Install three parts for one display: the neutral core, one Pixi version facade,
-and the native package for the target operating system.
+Configure GitHub Packages in the consumer's `.npmrc`:
 
-### Windows x64 with PixiJS 8
-
-```sh
-pnpm add @pixi-native/core @pixi-native/pixi8 @pixi-native/native-win32-x64
+```ini
+@matjazprijatelj:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
 ```
 
-### Linux x64 with PixiJS 8
+Use a classic GitHub personal access token with `read:packages`, then install
+the facade package:
 
 ```sh
-pnpm add @pixi-native/core @pixi-native/pixi8 @pixi-native/native-linux-x64
+pnpm add @matjazprijatelj/pixi-native
 ```
 
-Replace `@pixi-native/pixi8` with `@pixi-native/pixi7` for a PixiJS 7 display.
-A launcher that starts both generations installs both facades once, then runs
-each display in a separate process.
-
-The project has not published these packages to a public registry. For now, use
-the corresponding `.tgz` paths from `artifacts/` in place of package names.
-[Deployment](deployment.md) describes the complete archive set.
+npm selects the matching Windows or Linux x64 native dependency. The root
+import uses PixiJS 8. Use `/pixi7` for a PixiJS 7 display. A launcher can run
+both generations from one installation when each display has its own process.
 
 ## PixiJS 8
 
@@ -39,7 +34,7 @@ import {
   Sprite,
   createApp,
   createModuleFileAccess,
-} from "@pixi-native/pixi8";
+} from "@matjazprijatelj/pixi-native";
 
 const files = createModuleFileAccess(import.meta.url);
 const runtime = await createApp({
@@ -72,7 +67,7 @@ native asset environment.
 PixiJS 7 exposes the same application shape and uses WebGL:
 
 ```ts
-import { Graphics, createApp } from "@pixi-native/pixi7";
+import { Graphics, createApp } from "@matjazprijatelj/pixi-native/pixi7";
 
 const runtime = await createApp({
   width: 1280,

@@ -4,12 +4,12 @@
 
 Use one version package as the main facade for a display:
 
-- `@pixi-native/pixi7` exports PixiJS 7, `createApp()`, `createRenderer()`,
+- `@matjazprijatelj/pixi-native/pixi7` exports PixiJS 7, `createApp()`, `createRenderer()`,
   `VideoSprite`, and the neutral core API.
-- `@pixi-native/pixi8` exports PixiJS 8 and the matching native API.
+- `@matjazprijatelj/pixi-native` and `/pixi8` export PixiJS 8 and the matching native API.
 - `/audio`, `/files`, `/runtime`, and `/canvas` provide focused entrypoints on
   both version packages.
-- `@pixi-native/core` owns Pixi-neutral functionality. Display code can import
+- `@matjazprijatelj/pixi-native/core` owns Pixi-neutral functionality. Display code can import
   through its version facade in most cases.
 
 Only declared package exports form the public API. The packages do not expose
@@ -23,7 +23,7 @@ renderer, installs the minimal browser-shaped adapter required by Pixi, starts
 the ticker, polls input, presents frames, and controls teardown.
 
 ```ts
-import { createApp } from "@pixi-native/pixi8";
+import { createApp } from "@matjazprijatelj/pixi-native";
 
 const runtime = await createApp({
   backend: "webgpu",
@@ -71,7 +71,7 @@ the managed application loop. The caller then owns event polling, rendering,
 presentation, resizing, and cleanup.
 
 ```ts
-import { createRenderer } from "@pixi-native/pixi8";
+import { createRenderer } from "@matjazprijatelj/pixi-native";
 
 const { app, native } = await createRenderer({ backend: "webgpu" });
 
