@@ -243,7 +243,13 @@ try {
     );
     execSync("pnpm typecheck", { cwd: projectRoot, stdio: "inherit" });
     execSync("pnpm build", { cwd: projectRoot, stdio: "inherit" });
-    await readFile(resolve(projectRoot, "dist/main.js"));
+    const compiledMain = await readFile(
+      resolve(projectRoot, "dist/main.js"),
+      "utf8",
+    );
+    if (!compiledMain.includes('from "./backgroundAnimation.js"')) {
+      throw new Error(`${directory} did not rewrite its TypeScript import.`);
+    }
   }
 
   await writeFile(

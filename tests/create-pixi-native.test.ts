@@ -33,7 +33,7 @@ test("quickboot parses explicit Pixi and backend options", () => {
 });
 
 test("quickboot keeps generator and runtime versions independent", () => {
-    assert.equal(GENERATOR_VERSION, "0.1.2");
+    assert.equal(GENERATOR_VERSION, "0.1.3");
     assert.equal(PIXI_NATIVE_VERSION, "0.1.1");
     assert.equal(
         execFileSync(
@@ -148,6 +148,7 @@ test("quickboot generates version-specific projects without credentials", async 
                 "utf8",
             );
             const npmrc = await readFile(join(target, ".npmrc"), "utf8");
+            const tsconfig = JSON.parse(await readFile(join(target, "tsconfig.json"), "utf8"));
             assert.equal(
                 manifest.dependencies["@matjazprijatelj/pixi-native"],
                 PIXI_NATIVE_VERSION,
@@ -161,6 +162,8 @@ test("quickboot generates version-specific projects without credentials", async 
             assert.equal(manifest.devDependencies.prettier, "3.9.6");
             assert.match(manifest.scripts.dev, /node --watch .*src\/main\.ts/);
             assert.ok(source.includes(`from "${importPath}"`));
+            assert.match(source, /from "\.\/backgroundAnimation\.ts"/);
+            assert.equal(tsconfig.compilerOptions.rewriteRelativeImportExtensions, true);
             assert.match(source, /assets\/pixi-hero\.png/);
             assert.ok(animationSource.includes(`from "${importPath}"`));
             if (animation === "gsap") {

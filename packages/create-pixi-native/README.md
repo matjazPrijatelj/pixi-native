@@ -26,7 +26,7 @@ credentials and does not install dependencies.
 
 PixiJS 8 projects depend on `pixi.js@^8.20.0`. PixiJS 7 projects depend only on
 the `pixi.js-v7` alias for `pixi.js@^7.4.3`. Both target Pixi Native runtime
-`0.1.1`; the generator has its own `0.1.2` release version.
+`0.1.1`; the generator has its own `0.1.3` release version.
 
 GitHub Packages requires `GITHUB_PACKAGES_TOKEN` with `read:packages` before
 running the generator or installing the generated project.

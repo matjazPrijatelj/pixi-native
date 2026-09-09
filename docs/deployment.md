@@ -74,7 +74,7 @@ pnpm pack:generator
 This produces an archive matching the generator's independent package version
 and its package-specific release manifest. It checks the packed CLI version and
 verifies representative PixiJS 7 and 8 projects in fresh temporary consumers.
-The current generator release is `0.1.2`; both generated Pixi majors target
+The current generator release is `0.1.3`; both generated Pixi majors target
 runtime `0.1.1`.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
@@ -134,7 +134,7 @@ packing:
 - the generator version in `packages/create-pixi-native/README.md`
 - `HISTORY.md`
 
-For the current patch, every generator version reference is `0.1.2`; the
+For the current patch, every generator version reference is `0.1.3`; the
 separate `PIXI_NATIVE_VERSION` remains `0.1.1`.
 
 Pack and validate the generator first:

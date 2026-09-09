@@ -2,6 +2,10 @@
 
 ## 2026-09-09
 
+- Fixed generated development startup for PixiJS 8 WebGPU, PixiJS 8 WebGL,
+  and PixiJS 7 WebGL in `create-pixi-native` 0.1.3. Source templates now import
+  `backgroundAnimation.ts` for direct Node.js 24 execution, while TypeScript
+  rewrites the production import to `.js` during compilation.
 - Removed low-value demo navigation, particle, RTP, asset-shape, documentation,
   and duplicated integration tests. Kept the critical native lifecycle,
   renderer adapter, resize/animation, media state-machine, public API,
