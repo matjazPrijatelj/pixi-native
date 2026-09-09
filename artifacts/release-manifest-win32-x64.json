@@ -1,12 +1,12 @@
 {
   "version": "0.1.0",
   "target": "win32-x64",
-  "sourceFingerprint": "a8fe332e9422927123f1449c24e330e689470c0d32ae1604020f0003203fc295",
+  "sourceFingerprint": "416b3dfb0de45f17e6834d1bb8a691d44903d6e9f21e7ed715f785d5e7cdff62",
   "archives": [
     {
       "filename": "matjazprijatelj-pixi-native-0.1.0.tgz",
       "packageName": "@matjazprijatelj/pixi-native",
-      "sha256": "a4051d4ffe93f6afbe8f6470f99d3032edcb01081cb29701a7e3719763a957fe"
+      "sha256": "26dfc821150df555b19c3ece996810b6a99d3ce9cb00cd6486532589c57ef6aa"
     },
     {
       "filename": "matjazprijatelj-pixi-native-win32-x64-0.1.0.tgz",

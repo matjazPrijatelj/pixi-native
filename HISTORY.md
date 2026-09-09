@@ -2,6 +2,10 @@
 
 ## 2026-09-09
 
+- Fixed the Windows GitHub Packages publisher to invoke npm through Node's
+  `npm-cli.js` instead of spawning the `npm.cmd` shim. Publisher subprocesses
+  now use the Windows system CA store and report their actual spawn, TLS, or
+  registry error instead of an unhelpful null exit code.
 - Prepared the 0.1.0 GitHub Packages release under the MIT License. The public
   API now ships as `@matjazprijatelj/pixi-native`, with PixiJS 8 at the package
   root and explicit `/pixi8`, `/pixi7`, and `/core` subpaths.

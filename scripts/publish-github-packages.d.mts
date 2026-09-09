@@ -8,6 +8,16 @@ export interface RegistryDistribution {
   readonly integrity?: string;
 }
 
+export interface NpmInvocation {
+  readonly command: string;
+  readonly argumentPrefix: readonly string[];
+}
+
+export function getNpmInvocation(
+  platform?: NodeJS.Platform,
+  execPath?: string,
+): NpmInvocation;
+
 export function sanitizeNpmEnvironment(
   environment: NodeJS.ProcessEnv,
   userConfig: string,

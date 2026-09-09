@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   archiveDigests,
+  getNpmInvocation,
   registryCopyMatches,
   sanitizeNpmEnvironment,
 } from "../scripts/publish-github-packages.mjs";
@@ -68,6 +69,15 @@ test("publisher strips inherited npm config and compares immutable digests", () 
     PATH: "bin",
     NPM_CONFIG_USERCONFIG: "temporary-npmrc",
     NPM_CONFIG_CACHE: "temporary-cache",
+    NODE_OPTIONS: "--use-system-ca",
+  });
+
+  assert.deepEqual(getNpmInvocation("win32", "C:\\Node\\node.exe"), {
+    command: "C:\\Node\\node.exe",
+    argumentPrefix: [
+      "--use-system-ca",
+      "C:\\Node\\node_modules\\npm\\bin\\npm-cli.js",
+    ],
   });
 
   const digests = archiveDigests(Buffer.from("archive"));

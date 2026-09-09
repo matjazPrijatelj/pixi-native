@@ -16,7 +16,23 @@ const EXPECTED_PACKAGES = [
   "@matjazprijatelj/pixi-native-linux-x64",
   "@matjazprijatelj/pixi-native",
 ];
-const NPM_COMMAND = process.platform === "win32" ? "npm.cmd" : "npm";
+const NPM_INVOCATION = getNpmInvocation();
+
+export function getNpmInvocation(
+  platform = process.platform,
+  execPath = process.execPath,
+) {
+  if (platform !== "win32") {
+    return { command: "npm", argumentPrefix: [] };
+  }
+  return {
+    command: execPath,
+    argumentPrefix: [
+      "--use-system-ca",
+      resolve(dirname(execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    ],
+  };
+}
 
 export function sanitizeNpmEnvironment(environment, userConfig, cache) {
   const sanitized = {};
@@ -27,6 +43,13 @@ export function sanitizeNpmEnvironment(environment, userConfig, cache) {
   }
   sanitized.NPM_CONFIG_USERCONFIG = userConfig;
   sanitized.NPM_CONFIG_CACHE = cache;
+  const nodeOptions = (environment.NODE_OPTIONS ?? "")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!nodeOptions.includes("--use-system-ca")) {
+    nodeOptions.push("--use-system-ca");
+  }
+  sanitized.NODE_OPTIONS = nodeOptions.join(" ");
   return sanitized;
 }
 
@@ -201,8 +224,7 @@ function validatePackedManifest(manifest, packageName) {
 }
 
 function queryRegistryDistribution(packageName, environment) {
-  const result = spawnSync(
-    NPM_COMMAND,
+  const result = runNpmProcess(
     [
       "view",
       `${packageName}@${VERSION}`,
@@ -211,26 +233,46 @@ function queryRegistryDistribution(packageName, environment) {
       "--registry",
       REGISTRY,
     ],
-    { cwd: REPOSITORY_ROOT, encoding: "utf8", env: environment, shell: false },
+    environment,
   );
   if (result.status === 0) return JSON.parse(result.stdout);
-  if (/E404|404 Not Found/i.test(result.stderr)) return null;
-  throw new Error(`Registry lookup failed for ${packageName}.`);
+  const failure = processFailure(result);
+  if (/E404|404 Not Found/i.test(failure)) return null;
+  throw new Error(`Registry lookup failed for ${packageName}: ${failure}`);
 }
 
 function runNpm(arguments_, environment) {
-  const result = spawnSync(NPM_COMMAND, arguments_, {
-    cwd: REPOSITORY_ROOT,
-    encoding: "utf8",
-    env: environment,
-    shell: false,
-  });
+  const result = runNpmProcess(arguments_, environment);
   if (result.status !== 0) {
-    throw new Error(
-      `npm ${arguments_[0]} failed with exit code ${result.status}.`,
-    );
+    throw new Error(`npm ${arguments_[0]} failed: ${processFailure(result)}`);
   }
   if (result.stdout.trim()) process.stdout.write(result.stdout);
+}
+
+function runNpmProcess(arguments_, environment) {
+  return spawnSync(
+    NPM_INVOCATION.command,
+    [...NPM_INVOCATION.argumentPrefix, ...arguments_],
+    {
+      cwd: REPOSITORY_ROOT,
+      encoding: "utf8",
+      env: environment,
+      shell: false,
+    },
+  );
+}
+
+function processFailure(result) {
+  if (result.error) {
+    const code = result.error.code ? `${result.error.code}: ` : "";
+    return `${code}${result.error.message}`;
+  }
+  const output = [result.stderr, result.stdout]
+    .map((value) => value?.trim())
+    .filter(Boolean)
+    .join("\n");
+  if (output) return output;
+  return `exit code ${result.status ?? "unknown"}`;
 }
 
 function runGit(arguments_) {
