@@ -103,6 +103,17 @@ test("generator has an independent package version", async () => {
   assert.equal(manifest.version, "0.1.0");
 });
 
+test("WSL release commands use temporary LF scripts", async () => {
+  const source = await readFile(
+    new URL("scripts/package-release-linux-wsl.ps1", REPOSITORY_ROOT),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /bash -lc \$Command/);
+  assert.match(source, /UTF8Encoding\(\$false\)/);
+  assert.match(source, /--exec bash \$wslCommandPath/);
+  assert.match(source, /Remove-Item -LiteralPath \$windowsCommandPath/);
+});
+
 test("publisher strips inherited npm config and compares immutable digests", () => {
   const environment = sanitizeNpmEnvironment(
     {

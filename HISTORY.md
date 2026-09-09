@@ -2,6 +2,10 @@
 
 ## 2026-09-09
 
+- Made the Windows-to-WSL release helper execute multiline Bash commands from
+  temporary UTF-8/LF script files. This prevents Windows PowerShell argument
+  handling from opening the default interactive WSL shell during Linux
+  packaging.
 - Added the Pixi Native hero artwork to the main documentation and packaged
   facade. PixiJS 7 and 8 demos now use the supplied demo copy as a dimmed,
   cover-scaled background that follows native window resizing.

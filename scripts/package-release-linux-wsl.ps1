@@ -40,9 +40,26 @@ function ConvertTo-BashLiteral {
 function Invoke-WslCommand {
     param([Parameter(Mandatory = $true)][string]$Command)
 
-    & wsl.exe @wslArguments -- bash -lc $Command
-    if ($LASTEXITCODE -ne 0) {
-        throw "WSL command failed with exit code $LASTEXITCODE."
+    $commandFileName = "wsl-command-$([Guid]::NewGuid().ToString("N")).sh"
+    $windowsCommandPath = Join-Path $temporaryDirectory $commandFileName
+    $wslCommandPath = "$wslRepositoryRoot/.tmp/$commandFileName"
+    $normalizedCommand = $Command.Replace("`r`n", "`n").Replace("`r", "`n")
+    if (-not $normalizedCommand.EndsWith("`n")) {
+        $normalizedCommand += "`n"
+    }
+    $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($windowsCommandPath, $normalizedCommand, $utf8WithoutBom)
+
+    $wslExitCode = -1
+    try {
+        & wsl.exe @wslArguments --exec bash $wslCommandPath
+        $wslExitCode = $LASTEXITCODE
+    }
+    finally {
+        Remove-Item -LiteralPath $windowsCommandPath -Force -ErrorAction SilentlyContinue
+    }
+    if ($wslExitCode -ne 0) {
+        throw "WSL command failed with exit code $wslExitCode."
     }
 }
 
