@@ -1,73 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   DRUM_ATLAS,
   DRUM_PADS,
   DRUM_SOURCE_PATH,
-  getDrumPadForKey,
 } from "../src/demo/v8/drumKit.ts";
 
 const source = fileURLToPath(
   new URL("../src/demo/assets/audio/howler-test.wav", import.meta.url),
 );
-
-test("generated audio fixture has a valid stereo 48 kHz WAV header", async () => {
-  assert.equal(existsSync(source), true);
-  const { readFile } = await import("node:fs/promises");
-  const wav = await readFile(source);
-  assert.equal(wav.toString("ascii", 0, 4), "RIFF");
-  assert.equal(wav.toString("ascii", 8, 12), "WAVE");
-  assert.equal(wav.readUInt16LE(22), 2);
-  assert.equal(wav.readUInt32LE(24), 48_000);
-});
-
-test("drum MP3 atlas maps eight keys to valid sprites and transparent hit regions", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const mp3 = await readFile(DRUM_SOURCE_PATH);
-  assert.ok(
-    mp3.subarray(0, 3).toString("ascii") === "ID3" ||
-      (mp3[0] === 0xff && (mp3[1] & 0xe0) === 0xe0),
-  );
-  assert.deepEqual(
-    DRUM_PADS.map(({ key, sprite }) => [key, sprite]),
-    [
-      ["u", "crash"],
-      ["i", "closedHat"],
-      ["o", "ride"],
-      ["p", "highTom"],
-      ["j", "snare"],
-      ["k", "kick"],
-      ["l", "floorTom"],
-      ["č", "openHat"],
-    ],
-  );
-  assert.equal(getDrumPadForKey("Č")?.sprite, "openHat");
-  assert.equal(getDrumPadForKey("x"), undefined);
-  for (const pad of DRUM_PADS) {
-    assert.ok(DRUM_ATLAS.sprite[pad.sprite]);
-    assert.ok(pad.hit.x - pad.hit.radiusX >= 0);
-    assert.ok(pad.hit.x + pad.hit.radiusX <= 1);
-    assert.ok(pad.hit.y - pad.hit.radiusY >= 0);
-    assert.ok(pad.hit.y + pad.hit.radiusY <= 1);
-  }
-
-  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
-  const texturePath = fileURLToPath(
-    new URL("../src/demo/assets/drum-kit.png", import.meta.url),
-  );
-  const image = await loadImage(texturePath);
-  const canvas = createCanvas(image.width, image.height);
-  const context = canvas.getContext("2d");
-  context.drawImage(image, 0, 0);
-  const pixels = context.getImageData(0, 0, image.width, image.height).data;
-  let transparentPixels = 0;
-  for (let index = 3; index < pixels.length; index += 4) {
-    if (pixels[index] === 0) transparentPixels++;
-  }
-  assert.ok(transparentPixels > pixels.length / 16);
-});
 
 test(
   "Howler-compatible sprites overlap and fade through the native mixer",

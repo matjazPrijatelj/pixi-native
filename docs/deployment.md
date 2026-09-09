@@ -71,11 +71,11 @@ Pack and validate the independently versioned generator separately:
 pnpm pack:generator
 ```
 
-This produces the `0.1.0` generator archive and its package-specific release
-manifest, checks the packed CLI version, and verifies that PixiJS 7 and 8
-templates contain only their selected Pixi dependency while both target runtime
-`0.1.1`. It installs, typechecks, and builds both projects in fresh temporary
-consumers outside the workspace.
+This produces an archive matching the generator's independent package version
+and its package-specific release manifest. It checks the packed CLI version and
+verifies representative PixiJS 7 and 8 projects in fresh temporary consumers.
+The current generator release is `0.1.2`; both generated Pixi majors target
+runtime `0.1.1`.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
 checkout after the Windows archive exists:
@@ -117,12 +117,115 @@ Publish with an explicit command:
 pnpm publish:github
 ```
 
-The generator uses its own `create-pixi-native-v0.1.0` tag and preflight:
+### Generator release runbook
 
-```sh
+The generator has its own version, archive, release manifest, and
+`create-pixi-native-v<version>` tag. It can be released without rebuilding or
+publishing the runtime/native packages. Never run `native:build` as part of this
+workflow.
+
+Use Node.js 24 LTS and pnpm 9.15.9. Start from the repository root with all
+intended generator changes present. Update these version references before
+packing:
+
+- `packages/create-pixi-native/package.json`
+- `GENERATOR_VERSION` in `packages/create-pixi-native/src/generator.ts`
+- generator-version assertions in the focused release tests
+- the generator version in `packages/create-pixi-native/README.md`
+- `HISTORY.md`
+
+For the current patch, every generator version reference is `0.1.2`; the
+separate `PIXI_NATIVE_VERSION` remains `0.1.1`.
+
+Pack and validate the generator first:
+
+```powershell
+$generatorVersion = (Get-Content packages/create-pixi-native/package.json |
+    ConvertFrom-Json).version
+$generatorTag = "create-pixi-native-v$generatorVersion"
+$generatorArchive = "artifacts/matjazprijatelj-create-pixi-native-$generatorVersion.tgz"
+
+pnpm pack:generator
+git status --short
+```
+
+`pack:generator` must finish successfully and create the archive, its
+`.sha256` file, and `artifacts/release-manifest-create-pixi-native.json`. Review
+the changes, then stage only the generator release sources, documentation,
+tests, and generated release outputs:
+
+```powershell
+git add -- HISTORY.md `
+    docs/deployment.md `
+    packages/create-pixi-native `
+    scripts/pack-generator.mjs `
+    tests/create-pixi-native.test.ts `
+    tests/release-packages.test.ts `
+    artifacts/release-manifest-create-pixi-native.json `
+    $generatorArchive `
+    "$generatorArchive.sha256"
+
+git diff --cached --check
+git diff --cached --stat
+git commit -m "release(create-pixi-native): $generatorVersion"
+git tag -a $generatorTag -m "create-pixi-native $generatorVersion"
+```
+
+The publisher requires a clean working tree and the generator tag on `HEAD`.
+Push the release commit and tag before publishing:
+
+```powershell
+git push origin main
+git push origin $generatorTag
+```
+
+Create a classic GitHub personal access token with `write:packages` and enter it
+without writing it to a repository file or PowerShell history:
+
+```powershell
+$secureToken = Read-Host "Enter GITHUB_PACKAGES_TOKEN:" -MaskInput
+$env:GITHUB_PACKAGES_TOKEN = $secureToken
+```
+
+Run the non-publishing registry preflight, then publish only when it reports
+that the exact generator archive is ready:
+
+```powershell
 pnpm publish:generator:github:check
 pnpm publish:generator:github
+pnpm publish:generator:github:check
 ```
+
+The final check must report that
+`@matjazprijatelj/create-pixi-native@<version>` already matches. Remove the
+token from the process environment afterward:
+
+```powershell
+Remove-Item Env:GITHUB_PACKAGES_TOKEN
+```
+
+Verify the published package from a new directory with an explicit version.
+Existing generated projects are not updated when a new generator is released:
+
+```powershell
+cd C:\Work\pixi-playground
+pnpm dlx "@matjazprijatelj/create-pixi-native@$generatorVersion" `
+    release-smoke --pixi 8 --backend webgl
+cd release-smoke
+pnpm install
+pnpm dev
+```
+
+Interpret the preflight result carefully:
+
+- `is ready to publish` means the version is absent and the archive can be
+  published.
+- `already matches` means that exact archive is already published; do not
+  publish it again.
+- `exists with different content` means the registry version is immutable.
+  Increment the generator version, repack, commit, and create a new tag.
+- `SEC_E_NO_CREDENTIALS` during `git push` or `git ls-remote` is a Git
+  credential failure, not evidence that npm publication succeeded or failed.
 
 GitHub creates new packages as private. Change each package page to Public
 after publication. The source repository may remain private; package consumers

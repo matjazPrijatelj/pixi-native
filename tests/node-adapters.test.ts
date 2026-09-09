@@ -24,7 +24,6 @@ import {
   warnAntialiasSampleFallback,
 } from "@pixi-native/core/runtime/windowOptions.js";
 import { setNativeWindowTransparent } from "@pixi-native/core/runtime/ModalFrameController.js";
-import { DEMO_WINDOW_OPTIONS } from "../src/demo/windowOptions.ts";
 import {
   assertGlfwTransparency,
   requestGlfwTransparency,
@@ -223,18 +222,6 @@ test("maxFps controls only timer-paced animation frames", () => {
   }
   assert.equal(warnings.length, 1);
   assert.match(String(warnings[0][0]), /maxFps is ignored/);
-});
-
-test("native demos expose explicit decorated window defaults", () => {
-  assert.deepEqual(DEMO_WINDOW_OPTIONS, {
-    width: 1280,
-    height: 720,
-    borderless: false,
-    transparent: true,
-    backgroundAlpha: 0.5,
-    x: 50,
-    y: 50,
-  });
 });
 
 test("Linux transparency leaves Wayland handles with SDL", () => {

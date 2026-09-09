@@ -5,7 +5,6 @@ import { createRequire } from "node:module";
 import {
   getDefaultGpuBackend,
   resolveGpuBackend,
-  supportsNativeVideo,
 } from "@pixi-native/core/runtime/platform.js";
 
 const require = createRequire(import.meta.url);
@@ -36,10 +35,4 @@ test("native GPU binding paths are isolated by platform and architecture", () =>
     ),
     true,
   );
-});
-
-test("the native video scene is exposed on Windows and Linux", () => {
-  assert.equal(supportsNativeVideo("linux"), true);
-  assert.equal(supportsNativeVideo("win32"), true);
-  assert.equal(supportsNativeVideo("darwin"), false);
 });

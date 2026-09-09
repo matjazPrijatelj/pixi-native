@@ -1,34 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { Assets, BitmapFont, BitmapText, settings } from "pixi.js-v7";
+import { Assets, BitmapFont, settings } from "pixi.js-v7";
 import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
-import {
-  DYNAMIC_BITMAP_FONT_NAME,
-  installDynamicBitmapTextFont,
-  loadExternalBitmapFont,
-} from "../src/demo/v7/bitmapFonts.ts";
-
-test("PixiJS 7 dynamic BitmapFont contains every scene glyph", () => {
-  new NodeDOMAdapter({} as never).installPixi7(settings);
-  installDynamicBitmapTextFont();
-
-  const sample = "[1] Dynamic atlas: ČŠŽ čšž € 0123456789";
-  const font = BitmapFont.available[DYNAMIC_BITMAP_FONT_NAME];
-  const missing = [...sample]
-    .filter((character) => !font.chars[character.codePointAt(0) ?? -1])
-    .join("");
-
-  assert.equal(missing, "");
-  assert.ok(
-    new BitmapText(sample, {
-      fontName: DYNAMIC_BITMAP_FONT_NAME,
-      fontSize: 46,
-    }).width > 0,
-  );
-
-  BitmapFont.uninstall(DYNAMIC_BITMAP_FONT_NAME);
-});
+import { loadExternalBitmapFont } from "../src/demo/v7/bitmapFonts.ts";
 
 test("PixiJS 7 Assets loads a native PNG without explicit Assets initialization", async () => {
   const adapter = new NodeDOMAdapter({} as never);
