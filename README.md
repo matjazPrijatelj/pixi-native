@@ -150,8 +150,6 @@ Native version facade in the same display process.
 - [Deployment and release archives](docs/deployment.md)
 
 Package tarballs include these guides and the public TypeScript declarations.
-The GitHub source and issue tracker require repository access while the
-repository remains private.
 
 ## Current limitations
 
