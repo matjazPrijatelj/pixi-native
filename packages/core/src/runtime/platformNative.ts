@@ -13,8 +13,8 @@ export interface NativePlatformModules {
 }
 
 const PLATFORM_PACKAGES: Readonly<Record<string, string>> = {
-    "win32-x64": "@matjazprijatelj/pixi-native-win32-x64",
-    "linux-x64": "@matjazprijatelj/pixi-native-linux-x64",
+    "win32-x64": "@matjash/pixi-native-win32-x64",
+    "linux-x64": "@matjash/pixi-native-linux-x64",
 };
 
 /** Resolves the one installed native package for the active OS and architecture. */

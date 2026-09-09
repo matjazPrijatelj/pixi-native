@@ -13,6 +13,7 @@ export class NodeGPUCanvas {
     Set<EventListenerOrEventListenerObject>
   >();
 
+  /** Wraps a native WebGPU renderer in the canvas shape expected by Pixi. */
   public constructor(renderer: NodeWindowRenderer, width = 1280, height = 720) {
     this.renderer = renderer;
     this.context = {
@@ -32,6 +33,7 @@ export class NodeGPUCanvas {
     return this.height;
   }
 
+  /** Returns a viewport-aligned rectangle for Pixi pointer normalization. */
   public getBoundingClientRect(): DOMRect {
     return {
       left: 0,
@@ -79,11 +81,13 @@ export class NodeGPUCanvas {
     }
   }
 
+  /** Returns the native `webgpu` canvas context, or `null` for other types. */
   public getContext(type: string): unknown {
     if (type !== "webgpu") return null;
     return this.context;
   }
 
+  /** Resizes the canvas and native WebGPU presentation surface. */
   public resize(width: number, height: number): void {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));

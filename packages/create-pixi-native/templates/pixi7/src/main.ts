@@ -4,8 +4,8 @@ import {
   Sprite,
   Text,
   createApp,
-} from "@matjazprijatelj/pixi-native/pixi7";
-import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi7/files";
+} from "@matjash/pixi-native/pixi7";
+import { createModuleFileAccess } from "@matjash/pixi-native/pixi7/files";
 import { startBackgroundAnimation } from "./backgroundAnimation.ts";
 
 const runtime = await createApp({

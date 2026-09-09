@@ -11,11 +11,9 @@ selected when this project was generated. It continuously scales from 0.5 to
 
 ## Setup
 
-Use Node.js 24 and pnpm 9. Export a GitHub classic personal access token with
-`read:packages` before installing dependencies:
+Use Node.js 24 and pnpm 9, then install dependencies:
 
-```powershell
-$env:GITHUB_PACKAGES_TOKEN = "your-token"
+```sh
 pnpm install
 pnpm dev
 ```

@@ -30,12 +30,15 @@ export interface NodeRendererContext {
 
 export type RendererBackend = "webgpu" | "webgl";
 
+/** PixiJS 8 application and manually managed native rendering context. */
 export interface RendererResult {
   readonly app: Application;
   readonly native: NodeRendererContext;
 }
 
+/** PixiJS 8 native window options and explicit renderer backend selection. */
 export interface RendererOptions extends NodeRendererOptions {
+  /** Renderer backend. Defaults to `webgpu`; no automatic fallback occurs. */
   readonly backend?: RendererBackend;
 }
 
@@ -58,7 +61,10 @@ function initializeNativeAssets(): Promise<void> {
   return nativeAssetsInitialization;
 }
 
-/** Selects one explicit backend; backend implementations own their startup details. */
+/**
+ * Creates a PixiJS 8 application and native surface without a managed loop.
+ * The caller owns rendering, presentation, event polling, and teardown.
+ */
 export async function createRenderer(
   options: RendererOptions = {},
 ): Promise<RendererResult> {
@@ -76,7 +82,10 @@ export async function createRenderer(
   return result;
 }
 
-/** Creates a self-running Pixi 8 application on one native renderer backend. */
+/**
+ * Creates a self-running PixiJS 8 application on one native renderer backend.
+ * Native close and process termination use the same idempotent teardown path.
+ */
 export async function createApp(options: AppOptions = {}): Promise<App> {
   const { app, native } = await createRenderer(options);
 

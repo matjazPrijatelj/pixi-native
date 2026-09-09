@@ -76,6 +76,7 @@ interface NativeVideoModule {
   }) => NativeDecoderBinding;
 }
 
+/** Playback, decoding, and reconnect options for {@link NativeVideo}. */
 export interface NativeVideoOptions {
   readonly width: number;
   readonly height: number;
@@ -112,6 +113,7 @@ export interface NativeVideoDecoderOptions extends NativeVideoOptions {
   readonly outputArgs?: readonly string[];
 }
 
+/** Read-only counters for the current video source and presentation lifecycle. */
 export interface NativeVideoStats {
   readonly decodedFrames: number;
   readonly presentedFrames: number;
@@ -560,6 +562,12 @@ export function setNativeVideoModalState(active: boolean): void {
   }
 }
 
+/**
+ * Browser-shaped native video source backed by FFmpeg and an NV12 decoder.
+ *
+ * Pair it with the selected Pixi facade's `VideoSprite`, then call
+ * {@link destroy} during application teardown.
+ */
 export class NativeVideo extends EventTarget {
   public readonly width: number;
   public readonly height: number;
@@ -625,6 +633,7 @@ export class NativeVideo extends EventTarget {
   private metadataPromise?: Promise<void>;
   private sourceGeneration = 0;
 
+  /** Creates a video source with fixed output dimensions and frame rate. */
   public constructor(
     src: string,
     options: NativeVideoOptions,
@@ -672,10 +681,12 @@ export class NativeVideo extends EventTarget {
     activeVideos.add(this.registryReference);
   }
 
+  /** Original source string, including an optional media fragment. */
   public get src(): string {
     return this.sourceValue;
   }
 
+  /** Replaces the source and resets decoder, audio, readiness, and statistics. */
   public set src(value: string) {
     this.replaceSource(value, !this.isPaused);
   }
@@ -701,14 +712,17 @@ export class NativeVideo extends EventTarget {
     }
   }
 
+  /** Decoder source after removing supported media fragments. */
   public get currentSrc(): string {
     return this.decodedSource;
   }
 
+  /** Media duration in seconds, or `Infinity` for a live source. */
   public get duration(): number {
     return this.durationValue;
   }
 
+  /** HTMLMediaElement-compatible readiness level from `0` through `4`. */
   public get readyState(): number {
     return this.readyStateValue;
   }
@@ -721,6 +735,7 @@ export class NativeVideo extends EventTarget {
     this.loopValue = Boolean(value);
   }
 
+  /** Playback multiplier. Live sources support only `1`. */
   public get playbackRate(): number {
     return this.playbackRateValue;
   }
@@ -747,14 +762,17 @@ export class NativeVideo extends EventTarget {
     return this.hasEnded;
   }
 
+  /** Active decoder backend name, when available. */
   public get backend(): string {
     return this.decoder?.backend() ?? this.lastBackend;
   }
 
+  /** Most recent video playback or decoder error. */
   public get error(): Error | null {
     return this.lastError;
   }
 
+  /** Most recent audio error; video may continue without audio. */
   public get audioError(): Error | null {
     return this.lastAudioError;
   }
@@ -827,6 +845,7 @@ export class NativeVideo extends EventTarget {
     });
   }
 
+  /** Snapshot of decode, queue, synchronization, and presentation counters. */
   public get stats(): NativeVideoStats {
     const layout = getNv12FrameLayout(this.width, this.height);
     return {
@@ -846,6 +865,7 @@ export class NativeVideo extends EventTarget {
     };
   }
 
+  /** Loads metadata if needed and starts or resumes playback. */
   public async play(): Promise<void> {
     this.assertUsable();
     if (!this.isPaused) return;
@@ -878,15 +898,18 @@ export class NativeVideo extends EventTarget {
     }
   }
 
+  /** Pauses decoding and audio while preserving the current position. */
   public pause(): void {
     this.assertUsable();
     this.pauseInternal(true);
   }
 
+  /** Resets and reloads the current source without changing `src`. */
   public load(): void {
     this.replaceSource(this.sourceValue, false);
   }
 
+  /** @internal Claims the newest decoded frame for a renderer integration. */
   public takeLatestFrame(): NativeVideoFrame | null {
     if (this.destroyed) return null;
     if (!this.decoder) {
@@ -964,6 +987,7 @@ export class NativeVideo extends EventTarget {
     return null;
   }
 
+  /** @internal Records that a renderer presented the claimed frame. */
   public markFramePresented(): void {
     if (this.destroyed || !this.frameAwaitingPresentation) return;
     this.frameAwaitingPresentation = false;
@@ -971,6 +995,7 @@ export class NativeVideo extends EventTarget {
     this.handlePresentedFrameState();
   }
 
+  /** Idempotently stops playback and releases decoder and audio resources. */
   public destroy(): void {
     if (this.destroyed) return;
     this.playbackGeneration++;
@@ -1245,6 +1270,7 @@ export class NativeVideo extends EventTarget {
     this.decoder = undefined;
   }
 
+  /** @internal Coordinates playback with a native modal move/resize loop. */
   public setModalState(active: boolean): void {
     // Native audio and the decoder keep their own clocks/threads. Modal RAF
     // continues presenting the newest frame due on that same audio clock.

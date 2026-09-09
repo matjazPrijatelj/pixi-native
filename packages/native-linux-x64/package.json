@@ -1,8 +1,8 @@
 {
-  "name": "@matjazprijatelj/pixi-native-linux-x64",
-  "version": "0.1.1",
+  "name": "@matjash/pixi-native-linux-x64",
+  "version": "0.1.2",
   "type": "commonjs",
-  "description": "Linux x64 native binaries for @matjazprijatelj/pixi-native",
+  "description": "Linux x64 native binaries for @matjash/pixi-native",
   "license": "MIT",
   "os": [
     "linux"
@@ -35,6 +35,7 @@
     "url": "https://github.com/matjazPrijatelj/pixi-native/issues"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   }
 }

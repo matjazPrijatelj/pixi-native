@@ -3,7 +3,7 @@
 Create a minimal TypeScript application for PixiJS 7 or 8 on Pixi Native.
 
 ```sh
-pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
 cd my-display
 pnpm install
 pnpm dev
@@ -17,7 +17,7 @@ The generated hero background uses the Pixi ticker by default. Pass
 include GSAP as an application dependency:
 
 ```sh
-pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu --animation gsap
+pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu --animation gsap
 ```
 
 The generated project uses Node.js 24 watch mode during development, TypeScript
@@ -26,7 +26,5 @@ credentials and does not install dependencies.
 
 PixiJS 8 projects depend on `pixi.js@^8.20.0`. PixiJS 7 projects depend only on
 the `pixi.js-v7` alias for `pixi.js@^7.4.3`. Both target Pixi Native runtime
-`0.1.1`; the generator has its own `0.1.3` release version.
-
-GitHub Packages requires `GITHUB_PACKAGES_TOKEN` with `read:packages` before
-running the generator or installing the generated project.
+`0.1.2`; the generator has its own `0.1.4` release version. Both are public on
+npm and do not require registry credentials for installation.

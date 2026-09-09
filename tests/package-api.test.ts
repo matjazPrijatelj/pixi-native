@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { nativeAudioEngine } from "@pixi-native/pixi8/audio";
 import * as canvas from "@pixi-native/pixi8/canvas";
 import * as runtime from "@pixi-native/pixi8/runtime";
 import * as v7 from "@pixi-native/pixi7";
@@ -25,6 +26,14 @@ test("runtime and canvas expose their public compatibility adapters", () => {
   assert.equal(typeof canvas.NodeCanvas, "function");
   assert.equal(typeof canvas.NodeGPUCanvas, "function");
   assert.equal(typeof canvas.prepareRgbaPixelsForUpload, "function");
+});
+
+test("public audio engine access is limited to diagnostics", () => {
+  assert.equal(typeof nativeAudioEngine.diagnostics.activeVoices, "number");
+  if (false) {
+    // @ts-expect-error Playback ownership belongs to Howl and Howler.
+    nativeAudioEngine.stopAll();
+  }
 });
 
 test("version packages expose the same supported public entrypoints", async () => {

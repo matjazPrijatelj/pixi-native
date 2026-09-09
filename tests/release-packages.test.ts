@@ -7,7 +7,7 @@ import {
   getNpmInvocation,
   registryCopyMatches,
   sanitizeNpmEnvironment,
-} from "../scripts/publish-github-packages.mjs";
+} from "../scripts/publish-npm-packages.mjs";
 
 const REPOSITORY_ROOT = new URL("..", import.meta.url);
 
@@ -26,14 +26,15 @@ test("public package metadata defines the generator, facade, and native packages
     names.push(manifest.name);
     assert.equal(manifest.license, "MIT", packagePath);
     assert.deepEqual(manifest.publishConfig, {
-      registry: "https://npm.pkg.github.com",
+      registry: "https://registry.npmjs.org",
+      access: "public",
     });
   }
   assert.deepEqual(names, [
-    "@matjazprijatelj/create-pixi-native",
-    "@matjazprijatelj/pixi-native",
-    "@matjazprijatelj/pixi-native-win32-x64",
-    "@matjazprijatelj/pixi-native-linux-x64",
+    "@matjash/create-pixi-native",
+    "@matjash/pixi-native",
+    "@matjash/pixi-native-win32-x64",
+    "@matjash/pixi-native-linux-x64",
   ]);
 });
 
@@ -54,9 +55,11 @@ test("facade exports root Pixi 8 and explicit version and core paths", async () 
   for (const path of ["./pixi8", "./pixi7", "./core"]) {
     assert.ok(manifest.exports[path], path);
   }
+  assert.ok(manifest.exports["./core/audio"]);
+  assert.equal(manifest.exports["./core/audio/*.js"], undefined);
   assert.deepEqual(manifest.optionalDependencies, {
-    "@matjazprijatelj/pixi-native-linux-x64": "0.1.1",
-    "@matjazprijatelj/pixi-native-win32-x64": "0.1.1",
+    "@matjash/pixi-native-linux-x64": "0.1.2",
+    "@matjash/pixi-native-win32-x64": "0.1.2",
   });
   assert.equal(manifest.dependencies["pixi.js"], undefined);
   assert.equal(manifest.dependencies["pixi.js-v7"], undefined);
@@ -100,7 +103,7 @@ test("generator has an independent package version", async () => {
       "utf8",
     ),
   );
-  assert.equal(manifest.version, "0.1.3");
+  assert.equal(manifest.version, "0.1.4");
 });
 
 test("WSL release commands use temporary LF scripts", async () => {
@@ -114,20 +117,17 @@ test("WSL release commands use temporary LF scripts", async () => {
   assert.match(source, /Remove-Item -LiteralPath \$windowsCommandPath/);
 });
 
-test("publisher strips inherited npm config and compares immutable digests", () => {
+test("publisher isolates npm configuration and compares immutable digests", () => {
   const environment = sanitizeNpmEnvironment(
     {
       PATH: "bin",
       npm_config_registry: "https://wrong.invalid",
       NPM_CONFIG_TOKEN: "secret",
-      GITHUB_PACKAGES_TOKEN: "secret",
     },
-    "temporary-npmrc",
     "temporary-cache",
   );
   assert.deepEqual(environment, {
     PATH: "bin",
-    NPM_CONFIG_USERCONFIG: "temporary-npmrc",
     NPM_CONFIG_CACHE: "temporary-cache",
     NODE_OPTIONS: "--use-system-ca",
   });
@@ -150,18 +150,18 @@ test("publisher strips inherited npm config and compares immutable digests", () 
 });
 
 test("publisher selects package-specific versions, archives, and tags", () => {
-  assert.deepEqual(getReleaseConfiguration(true, "0.1.1", "0.1.3"), {
-    version: "0.1.3",
-    tag: "create-pixi-native-v0.1.3",
-    expectedPackages: ["@matjazprijatelj/create-pixi-native"],
+  assert.deepEqual(getReleaseConfiguration(true, "0.1.2", "0.1.4"), {
+    version: "0.1.4",
+    tag: "create-pixi-native-v0.1.4",
+    expectedPackages: ["@matjash/create-pixi-native"],
   });
-  assert.deepEqual(getReleaseConfiguration(false, "0.1.1", "0.1.3"), {
-    version: "0.1.1",
-    tag: "v0.1.1",
+  assert.deepEqual(getReleaseConfiguration(false, "0.1.2", "0.1.4"), {
+    version: "0.1.2",
+    tag: "v0.1.2",
     expectedPackages: [
-      "@matjazprijatelj/pixi-native-win32-x64",
-      "@matjazprijatelj/pixi-native-linux-x64",
-      "@matjazprijatelj/pixi-native",
+      "@matjash/pixi-native-win32-x64",
+      "@matjash/pixi-native-linux-x64",
+      "@matjash/pixi-native",
     ],
   });
 });

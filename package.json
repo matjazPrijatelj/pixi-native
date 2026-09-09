@@ -1,6 +1,6 @@
 {
   "name": "pixi-native-workspace",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "author": {
@@ -28,10 +28,10 @@
     "pack:dist": "node scripts/pack-distribution.mjs",
     "pack:generator": "node scripts/pack-generator.mjs",
     "pack:dist:linux:wsl": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release-linux-wsl.ps1",
-    "publish:github:check": "node scripts/publish-github-packages.mjs --check",
-    "publish:github": "node scripts/publish-github-packages.mjs",
-    "publish:generator:github:check": "node scripts/publish-github-packages.mjs --generator --check",
-    "publish:generator:github": "node scripts/publish-github-packages.mjs --generator",
+    "publish:npm:check": "node scripts/publish-npm-packages.mjs --check",
+    "publish:npm": "node scripts/publish-npm-packages.mjs",
+    "publish:generator:npm:check": "node scripts/publish-npm-packages.mjs --generator --check",
+    "publish:generator:npm": "node scripts/publish-npm-packages.mjs --generator",
     "prepack": "node scripts/reject-workspace-pack.mjs",
     "format": "prettier --write ."
   },
@@ -43,8 +43,8 @@
   },
   "devDependencies": {
     "@pixi-native/core": "workspace:*",
-    "@matjazprijatelj/pixi-native-linux-x64": "workspace:*",
-    "@matjazprijatelj/pixi-native-win32-x64": "workspace:*",
+    "@matjash/pixi-native-linux-x64": "workspace:*",
+    "@matjash/pixi-native-win32-x64": "workspace:*",
     "@pixi-native/pixi7": "workspace:*",
     "@pixi-native/pixi8": "workspace:*",
     "@types/node": "22.15.21",

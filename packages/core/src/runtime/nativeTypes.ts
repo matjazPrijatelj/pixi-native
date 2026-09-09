@@ -7,10 +7,15 @@ export type AntialiasSamples = 0 | 2 | 4 | 8;
 export const DEFAULT_ANTIALIAS_SAMPLES: AntialiasSamples = 4;
 
 export interface NodeRendererOptions {
+  /** Native window title. */
   readonly title?: string;
+  /** Initial client width in physical pixels. */
   readonly width?: number;
+  /** Initial client height in physical pixels. */
   readonly height?: number;
+  /** Allows a decorated window to be resized by the user. */
   readonly resizable?: boolean;
+  /** Synchronizes presentation to the display when supported. */
   readonly vsync?: boolean;
   /** Caps timer-paced RAF when VSync is disabled. Defaults to display refresh. */
   readonly maxFps?: number;
@@ -62,22 +67,38 @@ export interface NodeRenderSurface {
 }
 
 export interface NodeWindowHandle {
+  /** Current virtual-desktop X coordinate. */
   readonly x: number;
+  /** Current virtual-desktop Y coordinate. */
   readonly y: number;
+  /** Current drawable width in physical pixels. */
   readonly pixelWidth: number;
+  /** Current drawable height in physical pixels. */
   readonly pixelHeight: number;
+  /** Display information reported by the native window backend. */
   readonly display: { readonly frequency: number };
+  /** Whether the native window has already been released. */
   readonly destroyed: boolean;
+  /** Polls pending native events when the backend requires explicit polling. */
   readonly pollEvents?: () => void;
+  /** Moves the window to an absolute virtual-desktop position. */
   setPosition(x: number, y: number): void;
+  /** Minimizes the native window. */
   minimize(): void;
+  /** Maximizes the native window. */
   maximize(): void;
+  /** Restores a minimized or maximized window. */
   restore(): void;
+  /** Registers a native window event listener. */
   on(event: string, listener: (event: any) => void): void;
+  /** Releases the native window. Prefer the managed application's destroy method. */
   destroy(): void;
 }
 
+/** Event bridge exposed by manually managed renderer contexts. */
 export interface NodeNativeInput {
+  /** Dispatches a translated event to the renderer canvas. */
   dispatchCanvasEvent(type: string, event: Event): void;
+  /** Dispatches a translated event to global document/window listeners. */
   dispatchGlobalEvent(type: string, event: Event): void;
 }

@@ -5,7 +5,7 @@
 Resolve packaged assets from `import.meta.url` instead of `process.cwd()`:
 
 ```ts
-import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";
+import { createModuleFileAccess } from "@matjash/pixi-native/pixi8/files";
 
 const files = createModuleFileAccess(import.meta.url);
 const settings = await files.readJson<{ renderer: "webgpu" | "webgl" }>(
@@ -28,7 +28,7 @@ native window.
 Use the standard Pixi asset pipeline after either initializer completes:
 
 ```ts
-import { Assets, Sprite, createApp } from "@matjazprijatelj/pixi-native";
+import { Assets, Sprite, createApp } from "@matjash/pixi-native";
 
 const runtime = await createApp({ backend: "webgpu" });
 const texture = await Assets.load(imagePath);
@@ -53,7 +53,7 @@ import {
   VideoSprite,
   createApp,
   createModuleFileAccess,
-} from "@matjazprijatelj/pixi-native";
+} from "@matjash/pixi-native";
 
 const files = createModuleFileAccess(import.meta.url);
 const runtime = await createApp({ backend: "webgpu" });
@@ -108,8 +108,8 @@ RGBA on the CPU.
 The `/audio` entrypoint provides Howler-style `Howl` and `Howler` objects:
 
 ```ts
-import { Howl } from "@matjazprijatelj/pixi-native/pixi8/audio";
-import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";
+import { Howl } from "@matjash/pixi-native/pixi8/audio";
+import { createModuleFileAccess } from "@matjash/pixi-native/pixi8/files";
 
 const files = createModuleFileAccess(import.meta.url);
 const effects = new Howl({
@@ -126,6 +126,9 @@ effects.play("win");
 Audio supports overlapping voices, sprites, looping, pause, stop, seek, fades,
 volume, mute, events, preload, and bounded FFmpeg streaming. Windows uses the
 native WASAPI addon. Linux uses SDL playback.
+
+The [API reference](api-reference.md#audio) lists every supported `Howl` and
+`Howler` method, overload, event, unit, and teardown rule.
 
 Unload caller-owned audio during application teardown:
 

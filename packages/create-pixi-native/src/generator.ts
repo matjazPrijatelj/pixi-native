@@ -14,14 +14,13 @@ export interface CreateProjectOptions {
     readonly cwd?: string;
 }
 
-export const GENERATOR_VERSION = "0.1.3";
-export const PIXI_NATIVE_VERSION = "0.1.1";
+export const GENERATOR_VERSION = "0.1.4";
+export const PIXI_NATIVE_VERSION = "0.1.2";
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 const PROJECT_NAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const TEXT_TEMPLATE_EXTENSIONS = new Set([".json", ".md", ".template", ".ts"]);
 const TEMPLATE_RENAMES = new Map([
     ["gitignore.template", ".gitignore"],
-    ["npmrc.template", ".npmrc"],
     ["prettierignore.template", ".prettierignore"],
     ["package.json.template", "package.json"],
 ]);
@@ -50,8 +49,8 @@ export async function createProject(options: CreateProjectOptions): Promise<stri
         PIXI_PACKAGE_VERSION: options.pixi === "7" ? "npm:pixi.js@^7.4.3" : "^8.20.0",
         PIXI_IMPORT_PATH:
             options.pixi === "7"
-                ? "@matjazprijatelj/pixi-native/pixi7"
-                : "@matjazprijatelj/pixi-native",
+                ? "@matjash/pixi-native/pixi7"
+                : "@matjash/pixi-native",
         ANIMATION_ENGINE: animation,
         GSAP_DEPENDENCY: animation === "gsap" ? ',\n    "gsap": "^3.15.0"' : "",
     });

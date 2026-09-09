@@ -49,15 +49,15 @@ for (const key of ["facade", "native"]) {
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nativeArchiveName = basename(archives.get("native"));
 const nativePackageName = nativeArchiveName.includes("native-linux-x64")
-  ? "@matjazprijatelj/pixi-native-linux-x64"
-  : "@matjazprijatelj/pixi-native-win32-x64";
+  ? "@matjash/pixi-native-linux-x64"
+  : "@matjash/pixi-native-win32-x64";
 const nativeTarget = nativePackageName.includes("linux")
   ? "linux-x64"
   : "win32-x64";
 const oppositeNativePackageName =
   nativeTarget === "linux-x64"
-    ? "@matjazprijatelj/pixi-native-win32-x64"
-    : "@matjazprijatelj/pixi-native-linux-x64";
+    ? "@matjash/pixi-native-win32-x64"
+    : "@matjash/pixi-native-linux-x64";
 const oppositeNativeTarget =
   nativeTarget === "linux-x64" ? "win32-x64" : "linux-x64";
 const ffmpegDistribution = getFfmpegDistribution(nativeTarget);
@@ -78,7 +78,7 @@ try {
     `${JSON.stringify(
       {
         name: oppositeNativePackageName,
-        version: "0.1.1",
+        version: "0.1.2",
         os: [oppositeNativeTarget.split("-")[0]],
         cpu: ["x64"],
       },
@@ -92,7 +92,7 @@ try {
     type: "module",
     packageManager: "pnpm@9.15.9",
     dependencies: {
-      "@matjazprijatelj/pixi-native": toFileSpecifier(localFacadeArchive),
+      "@matjash/pixi-native": toFileSpecifier(localFacadeArchive),
       "pixi.js": "8.20.0",
       "pixi.js-v7": "npm:pixi.js@7.4.3",
       [nativePackageName]: toFileSpecifier(localNativeArchive),
@@ -111,15 +111,15 @@ try {
 
   await writeFile(
     join(testDirectory, "smoke-root.mjs"),
-    createRuntimeSmoke("@matjazprijatelj/pixi-native", 8),
+    createRuntimeSmoke("@matjash/pixi-native", 8),
   );
   await writeFile(
     join(testDirectory, "smoke-v7.mjs"),
-    createRuntimeSmoke("@matjazprijatelj/pixi-native/pixi7", 7),
+    createRuntimeSmoke("@matjash/pixi-native/pixi7", 7),
   );
   await writeFile(
     join(testDirectory, "smoke-v8.mjs"),
-    createRuntimeSmoke("@matjazprijatelj/pixi-native/pixi8", 8),
+    createRuntimeSmoke("@matjash/pixi-native/pixi8", 8),
   );
   await writeFile(
     join(testDirectory, "smoke-native.mjs"),
@@ -140,9 +140,9 @@ try {
       'import { existsSync } from "node:fs";',
       'import { dirname, resolve } from "node:path";',
       'import { fileURLToPath } from "node:url";',
-      'const entryPath = fileURLToPath(import.meta.resolve("@matjazprijatelj/pixi-native"));',
+      'const entryPath = fileURLToPath(import.meta.resolve("@matjash/pixi-native"));',
       'const packageRoot = resolve(dirname(entryPath), "../..");',
-      'for (const documentationPath of ["docs/README.md", "docs/getting-started.md", "docs/application-and-api.md", "docs/media-and-files.md", "docs/integrations/gsap.md", "docs/deployment.md"]) {',
+      'for (const documentationPath of ["docs/README.md", "docs/getting-started.md", "docs/application-and-api.md", "docs/api-reference.md", "docs/media-and-files.md", "docs/integrations/gsap.md", "docs/deployment.md"]) {',
       "  assert.equal(existsSync(resolve(packageRoot, documentationPath)), true, documentationPath);",
       "}",
       "",
@@ -160,7 +160,7 @@ try {
     join(displayDirectory, "dist", "file-smoke.mjs"),
     [
       'import assert from "node:assert/strict";',
-      'import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";',
+      'import { createModuleFileAccess } from "@matjash/pixi-native/pixi8/files";',
       "const files = createModuleFileAccess(import.meta.url);",
       'assert.equal(await files.readText("../assets/config.json"), \'{"renderer":"webgpu"}\\n\');',
       "",
@@ -169,14 +169,14 @@ try {
   await writeFile(
     join(testDirectory, "smoke.ts"),
     [
-      'import { Container as ContainerRoot, createApp as createAppRoot } from "@matjazprijatelj/pixi-native";',
-      'import { Container as Container7, NativeVideo as NativeVideo7, VideoSprite as VideoSprite7, createApp as createApp7, createRenderer as createRenderer7, type VideoSpriteOptions } from "@matjazprijatelj/pixi-native/pixi7";',
-      'import { Container as Container8, NativeVideo as NativeVideo8, VideoSprite as VideoSprite8, createApp as createApp8, createRenderer as createRenderer8 } from "@matjazprijatelj/pixi-native/pixi8";',
-      'import { Howl } from "@matjazprijatelj/pixi-native/pixi8/audio";',
-      'import { createModuleFileAccess } from "@matjazprijatelj/pixi-native/pixi8/files";',
-      'import { FrameScheduler } from "@matjazprijatelj/pixi-native/pixi8/runtime";',
-      'import { NodeCanvas } from "@matjazprijatelj/pixi-native/pixi8/canvas";',
-      'import { NativeVideo } from "@matjazprijatelj/pixi-native/core";',
+      'import { Container as ContainerRoot, createApp as createAppRoot } from "@matjash/pixi-native";',
+      'import { Container as Container7, NativeVideo as NativeVideo7, VideoSprite as VideoSprite7, createApp as createApp7, createRenderer as createRenderer7, type VideoSpriteOptions } from "@matjash/pixi-native/pixi7";',
+      'import { Container as Container8, NativeVideo as NativeVideo8, VideoSprite as VideoSprite8, createApp as createApp8, createRenderer as createRenderer8 } from "@matjash/pixi-native/pixi8";',
+      'import { Howl } from "@matjash/pixi-native/pixi8/audio";',
+      'import { createModuleFileAccess } from "@matjash/pixi-native/pixi8/files";',
+      'import { FrameScheduler } from "@matjash/pixi-native/pixi8/runtime";',
+      'import { NodeCanvas } from "@matjash/pixi-native/pixi8/canvas";',
+      'import { NativeVideo } from "@matjash/pixi-native/core";',
       "const options: VideoSpriteOptions = {};",
       "void [ContainerRoot, createAppRoot, Container7, NativeVideo7, VideoSprite7, createApp7, createRenderer7, Container8, NativeVideo8, VideoSprite8, createApp8, createRenderer8, Howl, createModuleFileAccess, FrameScheduler, NodeCanvas, NativeVideo, options];",
       "",
@@ -217,12 +217,19 @@ try {
     {
       directory: "generated-v7",
       pixiPackage: "pixi.js-v7",
-      arguments: ["--pixi", "7"],
+      arguments: ["--pixi", "7", "--animation", "ticker"],
     },
     {
       directory: "generated-v8",
       pixiPackage: "pixi.js",
-      arguments: ["--pixi", "8", "--backend", "webgpu"],
+      arguments: [
+        "--pixi",
+        "8",
+        "--backend",
+        "webgpu",
+        "--animation",
+        "ticker",
+      ],
     },
   ]) {
     execFileSync(
@@ -241,7 +248,7 @@ try {
       name.startsWith("pixi.js"),
     );
     if (
-      manifest.dependencies["@matjazprijatelj/pixi-native"] !== "0.1.1" ||
+      manifest.dependencies["@matjash/pixi-native"] !== "0.1.2" ||
       pixiDependencies.length !== 1 ||
       pixiDependencies[0] !== project.pixiPackage
     ) {
@@ -249,7 +256,7 @@ try {
     }
     manifest.pnpm = {
       overrides: {
-        "@matjazprijatelj/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
+        "@matjash/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
         [nativePackageName]: `file:${localNativeArchive.replaceAll("\\", "/")}`,
         [oppositeNativePackageName]: `file:${oppositeNativeStub.replaceAll("\\", "/")}`,
       },

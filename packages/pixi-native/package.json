@@ -1,6 +1,6 @@
 {
-  "name": "@matjazprijatelj/pixi-native",
-  "version": "0.1.1",
+  "name": "@matjash/pixi-native",
+  "version": "0.1.2",
   "description": "PixiJS 7 and 8 rendering in native Node.js windows with WebGPU, WebGL, audio, and video",
   "type": "module",
   "license": "MIT",
@@ -89,10 +89,6 @@
       "types": "./dist/core/application/*.d.ts",
       "default": "./dist/core/application/*.js"
     },
-    "./core/audio/*.js": {
-      "types": "./dist/core/audio/*.d.ts",
-      "default": "./dist/core/audio/*.js"
-    },
     "./core/canvas/*.js": {
       "types": "./dist/core/canvas/*.d.ts",
       "default": "./dist/core/canvas/*.js"
@@ -129,8 +125,8 @@
     }
   },
   "optionalDependencies": {
-    "@matjazprijatelj/pixi-native-linux-x64": "0.1.1",
-    "@matjazprijatelj/pixi-native-win32-x64": "0.1.1"
+    "@matjash/pixi-native-linux-x64": "0.1.2",
+    "@matjash/pixi-native-win32-x64": "0.1.2"
   },
   "repository": {
     "type": "git",
@@ -142,6 +138,7 @@
     "url": "https://github.com/matjazPrijatelj/pixi-native/issues"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   }
 }

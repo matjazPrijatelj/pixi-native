@@ -219,6 +219,7 @@ function createPackedAlphaGlProgram(
   });
 }
 
+/** PixiJS 8 mesh that uploads and presents frames from a {@link NativeVideo}. */
 export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
   public readonly video: NativeVideo;
 
@@ -233,6 +234,7 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     this.needsClear = true;
   };
 
+  /** Creates a sprite that borrows the video; destroying it does not destroy the video. */
   public constructor(video: NativeVideo, options: VideoSpriteOptions = {}) {
     const packedAlphaLayout =
       options.alphaMaskScale === undefined
@@ -327,6 +329,7 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     this.onRender = (renderer) => this.uploadLatestFrame(renderer);
   }
 
+  /** Releases sprite-owned GPU resources and detaches from the video. */
   public override destroy(): void {
     if (this.destroyed) return;
     this.video.removeEventListener("emptied", this.handleVideoEmptied);

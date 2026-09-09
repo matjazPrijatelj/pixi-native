@@ -2,6 +2,16 @@
 
 ## 2026-09-09
 
+- Removed redundant JavaScript and declaration outputs from `packages/core/src`;
+  TypeScript is now the single source and package builds emit both formats to
+  `dist`. Added public API JSDoc and a consumer reference for application,
+  files, audio, video, runtime, and canvas APIs. The public audio engine view is
+  now limited to read-only diagnostics while playback remains owned by
+  `Howl`/`Howler`.
+- Prepared the first public npm release under the `@matjash` scope. Runtime
+  packages now use lockstep version `0.1.2`, `create-pixi-native` uses `0.1.4`,
+  generated projects install without registry credentials, and the guarded
+  publisher targets npmjs with interactive 2FA and post-publish digest checks.
 - Fixed generated development startup for PixiJS 8 WebGPU, PixiJS 8 WebGL,
   and PixiJS 7 WebGL in `create-pixi-native` 0.1.3. Source templates now import
   `backgroundAnimation.ts` for direct Node.js 24 execution, while TypeScript

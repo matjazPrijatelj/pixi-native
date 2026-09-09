@@ -33,8 +33,8 @@ test("quickboot parses explicit Pixi and backend options", () => {
 });
 
 test("quickboot keeps generator and runtime versions independent", () => {
-    assert.equal(GENERATOR_VERSION, "0.1.3");
-    assert.equal(PIXI_NATIVE_VERSION, "0.1.1");
+    assert.equal(GENERATOR_VERSION, "0.1.4");
+    assert.equal(PIXI_NATIVE_VERSION, "0.1.2");
     assert.equal(
         execFileSync(
             process.execPath,
@@ -102,7 +102,7 @@ test("quickboot generates version-specific projects without credentials", async 
                 "8",
                 "webgl",
                 "ticker",
-                "@matjazprijatelj/pixi-native",
+                "@matjash/pixi-native",
                 "pixi.js",
                 "^8.20.0",
             ],
@@ -111,7 +111,7 @@ test("quickboot generates version-specific projects without credentials", async 
                 "7",
                 "webgl",
                 "ticker",
-                "@matjazprijatelj/pixi-native/pixi7",
+                "@matjash/pixi-native/pixi7",
                 "pixi.js-v7",
                 "npm:pixi.js@^7.4.3",
             ],
@@ -120,7 +120,7 @@ test("quickboot generates version-specific projects without credentials", async 
                 "8",
                 "webgpu",
                 "gsap",
-                "@matjazprijatelj/pixi-native",
+                "@matjash/pixi-native",
                 "pixi.js",
                 "^8.20.0",
             ],
@@ -129,7 +129,7 @@ test("quickboot generates version-specific projects without credentials", async 
                 "7",
                 "webgl",
                 "gsap",
-                "@matjazprijatelj/pixi-native/pixi7",
+                "@matjash/pixi-native/pixi7",
                 "pixi.js-v7",
                 "npm:pixi.js@^7.4.3",
             ],
@@ -147,10 +147,9 @@ test("quickboot generates version-specific projects without credentials", async 
                 join(target, "src", "backgroundAnimation.ts"),
                 "utf8",
             );
-            const npmrc = await readFile(join(target, ".npmrc"), "utf8");
             const tsconfig = JSON.parse(await readFile(join(target, "tsconfig.json"), "utf8"));
             assert.equal(
-                manifest.dependencies["@matjazprijatelj/pixi-native"],
+                manifest.dependencies["@matjash/pixi-native"],
                 PIXI_NATIVE_VERSION,
             );
             assert.equal(manifest.dependencies[pixiPackage], pixiVersion);
@@ -177,8 +176,9 @@ test("quickboot generates version-specific projects without credentials", async 
                     /addDestroyListener\(\(\) => \{\s*runtime\.app\.ticker\.remove/,
                 );
             }
-            assert.match(npmrc, /\$\{GITHUB_PACKAGES_TOKEN\}/);
-            assert.doesNotMatch(npmrc, /github_pat_|ghp_/);
+            await assert.rejects(readFile(join(target, ".npmrc"), "utf8"), {
+                code: "ENOENT",
+            });
             assert.deepEqual(await readdir(join(target, "assets")), ["pixi-hero.png"]);
             assert.deepEqual(
                 await readFile(join(target, "assets", "pixi-hero.png")),

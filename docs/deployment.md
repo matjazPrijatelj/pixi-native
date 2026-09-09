@@ -5,11 +5,11 @@
 Runtime releases publish one facade package and two platform packages in
 lockstep:
 
-- `@matjazprijatelj/pixi-native`
-- `@matjazprijatelj/pixi-native-win32-x64`
-- `@matjazprijatelj/pixi-native-linux-x64`
+- `@matjash/pixi-native`
+- `@matjash/pixi-native-win32-x64`
+- `@matjash/pixi-native-linux-x64`
 
-`@matjazprijatelj/create-pixi-native` has an independent release version and
+`@matjash/create-pixi-native` has an independent release version and
 release tag.
 
 Install the facade and the selected Pixi peer. The facade's optional native
@@ -17,29 +17,23 @@ dependencies select the package for the current operating system and x64
 architecture:
 
 ```sh
-pnpm add @matjazprijatelj/pixi-native pixi.js@^8.20.0
+pnpm add @matjash/pixi-native pixi.js@^8.20.0
 # PixiJS 7 instead:
-pnpm add @matjazprijatelj/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
+pnpm add @matjash/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
 ```
 
 The generator creates PixiJS 7 or 8 TypeScript projects. It has no runtime
 dependencies and works on both supported platforms.
 
-## GitHub Packages installation
+## npm installation
 
-GitHub Packages requires authentication for npm installs. Create a classic
-personal access token with `read:packages` and expose it as
-`GITHUB_PACKAGES_TOKEN`. Add this configuration to the consumer's `.npmrc`:
-
-```ini
-@matjazprijatelj:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
-```
+All published packages are public on npm. Consumers do not need registry
+configuration or credentials.
 
 Create a starter project:
 
 ```sh
-pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
 ```
 
 The root import and `/pixi8` use PixiJS 8. `/pixi7` uses PixiJS 7. Run displays
@@ -74,8 +68,8 @@ pnpm pack:generator
 This produces an archive matching the generator's independent package version
 and its package-specific release manifest. It checks the packed CLI version and
 verifies representative PixiJS 7 and 8 projects in fresh temporary consumers.
-The current generator release is `0.1.3`; both generated Pixi majors target
-runtime `0.1.1`.
+The current generator release is `0.1.4`; both generated Pixi majors target
+runtime `0.1.2`.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
 checkout after the Windows archive exists:
@@ -97,24 +91,50 @@ Do not copy the development checkout's pnpm-linked `node_modules` into a
 release. Create a fresh production installation so JavaScript, `.node` addons,
 DLLs, and FFmpeg programs are physical files under the launcher root.
 
-## Publishing
+## Release commit and tags
 
-Run the guarded preflight before uploading:
+Review and stage the source, documentation, tests, three release manifests,
+four npm archives, and their checksum files. For this combined npm migration,
+both release tags must point to the same final commit:
 
-```sh
-pnpm publish:github:check
+```powershell
+git diff --cached --check
+git diff --cached --stat
+git commit -m "release(npm): publish @matjash packages"
+git tag -a v0.1.2 -m "pixi-native 0.1.2"
+git tag -a create-pixi-native-v0.1.4 -m "create-pixi-native 0.1.4"
+git push origin main
+git push origin v0.1.2
+git push origin create-pixi-native-v0.1.4
 ```
 
-Set a classic personal access token with `write:packages` in
-`GITHUB_PACKAGES_TOKEN`. The runtime publisher requires a clean `v0.1.1`
-release commit, both platform manifests, all three runtime archives, and
-matching checksums. It uses an isolated npm configuration and does not print
-the token.
+## Publishing
 
-Publish with an explicit command:
+Sign in as the `matjash` npm user with 2FA enabled. The runtime publisher
+requires a clean `v0.1.2` release commit, both platform manifests, all three
+runtime archives, and matching checksums. It uses an isolated cache, the
+standard npm user credentials, and an explicit public npm registry:
+
+```powershell
+npm login --registry https://registry.npmjs.org
+npm whoami --registry https://registry.npmjs.org
+```
+
+Run the non-publishing preflight, publish the runtime packages, and verify that
+their immutable registry digests match the local archives:
 
 ```sh
-pnpm publish:github
+pnpm publish:npm:check
+pnpm publish:npm
+pnpm publish:npm:check
+```
+
+Then publish and verify the independently versioned generator:
+
+```sh
+pnpm publish:generator:npm:check
+pnpm publish:generator:npm
+pnpm publish:generator:npm:check
 ```
 
 ### Generator release runbook
@@ -134,8 +154,8 @@ packing:
 - the generator version in `packages/create-pixi-native/README.md`
 - `HISTORY.md`
 
-For the current patch, every generator version reference is `0.1.3`; the
-separate `PIXI_NATIVE_VERSION` remains `0.1.1`.
+For the current patch, every generator version reference is `0.1.4`; the
+separate `PIXI_NATIVE_VERSION` is `0.1.2`.
 
 Pack and validate the generator first:
 
@@ -143,7 +163,7 @@ Pack and validate the generator first:
 $generatorVersion = (Get-Content packages/create-pixi-native/package.json |
     ConvertFrom-Json).version
 $generatorTag = "create-pixi-native-v$generatorVersion"
-$generatorArchive = "artifacts/matjazprijatelj-create-pixi-native-$generatorVersion.tgz"
+$generatorArchive = "artifacts/matjash-create-pixi-native-$generatorVersion.tgz"
 
 pnpm pack:generator
 git status --short
@@ -179,37 +199,24 @@ git push origin main
 git push origin $generatorTag
 ```
 
-Create a classic GitHub personal access token with `write:packages` and enter it
-without writing it to a repository file or PowerShell history:
-
-```powershell
-$secureToken = Read-Host "Enter GITHUB_PACKAGES_TOKEN:" -MaskInput
-$env:GITHUB_PACKAGES_TOKEN = $secureToken
-```
-
 Run the non-publishing registry preflight, then publish only when it reports
 that the exact generator archive is ready:
 
 ```powershell
-pnpm publish:generator:github:check
-pnpm publish:generator:github
-pnpm publish:generator:github:check
+pnpm publish:generator:npm:check
+pnpm publish:generator:npm
+pnpm publish:generator:npm:check
 ```
 
 The final check must report that
-`@matjazprijatelj/create-pixi-native@<version>` already matches. Remove the
-token from the process environment afterward:
-
-```powershell
-Remove-Item Env:GITHUB_PACKAGES_TOKEN
-```
+`@matjash/create-pixi-native@<version>` already matches.
 
 Verify the published package from a new directory with an explicit version.
 Existing generated projects are not updated when a new generator is released:
 
 ```powershell
 cd C:\Work\pixi-playground
-pnpm dlx "@matjazprijatelj/create-pixi-native@$generatorVersion" `
+pnpm dlx "@matjash/create-pixi-native@$generatorVersion" `
     release-smoke --pixi 8 --backend webgl
 cd release-smoke
 pnpm install
@@ -227,9 +234,8 @@ Interpret the preflight result carefully:
 - `SEC_E_NO_CREDENTIALS` during `git push` or `git ls-remote` is a Git
   credential failure, not evidence that npm publication succeeded or failed.
 
-GitHub creates new packages as private. Change each package page to Public
-after publication. The source repository may remain private; package consumers
-still need a token for GitHub's npm registry.
+The publisher passes `--access public` for every package. The source repository
+may remain private, and package consumers do not need registry credentials.
 
 ## Platform contents
 

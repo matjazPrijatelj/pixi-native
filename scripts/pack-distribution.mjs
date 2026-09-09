@@ -27,6 +27,7 @@ const artifactsDirectory = resolve(root, "artifacts");
 const temporaryRoot = resolve(root, ".tmp");
 const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
 const MAX_UNPACKED_BYTES = 100 * 1024 * 1024;
+const NPM_CONFIG_ENV_PATTERN = /^npm_config_/i;
 const nativeTarget = `${process.platform}-${process.arch}`;
 const nativePackageName =
   nativeTarget === "linux-x64"
@@ -121,7 +122,7 @@ try {
       execSync("npm pack --ignore-scripts --json", {
         cwd: stagePackageRoot,
         encoding: "utf8",
-        env: { ...process.env, npm_config_cache: localNpmCache },
+        env: createNpmPackEnvironment(process.env),
       }),
     );
     if (packResult.unpackedSize > MAX_UNPACKED_BYTES) {
@@ -173,7 +174,7 @@ const sourceFingerprint =
 const releaseArchives =
   nativeTarget === "linux-x64"
     ? archives.filter((archive) =>
-        archive.packageName.startsWith("@matjazprijatelj/pixi-native-linux-"),
+        archive.packageName.startsWith("@matjash/pixi-native-linux-"),
       )
     : archives;
 await writeFile(
@@ -252,6 +253,15 @@ function validatePackedFiles(packageName, files) {
   }
 }
 
+function createNpmPackEnvironment(environment) {
+  const sanitized = {};
+  for (const [key, value] of Object.entries(environment)) {
+    if (!NPM_CONFIG_ENV_PATTERN.test(key)) sanitized[key] = value;
+  }
+  sanitized.npm_config_cache = localNpmCache;
+  return sanitized;
+}
+
 async function rewriteFacadeImports(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
@@ -265,7 +275,7 @@ async function rewriteFacadeImports(directory) {
     const source = await readFile(path, "utf8");
     const rewritten = source.replaceAll(
       "@pixi-native/core",
-      "@matjazprijatelj/pixi-native/core",
+      "@matjash/pixi-native/core",
     );
     if (rewritten !== source) await writeFile(path, rewritten);
   }

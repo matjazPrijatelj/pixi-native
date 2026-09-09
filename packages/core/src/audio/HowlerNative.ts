@@ -4,37 +4,60 @@ import {
   type NativeAudioEventTarget,
 } from "./NativeAudioEngine.ts";
 
+/** Named audio clips expressed as `[offsetMs, durationMs, loop?]`. */
 export type HowlSprite = Record<
   string,
   [offsetMs: number, durationMs: number, loop?: boolean]
 >;
+/** Listener invoked with the affected sound ID and an optional error message. */
 export type HowlEventCallback = (id?: number, message?: string) => void;
 
+/** Options accepted by {@link Howl}. */
 export interface HowlOptions {
+  /** Filesystem path or ordered path candidates. The first source is used. */
   readonly src: string | readonly string[];
+  /** Named clips whose offsets and durations are measured in milliseconds. */
   readonly sprite?: HowlSprite;
+  /** Initial group volume from `0` to `1`. Defaults to `1`. */
   readonly volume?: number;
+  /** Initial group mute state. Defaults to `false`. */
   readonly mute?: boolean;
+  /** Whether new voices loop by default. Defaults to `false`. */
   readonly loop?: boolean;
+  /** Starts playback after the source has loaded. Defaults to `false`. */
   readonly autoplay?: boolean;
+  /** Starts loading during construction unless set to `false`. */
   readonly preload?: boolean | "metadata";
+  /** Preloads each declared sprite range instead of the complete source. */
   readonly preloadSprites?: boolean;
+  /** Enables bounded FFmpeg streaming instead of decoded preloading. */
   readonly html5?: boolean;
   /** Internal/native FFmpeg input options used by media streams. */
   readonly ffmpegInputArgs?: readonly string[];
   readonly ffmpegOutputArgs?: readonly string[];
-  /** Initial media playback rate. */
+  /** Initial playback multiplier. Defaults to `1`. */
   readonly rate?: number;
+  /** Called after all requested preload operations complete. */
   readonly onload?: HowlEventCallback;
+  /** Called when the source cannot be loaded. */
   readonly onloaderror?: HowlEventCallback;
+  /** Called when a voice cannot start. */
   readonly onplayerror?: HowlEventCallback;
+  /** Called when a voice starts or resumes. */
   readonly onplay?: HowlEventCallback;
+  /** Called when a non-looping voice reaches its end. */
   readonly onend?: HowlEventCallback;
+  /** Called when a voice is paused. */
   readonly onpause?: HowlEventCallback;
+  /** Called when a voice is stopped. */
   readonly onstop?: HowlEventCallback;
+  /** Called after a voice mute change. */
   readonly onmute?: HowlEventCallback;
+  /** Called after a voice volume change. */
   readonly onvolume?: HowlEventCallback;
+  /** Called after a voice seek. */
   readonly onseek?: HowlEventCallback;
+  /** Called when a fade reaches its target volume. */
   readonly onfade?: HowlEventCallback;
 }
 
@@ -77,6 +100,11 @@ function clampVolume(value: number): number {
 
 const howls = new Set<Howl>();
 
+/**
+ * Howler-compatible owner for one audio source and its overlapping voices.
+ *
+ * Call {@link unload} when the application no longer owns the sound.
+ */
 export class Howl implements NativeAudioEventTarget {
   public readonly _sprite: HowlSprite;
   private readonly options: HowlOptions;
@@ -91,6 +119,7 @@ export class Howl implements NativeAudioEventTarget {
   private readonly pendingPreloads = new Set<number>();
   private destroyed = false;
 
+  /** Creates an audio group and preloads it unless `preload` is `false`. */
   public constructor(options: HowlOptions) {
     this.options = options;
     this.sources =
@@ -114,6 +143,7 @@ export class Howl implements NativeAudioEventTarget {
     if (options.preload !== false) this.load();
   }
 
+  /** Starts preloading once and returns this instance for chaining. */
   public load(): this {
     this.assertUsable();
     if (this.loadState !== "unloaded") return this;
@@ -142,6 +172,11 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /**
+   * Starts the complete source or a named sprite, or resumes a paused sound ID.
+   *
+   * @returns The sound ID, or `-1` when the sprite is unknown or playback fails.
+   */
   public play(spriteOrId?: string | number): number {
     this.assertUsable();
     if (typeof spriteOrId === "number") {
@@ -197,6 +232,7 @@ export class Howl implements NativeAudioEventTarget {
     }
   }
 
+  /** Pauses one sound ID, or every voice owned by this instance when omitted. */
   public pause(id?: number): this {
     this.forSounds(id, (sound, soundId) => {
       sound.paused = true;
@@ -205,6 +241,7 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Stops one sound ID, or every voice owned by this instance when omitted. */
   public stop(id?: number): this {
     this.forSounds(id, (_sound, soundId) => {
       nativeAudioEngine.command(this.ownerId, "stop", soundId);
@@ -213,8 +250,11 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Returns the group volume. */
   public volume(): number;
+  /** Returns the current volume for one sound ID. */
   public volume(volume: undefined, id: number): number;
+  /** Sets a `0` to `1` volume for one sound ID or the whole group. */
   public volume(volume: number, id?: number): this;
   public volume(volume?: number, id?: number): number | this {
     if (volume === undefined)
@@ -235,7 +275,9 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Returns the group mute state. */
   public mute(): boolean;
+  /** Sets mute for one sound ID or the whole group. */
   public mute(muted: boolean, id?: number): this;
   public mute(muted?: boolean, id?: number): boolean | this {
     if (muted === undefined)
@@ -252,7 +294,9 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Returns the group loop default. */
   public loop(): boolean;
+  /** Sets looping for one sound ID or the whole group. */
   public loop(loop: boolean, id?: number): this;
   public loop(loop?: boolean, id?: number): boolean | this {
     if (loop === undefined)
@@ -267,8 +311,11 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Returns the first active voice position in seconds. */
   public seek(): number;
+  /** Returns one sound position in seconds, relative to its sprite start. */
   public seek(id: number): number;
+  /** Seeks one sound ID or every voice to a non-negative time in seconds. */
   public seek(seek: number, id?: number): this;
   public seek(seekOrId?: number, id?: number): number | this {
     if (seekOrId === undefined) {
@@ -294,6 +341,7 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Fades one sound ID or every voice between `0` and `1`. */
   public fade(from: number, to: number, durationMs: number, id?: number): this {
     const normalizedFrom = clampVolume(from);
     const normalizedTo = clampVolume(to);
@@ -312,12 +360,14 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Reports whether one sound ID, or any owned voice, is currently playing. */
   public playing(id?: number): boolean {
     if (id !== undefined)
       return this.sounds.has(id) && !this.sounds.get(id)!.paused;
     return [...this.sounds.values()].some((sound) => !sound.paused);
   }
 
+  /** Returns sprite duration in seconds; unsprited sources currently return `0`. */
   public duration(id?: number): number {
     if (id !== undefined) {
       const sprite = this.sounds.get(id)?.sprite;
@@ -331,10 +381,12 @@ export class Howl implements NativeAudioEventTarget {
     );
   }
 
+  /** Returns the current preload state. */
   public state(): "unloaded" | "loading" | "loaded" {
     return this.loadState;
   }
 
+  /** Registers a persistent event listener, optionally limited to one sound ID. */
   public on(
     event: NativeAudioEvent,
     callback: HowlEventCallback,
@@ -346,6 +398,7 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Registers a one-shot event listener, optionally limited to one sound ID. */
   public once(
     event: NativeAudioEvent,
     callback: HowlEventCallback,
@@ -357,6 +410,10 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /**
+   * Removes matching listeners. With no event, removes every listener owned by
+   * this instance.
+   */
   public off(
     event?: NativeAudioEvent,
     callback?: HowlEventCallback,
@@ -378,6 +435,7 @@ export class Howl implements NativeAudioEventTarget {
     return this;
   }
 
+  /** Stops playback and permanently releases this instance's native resources. */
   public unload(): null {
     if (this.destroyed) return null;
     this.stop();
@@ -444,12 +502,19 @@ export class Howl implements NativeAudioEventTarget {
   }
 }
 
+/** Process-wide controls shared by every {@link Howl}. */
 export interface HowlerGlobal {
+  /** Returns the global mixer volume. */
   volume(): number;
+  /** Sets global volume from `0` to `1`. */
   volume(value: number): HowlerGlobal;
+  /** Mutes or unmutes the process-wide mixer. */
   mute(value: boolean): HowlerGlobal;
+  /** Stops every active voice without destroying Howl instances. */
   stop(): HowlerGlobal;
+  /** Unloads every Howl and shuts down the native audio backend. */
   unload(): HowlerGlobal;
+  /** Reports whether the bundled FFmpeg configuration recognizes an extension. */
   codecs(extension: string): boolean;
 }
 
@@ -461,6 +526,7 @@ function globalVolume(value?: number): number | HowlerGlobal {
   return Howler;
 }
 
+/** Process-wide native audio controls. */
 export const Howler: HowlerGlobal = {
   volume: globalVolume,
   mute(value: boolean): typeof Howler {

@@ -23,10 +23,10 @@ importers:
         specifier: 7.3.1
         version: 7.3.1
     devDependencies:
-      "@matjazprijatelj/pixi-native-linux-x64":
+      "@matjash/pixi-native-linux-x64":
         specifier: workspace:*
         version: link:packages/native-linux-x64
-      "@matjazprijatelj/pixi-native-win32-x64":
+      "@matjash/pixi-native-win32-x64":
         specifier: workspace:*
         version: link:packages/native-win32-x64
       "@pixi-native/core":
@@ -72,10 +72,10 @@ importers:
         specifier: 7.3.1
         version: 7.3.1
     devDependencies:
-      "@matjazprijatelj/pixi-native-linux-x64":
+      "@matjash/pixi-native-linux-x64":
         specifier: workspace:*
         version: link:../native-linux-x64
-      "@matjazprijatelj/pixi-native-win32-x64":
+      "@matjash/pixi-native-win32-x64":
         specifier: workspace:*
         version: link:../native-win32-x64
 
@@ -106,11 +106,11 @@ importers:
         specifier: npm:pixi.js@^7.4.3
         version: pixi.js@7.4.3
     optionalDependencies:
-      "@matjazprijatelj/pixi-native-linux-x64":
-        specifier: 0.1.1
+      "@matjash/pixi-native-linux-x64":
+        specifier: 0.1.2
         version: link:../native-linux-x64
-      "@matjazprijatelj/pixi-native-win32-x64":
-        specifier: 0.1.1
+      "@matjash/pixi-native-win32-x64":
+        specifier: 0.1.2
         version: link:../native-win32-x64
 
   packages/pixi7:

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -30,6 +30,19 @@ test("core has no Pixi runtime imports", async () => {
     fileURLToPath(new URL("../packages/core/src", import.meta.url)),
   );
   assert.doesNotMatch(sources, /from ["']pixi\.js(?:-v7)?["']/);
+});
+
+test("core source contains no generated neighbors for TypeScript modules", async () => {
+  for (const path of [
+    "packages/core/src/audio/NativeAudioEngine.js",
+    "packages/core/src/audio/NativeAudioEngine.d.ts",
+    "packages/core/src/runtime/nativeTypes.d.ts",
+    "packages/core/src/runtime/platformNative.d.ts",
+  ]) {
+    await assert.rejects(access(new URL(path, REPOSITORY_ROOT)), {
+      code: "ENOENT",
+    });
+  }
 });
 
 test("each version package imports only its matching Pixi major", async () => {
@@ -91,7 +104,7 @@ test("native platform resolver validates support, installation, and target", () 
       resolveNativePlatformModules("win32", "x64", () => {
         throw new Error("not installed");
       }),
-    /Missing native package @matjazprijatelj\/pixi-native-win32-x64/,
+    /Missing native package @matjash\/pixi-native-win32-x64/,
   );
   const wrongTarget = {
     target: "linux-x64",

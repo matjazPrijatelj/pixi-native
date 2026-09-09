@@ -17,6 +17,7 @@ export class NodeGLCanvas {
     Set<EventListenerOrEventListenerObject>
   >();
 
+  /** Wraps a native WebGL context in the canvas shape expected by Pixi. */
   public constructor(
     context: unknown,
     width = 1280,
@@ -55,6 +56,7 @@ export class NodeGLCanvas {
     return this.height;
   }
 
+  /** Returns a viewport-aligned rectangle for Pixi pointer normalization. */
   public getBoundingClientRect(): DOMRect {
     return {
       left: 0,
@@ -90,6 +92,7 @@ export class NodeGLCanvas {
     if (listeners?.size === 0) this.listeners.delete(type);
   }
 
+  /** Delivers a translated native event to registered canvas listeners. */
   public dispatchNativeEvent(type: string, event: Event): void {
     const listeners = this.listeners.get(type);
     if (!listeners) return;
@@ -99,6 +102,7 @@ export class NodeGLCanvas {
     }
   }
 
+  /** Returns the wrapped WebGL context or the auxiliary Canvas2D context. */
   public getContext(type: string): unknown {
     if (type === "2d") return this.canvas2d.getContext("2d");
     return type === "webgl" || type === "webgl2" ? this.context : null;
@@ -113,6 +117,7 @@ export class NodeGLCanvas {
     return Buffer.from(this.canvas2d.getPremultipliedRgbaPixels());
   }
 
+  /** Resizes the canvas and native WebGL drawing buffer in physical pixels. */
   public resize(width: number, height: number): void {
     this.width = width;
     this.height = height;

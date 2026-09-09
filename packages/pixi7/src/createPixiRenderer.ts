@@ -26,6 +26,7 @@ export type RendererOptions = NodeRendererOptions;
 
 export type AppOptions = RendererOptions;
 
+/** PixiJS 7 application and manually managed native WebGL context. */
 export interface RendererResult {
   readonly app: Application;
   readonly native: {
@@ -57,6 +58,10 @@ function initializeNativeAssets(): Promise<void> {
   return nativeAssetsInitialization;
 }
 
+/**
+ * Creates a PixiJS 7 application and native WebGL surface without a managed loop.
+ * The caller owns rendering, presentation, event polling, and teardown.
+ */
 export async function createRenderer(
   options: RendererOptions = {},
 ): Promise<RendererResult> {
@@ -269,7 +274,10 @@ export async function createRenderer(
   };
 }
 
-/** Creates a self-running Pixi 7 application on the native WebGL surface. */
+/**
+ * Creates a self-running PixiJS 7 application on the native WebGL surface.
+ * Native close and process termination use the same idempotent teardown path.
+ */
 export async function createApp(options: AppOptions = {}): Promise<App> {
   const { app, native } = await createRenderer(options);
   return manageNativeApplication({

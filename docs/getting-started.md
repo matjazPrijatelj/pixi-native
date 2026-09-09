@@ -6,20 +6,12 @@
 - Windows 11 x64 or Linux x64
 - pnpm 9.15.9 for repository development and the examples below
 
-Configure GitHub Packages in the consumer's `.npmrc`:
-
-```ini
-@matjazprijatelj:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
-```
-
-Use a classic GitHub personal access token with `read:packages`, then install
-the facade package:
+Install the public facade package directly from npm:
 
 ```sh
-pnpm add @matjazprijatelj/pixi-native pixi.js@^8.20.0
+pnpm add @matjash/pixi-native pixi.js@^8.20.0
 # PixiJS 7 instead:
-pnpm add @matjazprijatelj/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
+pnpm add @matjash/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
 ```
 
 npm selects the matching Windows or Linux x64 native dependency. Pixi itself is
@@ -30,10 +22,10 @@ process.
 
 ## Generate a project
 
-Create a PixiJS 8 WebGPU starter after configuring GitHub Packages:
+Create a PixiJS 8 WebGPU starter:
 
 ```sh
-pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
 cd my-display
 pnpm install
 pnpm dev
@@ -53,7 +45,7 @@ import {
   Sprite,
   createApp,
   createModuleFileAccess,
-} from "@matjazprijatelj/pixi-native";
+} from "@matjash/pixi-native";
 
 const files = createModuleFileAccess(import.meta.url);
 const runtime = await createApp({
@@ -86,7 +78,7 @@ native asset environment.
 PixiJS 7 exposes the same application shape and uses WebGL:
 
 ```ts
-import { Graphics, createApp } from "@matjazprijatelj/pixi-native/pixi7";
+import { Graphics, createApp } from "@matjash/pixi-native/pixi7";
 
 const runtime = await createApp({
   width: 1280,

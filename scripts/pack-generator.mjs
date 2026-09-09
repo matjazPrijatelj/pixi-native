@@ -18,6 +18,7 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = resolve(repositoryRoot, "packages/create-pixi-native");
 const artifactsDirectory = resolve(repositoryRoot, "artifacts");
 const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
+const NPM_CONFIG_ENV_PATTERN = /^npm_config_/i;
 const manifest = JSON.parse(
   await readFile(resolve(packageRoot, "package.json"), "utf8"),
 );
@@ -28,7 +29,6 @@ const expectedFiles = new Set([
   "templates/common/.prettierrc.json",
   "templates/common/assets/pixi-hero.png",
   "templates/common/gitignore.template",
-  "templates/common/npmrc.template",
   "templates/common/package.json.template",
   "templates/common/prettierignore.template",
   "templates/common/README.md",
@@ -82,7 +82,7 @@ try {
     execSync("npm pack --ignore-scripts --json", {
       cwd: stageRoot,
       encoding: "utf8",
-      env: { ...process.env, npm_config_cache: localNpmCache },
+      env: createNpmPackEnvironment(process.env),
     }),
   );
   const files = new Set(packResult.files.map((file) => file.path));
@@ -110,7 +110,7 @@ try {
         name: "create-pixi-native-archive-smoke",
         private: true,
         dependencies: {
-          "@matjazprijatelj/create-pixi-native": `file:${archivePath.replaceAll("\\", "/")}`,
+          "@matjash/create-pixi-native": `file:${archivePath.replaceAll("\\", "/")}`,
         },
       },
       null,
@@ -123,7 +123,7 @@ try {
   );
   const cliPath = resolve(
     consumerRoot,
-    "node_modules/@matjazprijatelj/create-pixi-native/dist/cli.js",
+    "node_modules/@matjash/create-pixi-native/dist/cli.js",
   );
   const packedVersion = execFileSync(process.execPath, [cliPath, "--version"], {
     encoding: "utf8",
@@ -159,7 +159,7 @@ try {
     execSync("npm pack --ignore-scripts --json", {
       cwd: facadeStageRoot,
       encoding: "utf8",
-      env: { ...process.env, npm_config_cache: localNpmCache },
+      env: createNpmPackEnvironment(process.env),
     }),
   );
   const facadeArchive = resolve(facadeStageRoot, facadePackResult.filename);
@@ -167,13 +167,13 @@ try {
   for (const target of ["win32-x64", "linux-x64"]) {
     const stubRoot = resolve(consumerRoot, `native-${target}-stub`);
     await mkdir(stubRoot, { recursive: true });
-    const packageName = `@matjazprijatelj/pixi-native-${target}`;
+    const packageName = `@matjash/pixi-native-${target}`;
     await writeFile(
       resolve(stubRoot, "package.json"),
       `${JSON.stringify(
         {
           name: packageName,
-          version: "0.1.1",
+          version: "0.1.2",
           os: [target.split("-")[0]],
           cpu: ["x64"],
         },
@@ -208,8 +208,7 @@ try {
       (name) => name.startsWith("pixi.js"),
     );
     if (
-      generatedManifest.dependencies["@matjazprijatelj/pixi-native"] !==
-        "0.1.1" ||
+      generatedManifest.dependencies["@matjash/pixi-native"] !== "0.1.2" ||
       pixiDependencies.length !== 1 ||
       pixiDependencies[0] !== expectedDependency ||
       generatedManifest.dependencies.gsap !==
@@ -219,7 +218,7 @@ try {
     }
     generatedManifest.pnpm = {
       overrides: {
-        "@matjazprijatelj/pixi-native": `file:${facadeArchive.replaceAll("\\", "/")}`,
+        "@matjash/pixi-native": `file:${facadeArchive.replaceAll("\\", "/")}`,
         ...nativeOverrides,
       },
     };
@@ -287,10 +286,19 @@ async function rewriteFacadeImports(directory) {
     const source = await readFile(path, "utf8");
     const rewritten = source.replaceAll(
       "@pixi-native/core",
-      "@matjazprijatelj/pixi-native/core",
+      "@matjash/pixi-native/core",
     );
     if (source !== rewritten) await writeFile(path, rewritten);
   }
+}
+
+function createNpmPackEnvironment(environment) {
+  const sanitized = {};
+  for (const [key, value] of Object.entries(environment)) {
+    if (!NPM_CONFIG_ENV_PATTERN.test(key)) sanitized[key] = value;
+  }
+  sanitized.npm_config_cache = localNpmCache;
+  return sanitized;
 }
 
 async function assertPathMissing(path) {

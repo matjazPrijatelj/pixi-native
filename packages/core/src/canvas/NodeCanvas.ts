@@ -5,6 +5,7 @@ export class NodeCanvas {
   public readonly style: Record<string, string> = {};
   private readonly canvas: Canvas;
 
+  /** Creates a Canvas2D surface with dimensions clamped to at least one pixel. */
   public constructor(width = 1, height = 1) {
     this.canvas = createCanvas(width, height);
   }
@@ -25,6 +26,7 @@ export class NodeCanvas {
     this.canvas.height = Math.max(1, Math.floor(value));
   }
 
+  /** Returns the native 2D context or Pixi capability-detection stubs. */
   public getContext(type: string): unknown {
     if (type === "2d") return this.canvas.getContext("2d");
     if (type === "webgl" || type === "webgl2") {

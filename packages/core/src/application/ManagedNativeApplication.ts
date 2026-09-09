@@ -28,10 +28,18 @@ export interface ManagedRuntimeNative {
   destroy(): void;
 }
 
+/** Self-running Pixi application and the native resources it owns. */
 export interface ManagedNativeApplication<TApplication, TNative> {
+  /** PixiJS Application for the selected major version. */
   readonly app: TApplication;
+  /** Backend-specific native window, renderer, canvas, and input context. */
   readonly native: TNative;
+  /** Idempotently stops the loop and releases application and native resources. */
   readonly destroy: () => Promise<void>;
+  /**
+   * Registers caller-owned cleanup to run before Pixi and native teardown.
+   * The returned function unregisters the listener without invoking it.
+   */
   readonly addDestroyListener: (
     listener: () => void | Promise<void>,
   ) => () => void;
@@ -61,7 +69,11 @@ function readNumber(event: NativeEvent, name: string, fallback = 0): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-/** Owns the browser-like runtime loop and native lifecycle around a Pixi app. */
+/**
+ * Owns the browser-like runtime loop and native lifecycle around a Pixi app.
+ *
+ * Most consumers should use the version facade's `createApp()` instead.
+ */
 export function manageNativeApplication<TApplication, TNative>(
   options: ManageNativeApplicationOptions<TApplication, TNative>,
 ): ManagedNativeApplication<TApplication, TNative> {

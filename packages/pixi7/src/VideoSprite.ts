@@ -116,6 +116,7 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
     this.needsClear = true;
   };
 
+  /** Creates a sprite that owns its video and destroys it during sprite teardown. */
   public constructor(video: NativeVideo, options: VideoSpriteOptions = {}) {
     const packedAlphaLayout =
       options.alphaMaskScale === undefined
@@ -193,6 +194,7 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
     super.render(renderer);
   }
 
+  /** Uploads the newest decoded frame and reports whether the texture changed. */
   public updateFrame(): boolean {
     if (this.needsClear) {
       this.needsClear = false;
@@ -224,6 +226,7 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
     return true;
   }
 
+  /** Releases the sprite textures and its owned video. */
   public override destroy(
     options?:
       | boolean

@@ -6,7 +6,7 @@ WebGL rendering, window input, Canvas2D, audio, video, and file access. Display
 applications do not need a browser, WebView, or CEF process.
 
 > [!NOTE]
-> Version 0.1.1 is a pre-release. The API and native package layout may change
+> Version 0.1.2 is a pre-release. The API and native package layout may change
 > before 1.0.
 
 ![Pixi Native architecture and supported platforms](pixi-hero.png)
@@ -30,7 +30,7 @@ HTML layout, CSS, navigation, browser media elements, or a general-purpose DOM.
 
 ## Package
 
-Install `@matjazprijatelj/pixi-native`. Its root export uses PixiJS 8. The
+Install `@matjash/pixi-native`. Its root export uses PixiJS 8. The
 `/pixi8`, `/pixi7`, and `/core` subpaths expose the explicit facades and the
 Pixi-neutral API. npm installs the matching Windows or Linux native package as
 an optional platform dependency.
@@ -40,7 +40,7 @@ Repository source paths and unexported `dist/` files are internal.
 
 ## Support matrix
 
-Version 0.1.1 targets PixiJS 8.20.0 and PixiJS 7.4.3.
+Version 0.1.2 targets PixiJS 8.20.0 and PixiJS 7.4.3.
 
 | Platform       | PixiJS 8 WebGPU | PixiJS 8 WebGL | PixiJS 7 WebGL | Audio         | Video                  |
 | -------------- | --------------- | -------------- | -------------- | ------------- | ---------------------- |
@@ -56,20 +56,12 @@ browser renderer or another backend.
 Use Node.js 24.13 or newer from the Node.js 24 LTS line. The repository uses
 pnpm 9.15.9.
 
-GitHub Packages requires a classic personal access token with `read:packages`.
-Add the registry to the consumer's `.npmrc`:
-
-```ini
-@matjazprijatelj:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}
-```
-
 Install the facade package together with the Pixi major used by the display:
 
 ```sh
-pnpm add @matjazprijatelj/pixi-native pixi.js@^8.20.0
+pnpm add @matjash/pixi-native pixi.js@^8.20.0
 # PixiJS 7 instead:
-pnpm add @matjazprijatelj/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
+pnpm add @matjash/pixi-native pixi.js-v7@npm:pixi.js@^7.4.3
 ```
 
 npm selects the matching x64 native package. The facade declares both Pixi
@@ -83,7 +75,7 @@ The quickboot package creates a small TypeScript project with Sprite, Graphics,
 Text, ticker animation, resize handling, and managed teardown:
 
 ```sh
-pnpm dlx @matjazprijatelj/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
 cd my-display
 pnpm install
 pnpm dev
@@ -105,7 +97,7 @@ import {
   Sprite,
   createApp,
   createModuleFileAccess,
-} from "@matjazprijatelj/pixi-native";
+} from "@matjash/pixi-native";
 
 const files = createModuleFileAccess(import.meta.url);
 const runtime = await createApp({
@@ -131,7 +123,7 @@ WebGL. Omitting `backend` selects WebGPU and still does not enable fallback.
 ## PixiJS 7 quick start
 
 ```ts
-import { Graphics, createApp } from "@matjazprijatelj/pixi-native/pixi7";
+import { Graphics, createApp } from "@matjash/pixi-native/pixi7";
 
 const runtime = await createApp({
   width: 1280,
@@ -152,6 +144,7 @@ Native version facade in the same display process.
 - [Documentation index](docs/README.md)
 - [Getting started](docs/getting-started.md)
 - [Application lifecycle and API](docs/application-and-api.md)
+- [Pixi Native API reference](docs/api-reference.md)
 - [Media and files](docs/media-and-files.md)
 - [GSAP integration](docs/integrations/gsap.md)
 - [Deployment and release archives](docs/deployment.md)
