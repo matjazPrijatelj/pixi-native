@@ -170,6 +170,8 @@ async function main() {
         npmEnvironment,
         true,
       );
+      // wait some time to publish
+      await new Promise((resolve) => setTimeout(resolve, 10000));
       const published = queryRegistryDistribution(
         archive.packageName,
         archive.version,
