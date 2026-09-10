@@ -7,11 +7,9 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-cpal = "0.15.3"
-crossbeam-queue = "0.3.12"
+maudio = "=0.1.14"
 napi = { version = "3.12.2", features = ["napi9"] }
 napi-derive = "3.2.5"
 
 [build-dependencies]
 napi-build = "2.2.3"
-

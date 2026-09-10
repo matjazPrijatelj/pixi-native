@@ -2,6 +2,12 @@
 
 ## 2026-09-10
 
+- Replaced the native CPAL audio output path with a process-level miniaudio
+  engine (`maudio` 0.1.14) for Windows and Linux x64. FFmpeg remains the
+  decoder; static voices use miniaudio buffers and streaming voices use bounded
+  PCM ring buffers. Added Linux audio addon staging and retained the existing
+  N-API Howler-compatible contract.
+
 - Kept PixiJS 8 WebGPU GSAP animations advancing while Windows owns the
   modal move/resize loop. WebGPU now exposes the same modal-frame listener
   contract as WebGL, dispatches GSAP listeners before the queued Pixi RAF

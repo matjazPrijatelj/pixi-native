@@ -13,6 +13,7 @@ module.exports = {
   gpuModule: Path.join(nativeRoot, "gpu", "src", "index.js"),
   windowModule: Path.join(nativeRoot, "window", "src", "index.js"),
   videoModule: Path.join(nativeRoot, "video", "src", "index.js"),
+  audioBinding: Path.join(nativeRoot, "audio", "dist", target, "native_audio.node"),
   ffmpeg: Path.join(nativeRoot, "video", "dist", target, "ffmpeg"),
   ffprobe: Path.join(nativeRoot, "video", "dist", target, "ffprobe"),
 };

@@ -29,14 +29,20 @@ export interface AudioTestScene extends DisposableDemoScene {
   update(deltaMs?: number): void;
 }
 
+const sourceBg = fileURLToPath(
+  new URL("../../assets/audio/mario.mp3", import.meta.url),
+);
+
 const source = fileURLToPath(
   new URL("../../assets/audio/howler-test.wav", import.meta.url),
 );
+
 export function createAudioTest(
   drumTexture: Texture,
   initialBounds: AudioTestBounds,
 ): AudioTestScene {
   const scene = new Container() as AudioTestScene;
+  let lastEvent = "loading";
   const title = new Text({
     text: "NATIVE AUDIO / HOWLER + DRUM ATLAS  [6]",
     style: {
@@ -46,6 +52,13 @@ export function createAudioTest(
       stroke: { color: 0x000000, width: 3 },
     },
   });
+  const bgMusic = new Howl({
+    src: [sourceBg],
+    volume: 0.2,
+    loop: true,
+  });
+  bgMusic.play();
+
   const instructions = createMetricBitmapText(
     "U/I/O/P + J/K/L/Č or mouse click: drums  |  M: music fade-in  |  F: fade-out  |  SPACE: mute",
     18,
@@ -96,7 +109,6 @@ export function createAudioTest(
   });
   scene.addChild(drumContainer);
 
-  let lastEvent = "loading";
   let musicId: number | null = null;
   let globallyMuted = false;
   let pendingFadeStop: (() => void) | undefined;
@@ -234,6 +246,7 @@ export function createAudioTest(
     scene.update = (): void => undefined;
     sound.unload();
     drums.unload();
+    bgMusic.unload();
     if (globallyMuted) Howler.mute(false);
   };
   return scene;
