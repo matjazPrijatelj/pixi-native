@@ -2782,7 +2782,7 @@ interface Renderer {
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap();
-  resize();
+  resize(width: number, height: number);
   destroy();
 }
 
@@ -2831,7 +2831,13 @@ interface WebGPU {
 
   createWindowContext(options: {
     flags: string[];
-    window: any;
+    surface: {
+      platform: "win32" | "x11" | "wayland";
+      window: Uint8Array;
+      display?: Uint8Array;
+    };
+    width: number;
+    height: number;
     presentMode?: PresentMode;
     alphaMode?: "opaque" | "premultiplied";
   }): {

@@ -1,7 +1,11 @@
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
+#include <cstdint>
+#include <cstring>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -265,35 +269,110 @@ Napi::External<std::shared_ptr<T>> SharedExternal(Napi::Env env, std::shared_ptr
         [](Napi::Env, std::shared_ptr<T>* pointer) { delete pointer; });
 }
 
+std::optional<uintptr_t> DecodeNativeHandle(Napi::Env env,
+                                            const Napi::Value& value,
+                                            const char* name) {
+    if (!value.IsTypedArray() ||
+        value.As<Napi::TypedArray>().TypedArrayType() != napi_uint8_array) {
+        Napi::TypeError::New(env, std::string(name) + " must be a Uint8Array")
+            .ThrowAsJavaScriptException();
+        return std::nullopt;
+    }
+    Napi::Uint8Array bytes = value.As<Napi::Uint8Array>();
+    if (bytes.ByteLength() != sizeof(uintptr_t)) {
+        Napi::TypeError::New(
+            env,
+            std::string(name) + " must contain exactly " +
+                std::to_string(sizeof(uintptr_t)) + " bytes")
+            .ThrowAsJavaScriptException();
+        return std::nullopt;
+    }
+    uintptr_t handle = 0;
+    const auto* data = static_cast<const uint8_t*>(bytes.ArrayBuffer().Data()) +
+        bytes.ByteOffset();
+    std::memcpy(&handle, data, sizeof(handle));
+    if (handle == 0) {
+        Napi::TypeError::New(env, std::string(name) + " must not be null")
+            .ThrowAsJavaScriptException();
+        return std::nullopt;
+    }
+    return handle;
+}
+
+std::optional<uint32_t> DecodeSurfaceDimension(Napi::Env env,
+                                               const Napi::Value& value,
+                                               const char* name) {
+    if (!value.IsNumber()) {
+        Napi::TypeError::New(env, std::string(name) + " must be a number")
+            .ThrowAsJavaScriptException();
+        return std::nullopt;
+    }
+    const double dimension = value.As<Napi::Number>().DoubleValue();
+    if (!std::isfinite(dimension) || dimension < 1 ||
+        dimension > std::numeric_limits<uint32_t>::max()) {
+        Napi::RangeError::New(env, std::string(name) + " is out of range")
+            .ThrowAsJavaScriptException();
+        return std::nullopt;
+    }
+    return static_cast<uint32_t>(dimension);
+}
+
 WGPUSurface CreateWindowSurface(Napi::Env env,
                                 WGPUInstance instance,
-                                const Napi::Object& window) {
-    Napi::Buffer<char> nativeData = {
-        env, window.Get("_native").As<Napi::Object>().Get("gpu")};
-    WGPUSurfaceDescriptor descriptor = {};
+                                const Napi::Object& surfaceDescriptor) {
+    if (!surfaceDescriptor.Get("platform").IsString()) {
+        Napi::TypeError::New(env, "surface.platform must be a string")
+            .ThrowAsJavaScriptException();
+        return nullptr;
+    }
+    const std::string platform =
+        surfaceDescriptor.Get("platform").As<Napi::String>().Utf8Value();
+    const auto windowHandle = DecodeNativeHandle(
+        env, surfaceDescriptor.Get("window"), "surface.window");
+    if (!windowHandle.has_value()) return nullptr;
+
 #if defined(_WIN32)
-    struct NativeData { HWND hwnd; HINSTANCE hinstance; };
-    const auto* native = reinterpret_cast<const NativeData*>(nativeData.Data());
+    if (platform != "win32") {
+        Napi::TypeError::New(env, "Windows requires a win32 surface")
+            .ThrowAsJavaScriptException();
+        return nullptr;
+    }
+    WGPUSurfaceDescriptor descriptor = {};
     WGPUSurfaceSourceWindowsHWND source = {};
     source.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
-    source.hwnd = native->hwnd;
-    source.hinstance = native->hinstance;
-#elif defined(__linux__)
-    struct NativeData { Display* display; Window window; };
-    const auto* native = reinterpret_cast<const NativeData*>(nativeData.Data());
-    WGPUSurfaceSourceXlibWindow source = {};
-    source.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
-    source.display = native->display;
-    source.window = native->window;
-#elif defined(__APPLE__)
-    struct NativeData { void* layer; };
-    const auto* native = reinterpret_cast<const NativeData*>(nativeData.Data());
-    WGPUSurfaceSourceMetalLayer source = {};
-    source.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
-    source.layer = native->layer;
-#endif
+    source.hwnd = reinterpret_cast<HWND>(*windowHandle);
+    source.hinstance = GetModuleHandleW(nullptr);
     descriptor.nextInChain = &source.chain;
     return gProcs->instanceCreateSurface(instance, &descriptor);
+#elif defined(__linux__)
+    const auto displayHandle = DecodeNativeHandle(
+        env, surfaceDescriptor.Get("display"), "surface.display");
+    if (!displayHandle.has_value()) return nullptr;
+    WGPUSurfaceDescriptor descriptor = {};
+    if (platform == "x11") {
+        WGPUSurfaceSourceXlibWindow source = {};
+        source.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
+        source.display = reinterpret_cast<Display*>(*displayHandle);
+        source.window = static_cast<Window>(*windowHandle);
+        descriptor.nextInChain = &source.chain;
+        return gProcs->instanceCreateSurface(instance, &descriptor);
+    }
+    if (platform == "wayland") {
+        WGPUSurfaceSourceWaylandSurface source = {};
+        source.chain.sType = WGPUSType_SurfaceSourceWaylandSurface;
+        source.display = reinterpret_cast<void*>(*displayHandle);
+        source.surface = reinterpret_cast<void*>(*windowHandle);
+        descriptor.nextInChain = &source.chain;
+        return gProcs->instanceCreateSurface(instance, &descriptor);
+    }
+    Napi::TypeError::New(env, "Linux requires an x11 or wayland surface")
+        .ThrowAsJavaScriptException();
+    return nullptr;
+#else
+    Napi::Error::New(env, "Native WebGPU surfaces are unsupported on this platform")
+        .ThrowAsJavaScriptException();
+    return nullptr;
+#endif
 }
 
 class Renderer final : public Napi::ObjectWrap<Renderer> {
@@ -314,31 +393,36 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
 
     static Napi::Object New(Napi::Env env,
                             const std::shared_ptr<NativeGpuContext>& context,
-                            Napi::Object window,
+                            Napi::Object surface,
+                            uint32_t width,
+                            uint32_t height,
                             Napi::String presentMode,
                             Napi::String alphaMode) {
-        return gRendererConstructor.New({SharedExternal(env, context), window, presentMode, alphaMode});
+        return gRendererConstructor.New(
+            {SharedExternal(env, context), surface,
+             Napi::Number::New(env, width), Napi::Number::New(env, height),
+             presentMode, alphaMode});
     }
 
     explicit Renderer(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Renderer>(info) {
         context_ = *info[0].As<Napi::External<std::shared_ptr<NativeGpuContext>>>().Data();
-        window_ = Napi::Persistent(info[1].As<Napi::Object>());
-        presentMode_ = kPresentModes.at(info[2].As<Napi::String>().Utf8Value());
-        alphaMode_ = kAlphaModes.at(info[3].As<Napi::String>().Utf8Value());
-        surface_ = CreateWindowSurface(info.Env(), context_->instance->Get(), window_.Value());
+        presentMode_ = kPresentModes.at(info[4].As<Napi::String>().Utf8Value());
+        alphaMode_ = kAlphaModes.at(info[5].As<Napi::String>().Utf8Value());
+        surface_ = CreateWindowSurface(
+            info.Env(), context_->instance->Get(), info[1].As<Napi::Object>());
         if (surface_ == nullptr) {
             Napi::Error::New(info.Env(), "WebGPU surface creation failed")
                 .ThrowAsJavaScriptException();
             return;
         }
-        ConfigureInitialSurface(info.Env());
+        ConfigureInitialSurface(
+            info.Env(), info[2].ToNumber().Uint32Value(), info[3].ToNumber().Uint32Value());
     }
 
     ~Renderer() override { DestroySurface(); }
 
   private:
     std::shared_ptr<NativeGpuContext> context_;
-    Napi::ObjectReference window_;
     WGPUSurface surface_ = nullptr;
     WGPUTextureFormat preferredFormat_ = WGPUTextureFormat_Undefined;
     WGPUPresentMode presentMode_ = WGPUPresentMode_Fifo;
@@ -375,7 +459,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         return texture;
     }
 
-    void ConfigureInitialSurface(Napi::Env env) {
+    void ConfigureInitialSurface(Napi::Env env, uint32_t width, uint32_t height) {
         WGPUSurfaceCapabilities capabilities = {};
         gProcs->surfaceGetCapabilities(surface_, context_->adapter.Get(), &capabilities);
         bool alphaSupported = false;
@@ -405,9 +489,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
             }
         }
         gProcs->surfaceCapabilitiesFreeMembers(capabilities);
-        ConfigureSurface(
-            std::max(1u, window_.Get("_pixelWidth").ToNumber().Uint32Value()),
-            std::max(1u, window_.Get("_pixelHeight").ToNumber().Uint32Value()));
+        ConfigureSurface(std::max(1u, width), std::max(1u, height));
     }
 
     void ConfigureSurface(uint32_t width, uint32_t height) {
@@ -432,7 +514,6 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         gProcs->surfaceRelease(surface_);
         surface_ = nullptr;
         configured_ = false;
-        window_.Reset();
         context_.reset();
     }
 
@@ -483,9 +564,15 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     }
 
     Napi::Value Resize(const Napi::CallbackInfo& info) {
-        ConfigureSurface(
-            std::max(1u, window_.Get("_pixelWidth").ToNumber().Uint32Value()),
-            std::max(1u, window_.Get("_pixelHeight").ToNumber().Uint32Value()));
+        if (info.Length() != 2) {
+            Napi::TypeError::New(info.Env(), "resize expects width and height")
+                .ThrowAsJavaScriptException();
+            return info.Env().Undefined();
+        }
+        const auto width = DecodeSurfaceDimension(info.Env(), info[0], "width");
+        const auto height = DecodeSurfaceDimension(info.Env(), info[1], "height");
+        if (!width.has_value() || !height.has_value()) return info.Env().Undefined();
+        ConfigureSurface(*width, *height);
         return info.Env().Undefined();
     }
 
@@ -503,11 +590,14 @@ Napi::Value CreateWindowContext(const Napi::CallbackInfo& info) {
         return env.Undefined();
     }
     Napi::Object options = info[0].As<Napi::Object>();
-    if (!options.Get("window").IsObject()) {
-        Napi::TypeError::New(env, "window must be a native SDL window object")
+    if (!options.Get("surface").IsObject()) {
+        Napi::TypeError::New(env, "surface must be a native surface descriptor")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
+    const auto width = DecodeSurfaceDimension(env, options.Get("width"), "width");
+    const auto height = DecodeSurfaceDimension(env, options.Get("height"), "height");
+    if (!width.has_value() || !height.has_value()) return env.Undefined();
     const std::string presentMode = options.Has("presentMode")
         ? options.Get("presentMode").ToString().Utf8Value() : "fifo";
     const std::string alphaMode = options.Has("alphaMode")
@@ -531,7 +621,8 @@ Napi::Value CreateWindowContext(const Napi::CallbackInfo& info) {
         env, std::make_unique<wgpu::binding::GPUDevice>(
             env, wgpu::DeviceDescriptor(), context->device, *context->lostPromise, context->async));
     Napi::Object renderer = Renderer::New(
-        env, context, options.Get("window").As<Napi::Object>(),
+        env, context, options.Get("surface").As<Napi::Object>(),
+        *width, *height,
         Napi::String::New(env, presentMode), Napi::String::New(env, alphaMode));
 
     Napi::Object adapterObject = adapter;

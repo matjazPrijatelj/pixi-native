@@ -128,9 +128,6 @@ importers:
 
   packages/pixi8:
     dependencies:
-      "@kmamal/sdl":
-        specifier: 0.11.13
-        version: 0.11.13
       "@napi-rs/canvas":
         specifier: 1.0.8
         version: 1.0.8

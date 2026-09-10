@@ -230,7 +230,7 @@ export class NodeDOMAdapter {
     this.globalListeners.clear();
   }
 
-  /** Delivers SDL-translated events registered on document/window globals. */
+  /** Delivers native-window events registered on document/window globals. */
   public dispatchGlobalEvent(type: string, event: Event): void {
     const listeners = this.globalListeners.get(type);
     if (!listeners) return;

@@ -6,6 +6,12 @@ export type AntialiasSamples = 0 | 2 | 4 | 8;
 
 export const DEFAULT_ANTIALIAS_SAMPLES: AntialiasSamples = 4;
 
+export interface NativeSurfaceDescriptor {
+  readonly platform: "win32" | "x11" | "wayland";
+  readonly window: Uint8Array;
+  readonly display?: Uint8Array;
+}
+
 export interface NodeRendererOptions {
   /** Native window title. */
   readonly title?: string;
@@ -36,7 +42,9 @@ export interface NodeRendererOptions {
 export interface NodeGPUApi {
   createWindowContext(options: {
     flags: string[];
-    window: unknown;
+    surface: NativeSurfaceDescriptor;
+    width: number;
+    height: number;
     presentMode?: string;
     alphaMode?: "opaque" | "premultiplied";
   }): {
@@ -51,12 +59,12 @@ export interface NodeGPUApi {
 }
 
 export interface NodeWindowRenderer {
-    getPreferredFormat(): GPUTextureFormat;
-    getAlphaMode?(): "opaque" | "premultiplied";
+  getPreferredFormat(): GPUTextureFormat;
+  getAlphaMode?(): "opaque" | "premultiplied";
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap(): void;
-  resize(): void;
+  resize(width: number, height: number): void;
   destroy(): void;
 }
 

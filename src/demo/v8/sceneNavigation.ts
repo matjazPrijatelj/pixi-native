@@ -34,7 +34,7 @@ function normalizeDirectionalKey(key: string | null): string | null {
   }
 }
 
-/** Returns the scene selected by a non-repeating SDL key press, or null for other keys. */
+/** Returns the scene selected by a non-repeating native key press, or null for other keys. */
 export function getSceneIndexForKey(
   key: string | null,
   currentIndex: number,

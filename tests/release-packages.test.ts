@@ -89,6 +89,9 @@ test("private Pixi facades use ranged peers and exact development versions", asy
     assert.equal(manifest.version, "0.1.3", packagePath);
     assert.equal(manifest.peerDependencies["@pixi-native/core"], "~0.1.3");
     assert.equal(manifest.dependencies?.[peerName], undefined, packagePath);
+    if (packagePath === "packages/pixi8/package.json") {
+      assert.equal(manifest.dependencies?.["@kmamal/sdl"], undefined);
+    }
     assert.equal(manifest.peerDependencies[peerName], peerVersion, packagePath);
     assert.equal(
       manifest.devDependencies[peerName],

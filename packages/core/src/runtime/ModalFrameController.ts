@@ -32,7 +32,7 @@ export function setNativeWindowTransparent(
   transparent: boolean,
 ): void {
   if (!transparent) return;
-  // SDL owns the Linux Wayland surface. Never pass its handle to the
+  // GLFW owns Linux surfaces. Never pass their handle to the
   // Windows-only addon where it would be interpreted as an HWND.
   if (process.platform === "linux") return;
   if (process.platform !== "win32") {

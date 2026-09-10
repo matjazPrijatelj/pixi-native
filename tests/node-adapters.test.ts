@@ -12,6 +12,11 @@ import { NodeGPUCanvas } from "@pixi-native/core/canvas/NodeGPUCanvas.js";
 import { NodeCanvas } from "@pixi-native/core/canvas/NodeCanvas.js";
 import { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
 import { NodeGLWindow } from "@pixi-native/core/renderers/webgl/NodeGLWindow.js";
+import {
+  encodeGlfwHandle,
+  resolveGlfwSurfacePlatform,
+} from "@pixi-native/core/renderers/glfw/NodeGlfwWindow.js";
+import { openGlfwWebGpuWindow } from "@pixi-native/core/renderers/glfw/createNodeGlfwWebGpuWindow.js";
 import { copyRgbaRowsFlippedY } from "@pixi-native/core/canvas/rgbaUpload.js";
 import { sliceWebGlBufferData } from "@pixi-native/core/renderers/webgl/webglBufferUpload.js";
 import {
@@ -224,7 +229,7 @@ test("maxFps controls only timer-paced animation frames", () => {
   assert.match(String(warnings[0][0]), /maxFps is ignored/);
 });
 
-test("Linux transparency leaves Wayland handles with SDL", () => {
+test("Linux transparency leaves GLFW surface handles untouched", () => {
   if (process.platform !== "linux") return;
   assert.doesNotThrow(() =>
     setNativeWindowTransparent(new Uint8Array(8), true),
@@ -333,7 +338,8 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
   let maximizeCalls = 0;
   let minimizeCalls = 0;
   let restoreCalls = 0;
-  let destroyed = false;
+  let destroyCalls = 0;
+  let shouldClose = false;
   let position = { x: 10, y: 20 };
   const glfwWindow = {
     framebufferSize: { width: 1, height: 1 },
@@ -351,8 +357,11 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
     set pos(value: { x: number; y: number }) {
       position = value;
     },
-    shouldClose: false,
+    get shouldClose() {
+      return shouldClose;
+    },
     currentContext: {},
+    platformDevice: 0x0708090a0b0c,
     platformWindow: 0x010203040506,
     getCurrentMonitor: () => ({ rate: 60 }),
     makeCurrent() {},
@@ -369,7 +378,7 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
       restoreCalls++;
     },
     destroy() {
-      destroyed = true;
+      destroyCalls++;
     },
     on(event: string, listener: (event: Record<string, number>) => void) {
       if (event === "wheel") {
@@ -378,6 +387,7 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
     },
   };
   const window = new NodeGLWindow(glfwWindow, {
+    platform: "x11",
     pollEvents() {},
     maximize() {
       maximizeCalls++;
@@ -388,6 +398,11 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
     Array.from(window.nativeWindowData),
     [0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0, 0],
   );
+  assert.deepEqual(window.nativeSurface, {
+    platform: "x11",
+    window: new Uint8Array([0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0, 0]),
+    display: new Uint8Array([0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0, 0]),
+  });
   window.swapBuffers();
   assert.equal(swapCalls, 1);
   assert.equal(drawCalls, 0);
@@ -412,12 +427,114 @@ test("NodeGLWindow serializes its handle and controls window state", () => {
   assert.equal(minimizeCalls, 1);
   assert.equal(maximizeCalls, 1);
   assert.equal(restoreCalls, 1);
+  let closeCalls = 0;
+  window.on("close", () => closeCalls++);
+  shouldClose = true;
+  window.pollEvents();
+  window.pollEvents();
+  assert.equal(closeCalls, 1);
   window.destroy();
-  assert.equal(destroyed, true);
+  window.destroy();
+  assert.equal(destroyCalls, 1);
   assert.throws(() => window.setPosition(0, 0), /destroyed/);
   assert.throws(() => window.minimize(), /destroyed/);
   assert.throws(() => window.maximize(), /destroyed/);
   assert.throws(() => window.restore(), /destroyed/);
+});
+
+test("GLFW native surface helpers reject invalid handles and platforms", () => {
+  assert.throws(() => encodeGlfwHandle(0, "window"), /Invalid native GLFW/);
+  assert.equal(
+    resolveGlfwSurfacePlatform({
+      PLATFORM_WIN32: 1,
+      PLATFORM_X11: 2,
+      PLATFORM_WAYLAND: 3,
+      getPlatform: () => 1,
+    }),
+    "win32",
+  );
+  assert.throws(
+    () =>
+      resolveGlfwSurfacePlatform({
+        PLATFORM_WIN32: 1,
+        PLATFORM_X11: 2,
+        PLATFORM_WAYLAND: 3,
+        getPlatform: () => 4,
+      }),
+    /Unsupported GLFW surface platform/,
+  );
+});
+
+test("transparent Win32 WebGPU windows request an alpha backing context", () => {
+  const hints: Array<[number, number]> = [];
+  let noApiArgument: boolean | undefined;
+  const handle = {};
+  const glfw = {
+    TRUE: 1,
+    FALSE: 0,
+    CLIENT_API: 10,
+    NO_API: 11,
+    OPENGL_API: 16,
+    ALPHA_BITS: 17,
+    RESIZABLE: 12,
+    VISIBLE: 13,
+    DECORATED: 14,
+    TRANSPARENT_FRAMEBUFFER: 15,
+    defaultWindowHints() {},
+    windowHint(hint: number, value: number) {
+      hints.push([hint, value]);
+    },
+    createWindow(
+      _width: number,
+      _height: number,
+      _emitter: unknown,
+      _title: string,
+      _monitor: undefined,
+      noApi: boolean,
+    ) {
+      noApiArgument = noApi;
+      return handle;
+    },
+  };
+
+  const result = openGlfwWebGpuWindow(
+    glfw as never,
+    resolveNodeRendererOptions(
+      { width: 800, height: 600, transparent: true },
+      "WebGPU test",
+    ),
+    { emit: () => false },
+    "win32",
+  );
+
+  assert.equal(result, handle);
+  assert.equal(noApiArgument, false);
+  assert.ok(
+    hints.some(
+      ([hint, value]) =>
+        hint === 10 && value === 16,
+    ),
+  );
+  assert.ok(hints.some(([hint, value]) => hint === 17 && value === 8));
+  assert.ok(hints.some(([hint, value]) => hint === 15 && value === 1));
+
+  hints.length = 0;
+  noApiArgument = undefined;
+  openGlfwWebGpuWindow(
+    glfw as never,
+    resolveNodeRendererOptions(
+      { width: 800, height: 600, transparent: false },
+      "Opaque WebGPU test",
+    ),
+    { emit: () => false },
+    "win32",
+  );
+  assert.equal(noApiArgument, true);
+  assert.ok(hints.some(([hint, value]) => hint === 10 && value === 11));
+  assert.equal(
+    hints.some(([hint, value]) => hint === 17),
+    false,
+  );
 });
 
 test("Pixi 7 adapter patches an existing incomplete document", () => {
@@ -512,8 +629,11 @@ test("NodeDOMAdapter exposes WebGL 1 constructor without misclassifying WebGL 2"
 
 test("NodeGPUCanvas exposes the native WebGPU context and resizes", () => {
   const context = {} as GPUCanvasContext;
+  let resized: [number, number] | undefined;
   const renderer = {
-    resize() {},
+    resize(width: number, height: number) {
+      resized = [width, height];
+    },
     getCurrentTexture() {
       return context as unknown as GPUTexture;
     },
@@ -526,6 +646,7 @@ test("NodeGPUCanvas exposes the native WebGPU context and resizes", () => {
   assert.doesNotThrow(() => canvas.addEventListener("mousedown", listener));
   assert.doesNotThrow(() => canvas.removeEventListener("mousedown", listener));
   canvas.resize(640.8, 360.2);
+  assert.deepEqual(resized, [640, 360]);
   assert.equal(canvas.width, 640);
   assert.equal(canvas.height, 360);
 });

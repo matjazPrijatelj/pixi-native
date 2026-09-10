@@ -2,6 +2,23 @@
 
 ## 2026-09-10
 
+- Restored Win32 WebGPU per-pixel transparency after the GLFW migration by
+  retaining an alpha-capable GLFW backing framebuffer for transparent windows
+  while Dawn remains the Pixi renderer. The transparent backing buffer is
+  cleared on creation and resize; opaque Windows and non-Windows WebGPU
+  windows continue to use `GLFW_NO_API`. Visually confirmed the transparent
+  PixiJS 8 WebGPU window against the already-working PixiJS 8 WebGL behavior.
+- Rebuilt and staged the Win32 x64 Dawn addon for the new GLFW surface ABI,
+  replacing the stale packaged binary that still required an SDL window.
+  Verified matching build/distribution hashes, TypeScript, 32 focused adapter
+  tests, package compilation, and live PixiJS 8 WebGPU plus PixiJS 7 WebGL
+  startup. The full suite passes 140 of 141 tests; the remaining generator
+  version assertion is unrelated to the renderer migration.
+- Began replacing the SDL-owned Pixi 8 WebGPU window with a shared GLFW
+  window/input layer. Added an explicit Win32/X11/Wayland surface descriptor
+  for the Dawn addon, made WebGPU surface resizing independent of an SDL
+  object, and kept the existing Windows CPAL/WASAPI and Linux SDL audio paths
+  unchanged.
 - Prepared the Win32 WebGPU fix for an independent npm patch release: runtime
   and Win32 packages advance to `0.1.3`, Linux remains on `0.1.2`, internal
   package links accept compatible `~0.1.x` patches, and the `0.1.5` generator

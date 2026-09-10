@@ -71,7 +71,7 @@ export class NodeGPUCanvas {
     if (listeners?.size === 0) this.listeners.delete(type);
   }
 
-  /** Delivers an SDL-translated event to Pixi's DOM event listeners. */
+  /** Delivers a native-window event to Pixi's DOM event listeners. */
   public dispatchNativeEvent(type: string, event: Event): void {
     const listeners = this.listeners.get(type);
     if (!listeners) return;
@@ -91,6 +91,6 @@ export class NodeGPUCanvas {
   public resize(width: number, height: number): void {
     this.width = Math.max(1, Math.floor(width));
     this.height = Math.max(1, Math.floor(height));
-    this.renderer.resize();
+    this.renderer.resize(this.width, this.height);
   }
 }

@@ -9,9 +9,8 @@ Pixi Native uses these projects through direct packages or native integration:
 
 - [PixiJS](https://pixijs.com/) for the rendering API and scene graph
 - [@node-3d](https://github.com/node-3d) and
-  [GLFW](https://www.glfw.org/) for native WebGL windows
-- [SDL](https://www.libsdl.org/) through `@kmamal/sdl` for input, display
-  information, and Linux audio output
+  [GLFW](https://www.glfw.org/) for native windows and input
+- [SDL](https://www.libsdl.org/) through `@kmamal/sdl` for Linux audio output
 - [@napi-rs/canvas](https://github.com/Brooooooklyn/canvas) for Canvas2D, text,
   and image decoding
 - [napi-rs](https://napi.rs/) for the Rust native addons

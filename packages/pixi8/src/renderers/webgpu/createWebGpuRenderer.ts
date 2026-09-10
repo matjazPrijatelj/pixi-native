@@ -13,7 +13,7 @@ import {
   prepareRgbaPixelsForUpload,
   type RgbaUploadFormat,
 } from "@pixi-native/core/canvas/rgbaUpload.js";
-import * as sdl from "@kmamal/sdl";
+import { createNodeGlfwWebGpuWindow } from "@pixi-native/core/renderers/glfw/createNodeGlfwWebGpuWindow.js";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
 import {
@@ -45,19 +45,10 @@ export async function createWebGpuRenderer(
     windowOptions.antialiasSamples,
   );
 
-  const window = sdl.video.createWindow({
-    title: windowOptions.title,
-    width: windowOptions.width,
-    height: windowOptions.height,
-    resizable: windowOptions.resizable,
-    borderless: windowOptions.borderless,
-    x: windowOptions.x,
-    y: windowOptions.y,
-    webgpu: true,
-  });
+  const window = await createNodeGlfwWebGpuWindow(windowOptions);
 
   setNativeWindowTransparent(
-    (window as unknown as { _native: { gpu: Uint8Array } })._native.gpu,
+    window.nativeWindowData,
     windowOptions.transparent,
   );
 
@@ -66,7 +57,9 @@ export async function createWebGpuRenderer(
   const presentMode = windowOptions.vsync ? "fifo" : "immediate";
   const gpuContext = gpu.createWindowContext({
     flags: [`backend=${backend}`, "verbose=1"],
-    window,
+    surface: window.nativeSurface,
+    width: window.pixelWidth,
+    height: window.pixelHeight,
     presentMode,
     alphaMode: windowOptions.transparent ? "premultiplied" : "opaque",
   });
@@ -75,7 +68,8 @@ export async function createWebGpuRenderer(
   const device = gpuContext.device;
   const renderer = gpuContext.renderer;
   const actualAlphaMode =
-    gpuContext.alphaMode ?? renderer.getAlphaMode?.() ??
+    gpuContext.alphaMode ??
+    renderer.getAlphaMode?.() ??
     (windowOptions.transparent ? "premultiplied" : "opaque");
   if (windowOptions.transparent && actualAlphaMode !== "premultiplied") {
     console.warn(
@@ -205,7 +199,7 @@ export async function createWebGpuRenderer(
   );
   domAdapter.installPixi8(DOMAdapter);
   const modalController = createModalFrameController(
-    (window as any)._native.gpu,
+    window.nativeWindowData,
     () => {
       domAdapter.dispatchModalFrame(performance.now());
     },

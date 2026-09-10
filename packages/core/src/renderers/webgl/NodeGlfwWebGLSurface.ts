@@ -1,5 +1,6 @@
 import { NodeGLCanvas } from "../../canvas/NodeGLCanvas.ts";
 import { NodeGLWindow } from "./NodeGLWindow.ts";
+import { resolveGlfwSurfacePlatform } from "../glfw/NodeGlfwWindow.ts";
 import type {
   NodeRenderSurface,
   NodeWindowHandle,
@@ -70,6 +71,7 @@ export async function createNodeGlfwWebGLSurface(
   );
 
   const glfwWindow = new NodeGLWindow(doc as never, {
+    platform: resolveGlfwSurfacePlatform(glfw),
     pollEvents: glfw.pollEvents,
     maximize: () => glfw.maximizeWindow(doc.handle),
   });
