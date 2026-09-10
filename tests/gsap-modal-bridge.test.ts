@@ -1,6 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { installGsapModalBridge } from "../src/demo/gsapModalBridge.ts";
+import { createModalFrameListeners } from "../packages/pixi8/src/renderers/modalFrameListeners.ts";
+
+test("modal frame listeners dispatch snapshots and support cleanup", () => {
+  const listeners = createModalFrameListeners();
+  const calls: string[] = [];
+  let removeFirst = (): void => undefined;
+
+  removeFirst = listeners.add(() => {
+    calls.push("first");
+    removeFirst();
+    listeners.add(() => calls.push("late"));
+  });
+  listeners.add(() => calls.push("second"));
+
+  listeners.dispatch();
+  assert.deepEqual(calls, ["first", "second"]);
+
+  listeners.dispatch();
+  assert.deepEqual(calls, ["first", "second", "second", "late"]);
+
+  listeners.clear();
+  listeners.dispatch();
+  assert.deepEqual(calls, ["first", "second", "second", "late"]);
+});
 
 test("GSAP modal bridge ticks and removes its native listener", () => {
   let modalListener: (() => void) | undefined;

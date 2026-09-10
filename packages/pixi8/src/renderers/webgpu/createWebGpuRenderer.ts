@@ -15,6 +15,7 @@ import {
 } from "@pixi-native/core/canvas/rgbaUpload.js";
 import { createNodeGlfwWebGpuWindow } from "@pixi-native/core/renderers/glfw/createNodeGlfwWebGpuWindow.js";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
+import { createModalFrameListeners } from "../modalFrameListeners.ts";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
 import {
   createCompositorFrameWaiter,
@@ -198,9 +199,11 @@ export async function createWebGpuRenderer(
     waitForPresent,
   );
   domAdapter.installPixi8(DOMAdapter);
+  const modalFrameListeners = createModalFrameListeners();
   const modalController = createModalFrameController(
     window.nativeWindowData,
     () => {
+      modalFrameListeners.dispatch();
       domAdapter.dispatchModalFrame(performance.now());
     },
     (active) => {
@@ -296,6 +299,7 @@ export async function createWebGpuRenderer(
     if (destroyed) return;
     destroyed = true;
     rgbaUploadBuffers.clear();
+    modalFrameListeners.clear();
     modalController.detach();
     domAdapter.dispose();
     renderer.destroy();
@@ -324,6 +328,7 @@ export async function createWebGpuRenderer(
         dispatchGlobalEvent: (type, event) =>
           domAdapter.dispatchGlobalEvent(type, event),
       },
+      addModalFrameListener: modalFrameListeners.add,
       destroy,
     },
   };

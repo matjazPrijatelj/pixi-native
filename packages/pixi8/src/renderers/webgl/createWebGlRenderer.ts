@@ -9,6 +9,7 @@ import { copyRgbaRowsFlippedY } from "@pixi-native/core/canvas/rgbaUpload.js";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
 import { sliceWebGlBufferData } from "@pixi-native/core/renderers/webgl/webglBufferUpload.js";
 import { createModalFrameController } from "@pixi-native/core/runtime/ModalFrameController.js";
+import { createModalFrameListeners } from "../modalFrameListeners.ts";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -230,7 +231,7 @@ export async function createWebGlRenderer(
     domAdapter.installPixi8(DOMAdapter);
 
     const app = new Application();
-    const modalFrameListeners = new Set<() => void>();
+    const modalFrameListeners = createModalFrameListeners();
 
     await app.init({
       preference: ["webgl"],
@@ -258,7 +259,7 @@ export async function createWebGlRenderer(
     const modalController = createModalFrameController(
       nativeWindowData,
       () => {
-        for (const listener of [...modalFrameListeners]) listener();
+        modalFrameListeners.dispatch();
         domAdapter.dispatchModalFrame(performance.now());
       },
       setNativeVideoModalState,
@@ -287,6 +288,7 @@ export async function createWebGlRenderer(
 
       destroyed = true;
 
+      modalFrameListeners.clear();
       modalController.detach();
       domAdapter.dispose();
       renderer.destroy();
@@ -312,10 +314,7 @@ export async function createWebGlRenderer(
           dispatchGlobalEvent: (type, event) =>
             domAdapter.dispatchGlobalEvent(type, event),
         },
-        addModalFrameListener: (listener) => {
-          modalFrameListeners.add(listener);
-          return () => modalFrameListeners.delete(listener);
-        },
+        addModalFrameListener: modalFrameListeners.add,
         destroy,
       },
     };

@@ -2,6 +2,10 @@
 
 ## 2026-09-10
 
+- Kept PixiJS 8 WebGPU GSAP animations advancing while Windows owns the
+  modal move/resize loop. WebGPU now exposes the same modal-frame listener
+  contract as WebGL, dispatches GSAP listeners before the queued Pixi RAF
+  frame, and clears backend listeners during teardown.
 - Restored Win32 WebGPU per-pixel transparency after the GLFW migration by
   retaining an alpha-capable GLFW backing framebuffer for transparent windows
   while Dawn remains the Pixi renderer. The transparent backing buffer is
