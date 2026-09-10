@@ -148,6 +148,7 @@ try {
       path: archivePath,
       filename: packResult.filename,
       packageName: manifest.name,
+      version: manifest.version,
       sha256: checksum,
     });
     console.log(`Created ${archivePath}`);
@@ -184,11 +185,14 @@ await writeFile(
       version: releaseVersion,
       target: nativeTarget,
       sourceFingerprint,
-      archives: releaseArchives.map(({ filename, packageName, sha256 }) => ({
-        filename,
-        packageName,
-        sha256,
-      })),
+      archives: releaseArchives.map(
+        ({ filename, packageName, version, sha256 }) => ({
+          filename,
+          packageName,
+          version,
+          sha256,
+        }),
+      ),
       ffmpegSource: {
         filename: FFMPEG_SOURCE_ARCHIVE,
         sha256: sourceChecksum,

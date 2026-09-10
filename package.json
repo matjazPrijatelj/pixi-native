@@ -1,6 +1,6 @@
 {
   "name": "pixi-native-workspace",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "author": {
@@ -30,6 +30,8 @@
     "pack:dist:linux:wsl": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release-linux-wsl.ps1",
     "publish:npm:check": "node scripts/publish-npm-packages.mjs --check",
     "publish:npm": "node scripts/publish-npm-packages.mjs",
+    "publish:npm:win32:check": "node scripts/publish-npm-packages.mjs --win32-only --check",
+    "publish:npm:win32": "node scripts/publish-npm-packages.mjs --win32-only",
     "publish:generator:npm:check": "node scripts/publish-npm-packages.mjs --generator --check",
     "publish:generator:npm": "node scripts/publish-npm-packages.mjs --generator",
     "prepack": "node scripts/reject-workspace-pack.mjs",

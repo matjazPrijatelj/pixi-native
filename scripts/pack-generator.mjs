@@ -46,11 +46,10 @@ if (process.versions.node.split(".")[0] !== "24") {
   throw new Error("Generator packing requires Node.js 24 LTS.");
 }
 execSync("pnpm typecheck", { cwd: repositoryRoot, stdio: "inherit" });
-execFileSync(
-  process.execPath,
-  ["--test", "tests/create-pixi-native.test.ts"],
-  { cwd: repositoryRoot, stdio: "inherit" },
-);
+execFileSync(process.execPath, ["--test", "tests/create-pixi-native.test.ts"], {
+  cwd: repositoryRoot,
+  stdio: "inherit",
+});
 const tsc = resolve(repositoryRoot, "node_modules/typescript/bin/tsc");
 for (const buildPackage of ["core", "pixi7", "pixi8", "create-pixi-native"]) {
   const buildRoot = resolve(repositoryRoot, "packages", buildPackage);
@@ -173,7 +172,10 @@ try {
       `${JSON.stringify(
         {
           name: packageName,
-          version: "0.1.2",
+          version: facadeManifest.optionalDependencies[packageName].replace(
+            /^~/,
+            "",
+          ),
           os: [target.split("-")[0]],
           cpu: ["x64"],
         },
@@ -208,7 +210,7 @@ try {
       (name) => name.startsWith("pixi.js"),
     );
     if (
-      generatedManifest.dependencies["@matjash/pixi-native"] !== "0.1.2" ||
+      generatedManifest.dependencies["@matjash/pixi-native"] !== "~0.1.3" ||
       pixiDependencies.length !== 1 ||
       pixiDependencies[0] !== expectedDependency ||
       generatedManifest.dependencies.gsap !==
@@ -260,6 +262,7 @@ try {
         archive: {
           filename: packResult.filename,
           packageName: manifest.name,
+          version: manifest.version,
           sha256,
         },
       },

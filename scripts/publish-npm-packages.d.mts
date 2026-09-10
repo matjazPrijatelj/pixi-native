@@ -17,12 +17,14 @@ export interface ReleaseConfiguration {
   readonly version: string;
   readonly tag: string;
   readonly expectedPackages: readonly string[];
+  readonly manifestTargets: readonly string[];
 }
 
 export function getReleaseConfiguration(
   useGenerator: boolean,
   runtimePackageVersion: string,
   generatorPackageVersion: string,
+  useWin32Only?: boolean,
 ): ReleaseConfiguration;
 
 export function getNpmInvocation(

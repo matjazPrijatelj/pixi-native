@@ -2,6 +2,11 @@
 
 ## 2026-09-10
 
+- Prepared the Win32 WebGPU fix for an independent npm patch release: runtime
+  and Win32 packages advance to `0.1.3`, Linux remains on `0.1.2`, internal
+  package links accept compatible `~0.1.x` patches, and the `0.1.5` generator
+  creates projects against `@matjash/pixi-native@~0.1.3`. Added a guarded
+  Win32-only publisher so this release does not require republishing Linux.
 - Fixed a native WebGPU surface-texture reference leak that retained one Dawn
   object per rendered frame. A 60-minute, 500-sprite D3D12 soak grew private
   memory by 224 MiB while GPU memory, handles, and threads stayed stable. The

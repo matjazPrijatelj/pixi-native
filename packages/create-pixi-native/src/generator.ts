@@ -1,4 +1,12 @@
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,108 +15,126 @@ export type RendererBackend = "webgpu" | "webgl";
 export type AnimationEngine = "ticker" | "gsap";
 
 export interface CreateProjectOptions {
-    readonly targetDirectory: string;
-    readonly pixi: PixiMajor;
-    readonly backend: RendererBackend;
-    readonly animation?: AnimationEngine;
-    readonly cwd?: string;
+  readonly targetDirectory: string;
+  readonly pixi: PixiMajor;
+  readonly backend: RendererBackend;
+  readonly animation?: AnimationEngine;
+  readonly cwd?: string;
 }
 
-export const GENERATOR_VERSION = "0.1.4";
-export const PIXI_NATIVE_VERSION = "0.1.2";
+export const GENERATOR_VERSION = "0.1.5";
+export const PIXI_NATIVE_VERSION = "0.1.3";
+export const PIXI_NATIVE_VERSION_RANGE = `~${PIXI_NATIVE_VERSION}`;
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 const PROJECT_NAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const TEXT_TEMPLATE_EXTENSIONS = new Set([".json", ".md", ".template", ".ts"]);
 const TEMPLATE_RENAMES = new Map([
-    ["gitignore.template", ".gitignore"],
-    ["prettierignore.template", ".prettierignore"],
-    ["package.json.template", "package.json"],
+  ["gitignore.template", ".gitignore"],
+  ["prettierignore.template", ".prettierignore"],
+  ["package.json.template", "package.json"],
 ]);
 
-export async function createProject(options: CreateProjectOptions): Promise<string> {
-    if (options.pixi === "7" && options.backend !== "webgl") {
-        throw new Error("PixiJS 7 supports only the WebGL backend.");
-    }
+export async function createProject(
+  options: CreateProjectOptions,
+): Promise<string> {
+  if (options.pixi === "7" && options.backend !== "webgl") {
+    throw new Error("PixiJS 7 supports only the WebGL backend.");
+  }
 
-    const cwd = options.cwd ?? process.cwd();
-    const animation = options.animation ?? "ticker";
-    const targetDirectory = resolve(cwd, options.targetDirectory);
-    const projectName = basename(targetDirectory);
-    validateProjectName(projectName);
-    await assertEmptyTarget(targetDirectory);
-    await mkdir(targetDirectory, { recursive: true });
-    await copyTemplateDirectory(resolve(TEMPLATE_ROOT, "common"), targetDirectory);
-    await copyTemplateDirectory(resolve(TEMPLATE_ROOT, `pixi${options.pixi}`), targetDirectory);
-    await copyTemplateDirectory(resolve(TEMPLATE_ROOT, "animation", animation), targetDirectory);
-    await replaceTemplateTokens(targetDirectory, {
-        PROJECT_NAME: projectName,
-        PIXI_MAJOR: options.pixi,
-        BACKEND: options.backend,
-        PIXI_NATIVE_VERSION,
-        PIXI_PACKAGE_NAME: options.pixi === "7" ? "pixi.js-v7" : "pixi.js",
-        PIXI_PACKAGE_VERSION: options.pixi === "7" ? "npm:pixi.js@^7.4.3" : "^8.20.0",
-        PIXI_IMPORT_PATH:
-            options.pixi === "7"
-                ? "@matjash/pixi-native/pixi7"
-                : "@matjash/pixi-native",
-        ANIMATION_ENGINE: animation,
-        GSAP_DEPENDENCY: animation === "gsap" ? ',\n    "gsap": "^3.15.0"' : "",
-    });
-    return targetDirectory;
+  const cwd = options.cwd ?? process.cwd();
+  const animation = options.animation ?? "ticker";
+  const targetDirectory = resolve(cwd, options.targetDirectory);
+  const projectName = basename(targetDirectory);
+  validateProjectName(projectName);
+  await assertEmptyTarget(targetDirectory);
+  await mkdir(targetDirectory, { recursive: true });
+  await copyTemplateDirectory(
+    resolve(TEMPLATE_ROOT, "common"),
+    targetDirectory,
+  );
+  await copyTemplateDirectory(
+    resolve(TEMPLATE_ROOT, `pixi${options.pixi}`),
+    targetDirectory,
+  );
+  await copyTemplateDirectory(
+    resolve(TEMPLATE_ROOT, "animation", animation),
+    targetDirectory,
+  );
+  await replaceTemplateTokens(targetDirectory, {
+    PROJECT_NAME: projectName,
+    PIXI_MAJOR: options.pixi,
+    BACKEND: options.backend,
+    PIXI_NATIVE_VERSION: PIXI_NATIVE_VERSION_RANGE,
+    PIXI_PACKAGE_NAME: options.pixi === "7" ? "pixi.js-v7" : "pixi.js",
+    PIXI_PACKAGE_VERSION:
+      options.pixi === "7" ? "npm:pixi.js@^7.4.3" : "^8.20.0",
+    PIXI_IMPORT_PATH:
+      options.pixi === "7"
+        ? "@matjash/pixi-native/pixi7"
+        : "@matjash/pixi-native",
+    ANIMATION_ENGINE: animation,
+    GSAP_DEPENDENCY: animation === "gsap" ? ',\n    "gsap": "^3.15.0"' : "",
+  });
+  return targetDirectory;
 }
 
 export function validateProjectName(projectName: string): void {
-    if (!PROJECT_NAME_PATTERN.test(projectName)) {
-        throw new Error(
-            "The project directory name must use lowercase letters, numbers, dots, hyphens, or underscores.",
-        );
-    }
+  if (!PROJECT_NAME_PATTERN.test(projectName)) {
+    throw new Error(
+      "The project directory name must use lowercase letters, numbers, dots, hyphens, or underscores.",
+    );
+  }
 }
 
 async function assertEmptyTarget(targetDirectory: string): Promise<void> {
-    try {
-        const targetStat = await stat(targetDirectory);
-        if (!targetStat.isDirectory()) {
-            throw new Error(`Target exists and is not a directory: ${targetDirectory}`);
-        }
-        if ((await readdir(targetDirectory)).length > 0) {
-            throw new Error(`Target directory is not empty: ${targetDirectory}`);
-        }
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  try {
+    const targetStat = await stat(targetDirectory);
+    if (!targetStat.isDirectory()) {
+      throw new Error(
+        `Target exists and is not a directory: ${targetDirectory}`,
+      );
     }
+    if ((await readdir(targetDirectory)).length > 0) {
+      throw new Error(`Target directory is not empty: ${targetDirectory}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 }
 
-async function copyTemplateDirectory(source: string, target: string): Promise<void> {
-    await cp(source, target, {
-        recursive: true,
-        filter: (path) => !path.endsWith(".template-placeholder"),
-    });
+async function copyTemplateDirectory(
+  source: string,
+  target: string,
+): Promise<void> {
+  await cp(source, target, {
+    recursive: true,
+    filter: (path) => !path.endsWith(".template-placeholder"),
+  });
 }
 
 async function replaceTemplateTokens(
-    directory: string,
-    values: Readonly<Record<string, string>>,
+  directory: string,
+  values: Readonly<Record<string, string>>,
 ): Promise<void> {
-    const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries) {
-        const sourcePath = resolve(directory, entry.name);
-        if (entry.isDirectory()) {
-            await replaceTemplateTokens(sourcePath, values);
-            continue;
-        }
-        // Only decode known text templates so copied binary assets retain their exact bytes.
-        if (!TEXT_TEMPLATE_EXTENSIONS.has(extname(entry.name))) continue;
-
-        let contents = await readFile(sourcePath, "utf8");
-        for (const [name, value] of Object.entries(values)) {
-            contents = contents.replaceAll(`{{${name}}}`, value);
-        }
-        const outputName = TEMPLATE_RENAMES.get(entry.name) ?? entry.name;
-        const outputPath = resolve(directory, outputName);
-        await writeFile(outputPath, contents);
-        if (outputPath !== sourcePath) {
-            await rm(sourcePath);
-        }
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await replaceTemplateTokens(sourcePath, values);
+      continue;
     }
+    // Only decode known text templates so copied binary assets retain their exact bytes.
+    if (!TEXT_TEMPLATE_EXTENSIONS.has(extname(entry.name))) continue;
+
+    let contents = await readFile(sourcePath, "utf8");
+    for (const [name, value] of Object.entries(values)) {
+      contents = contents.replaceAll(`{{${name}}}`, value);
+    }
+    const outputName = TEMPLATE_RENAMES.get(entry.name) ?? entry.name;
+    const outputPath = resolve(directory, outputName);
+    await writeFile(outputPath, contents);
+    if (outputPath !== sourcePath) {
+      await rm(sourcePath);
+    }
+  }
 }

@@ -78,7 +78,7 @@ try {
     `${JSON.stringify(
       {
         name: oppositeNativePackageName,
-        version: "0.1.2",
+        version: oppositeNativeTarget === "linux-x64" ? "0.1.2" : "0.1.3",
         os: [oppositeNativeTarget.split("-")[0]],
         cpu: ["x64"],
       },
@@ -248,7 +248,7 @@ try {
       name.startsWith("pixi.js"),
     );
     if (
-      manifest.dependencies["@matjash/pixi-native"] !== "0.1.2" ||
+      manifest.dependencies["@matjash/pixi-native"] !== "~0.1.3" ||
       pixiDependencies.length !== 1 ||
       pixiDependencies[0] !== project.pixiPackage
     ) {

@@ -9,7 +9,14 @@ import { computeSourceFingerprint } from "./release-source-fingerprint.mjs";
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ARTIFACTS_DIRECTORY = resolve(REPOSITORY_ROOT, "artifacts");
 const REGISTRY = "https://registry.npmjs.org";
-const generatorMode = process.argv.slice(2).includes("--generator");
+const commandArguments = process.argv.slice(2);
+const generatorMode = commandArguments.includes("--generator");
+const win32Only = commandArguments.includes("--win32-only");
+if (generatorMode && win32Only) {
+  throw new Error(
+    "Generator and Win32-only publication modes cannot be combined.",
+  );
+}
 const runtimeVersion = JSON.parse(
   await readFile(resolve(REPOSITORY_ROOT, "package.json"), "utf8"),
 ).version;
@@ -23,31 +30,40 @@ const releaseConfiguration = getReleaseConfiguration(
   generatorMode,
   runtimeVersion,
   generatorVersion,
+  win32Only,
 );
 const VERSION = releaseConfiguration.version;
 const TAG = releaseConfiguration.tag;
 const EXPECTED_PACKAGES = releaseConfiguration.expectedPackages;
+const MANIFEST_TARGETS = releaseConfiguration.manifestTargets;
 const NPM_INVOCATION = getNpmInvocation();
 
 export function getReleaseConfiguration(
   useGenerator,
   runtimePackageVersion,
   generatorPackageVersion,
+  useWin32Only = false,
 ) {
   return useGenerator
     ? {
         version: generatorPackageVersion,
         tag: `create-pixi-native-v${generatorPackageVersion}`,
         expectedPackages: ["@matjash/create-pixi-native"],
+        manifestTargets: [],
       }
     : {
         version: runtimePackageVersion,
         tag: `v${runtimePackageVersion}`,
-        expectedPackages: [
-          "@matjash/pixi-native-win32-x64",
-          "@matjash/pixi-native-linux-x64",
-          "@matjash/pixi-native",
-        ],
+        expectedPackages: useWin32Only
+          ? ["@matjash/pixi-native-win32-x64", "@matjash/pixi-native"]
+          : [
+              "@matjash/pixi-native-win32-x64",
+              "@matjash/pixi-native-linux-x64",
+              "@matjash/pixi-native",
+            ],
+        manifestTargets: useWin32Only
+          ? ["win32-x64"]
+          : ["win32-x64", "linux-x64"],
       };
 }
 
@@ -106,7 +122,7 @@ export function registryCopyMatches(localDigests, registryDistribution) {
 }
 
 async function main() {
-  const checkOnly = process.argv.slice(2).includes("--check");
+  const checkOnly = commandArguments.includes("--check");
   if (process.versions.node.split(".")[0] !== "24") {
     throw new Error("Publishing requires Node.js 24 LTS.");
   }
@@ -121,19 +137,24 @@ async function main() {
     for (const archive of archives) {
       const registryDistribution = queryRegistryDistribution(
         archive.packageName,
+        archive.version,
         npmEnvironment,
       );
       if (registryDistribution) {
         if (!registryCopyMatches(archive.digests, registryDistribution)) {
           throw new Error(
-            `${archive.packageName}@${VERSION} exists with different content.`,
+            `${archive.packageName}@${archive.version} exists with different content.`,
           );
         }
-        console.log(`${archive.packageName}@${VERSION} already matches.`);
+        console.log(
+          `${archive.packageName}@${archive.version} already matches.`,
+        );
         continue;
       }
       if (checkOnly) {
-        console.log(`${archive.packageName}@${VERSION} is ready to publish.`);
+        console.log(
+          `${archive.packageName}@${archive.version} is ready to publish.`,
+        );
         continue;
       }
       runNpm(
@@ -151,6 +172,7 @@ async function main() {
       );
       const published = queryRegistryDistribution(
         archive.packageName,
+        archive.version,
         npmEnvironment,
       );
       if (!registryCopyMatches(archive.digests, published)) {
@@ -158,7 +180,9 @@ async function main() {
           `Registry verification failed for ${archive.packageName}.`,
         );
       }
-      console.log(`Published and verified ${archive.packageName}@${VERSION}.`);
+      console.log(
+        `Published and verified ${archive.packageName}@${archive.version}.`,
+      );
     }
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
@@ -194,7 +218,7 @@ async function loadReleaseArchives() {
     return loadArchiveEntries([releaseManifest.archive]);
   }
   const manifests = await Promise.all(
-    ["win32-x64", "linux-x64"].map(async (target) => {
+    MANIFEST_TARGETS.map(async (target) => {
       const path = resolve(
         ARTIFACTS_DIRECTORY,
         `release-manifest-${target}.json`,
@@ -206,8 +230,13 @@ async function loadReleaseArchives() {
       return manifest;
     }),
   );
-  if (manifests[0].sourceFingerprint !== manifests[1].sourceFingerprint) {
-    throw new Error("Windows and Linux source fingerprints differ.");
+  if (
+    manifests.some(
+      (manifest) =>
+        manifest.sourceFingerprint !== manifests[0].sourceFingerprint,
+    )
+  ) {
+    throw new Error("Release source fingerprints differ.");
   }
   if (
     manifests[0].sourceFingerprint !== computeSourceFingerprint(REPOSITORY_ROOT)
@@ -251,20 +280,24 @@ async function loadArchiveEntries(archiveEntries) {
       throw new Error(`SHA-256 mismatch for ${entry.filename}.`);
     }
     const manifest = JSON.parse(runTar(["-xOf", path, "package/package.json"]));
-    validatePackedManifest(manifest, packageName);
+    if (entry.version !== manifest.version) {
+      throw new Error(`${entry.filename} has an invalid manifest version.`);
+    }
+    validatePackedManifest(manifest, packageName, entry.version);
     archives.push({
       packageName,
       path,
+      version: manifest.version,
       digests: archiveDigests(bytes),
     });
   }
   return archives;
 }
 
-function validatePackedManifest(manifest, packageName) {
+function validatePackedManifest(manifest, packageName, expectedVersion) {
   if (
     manifest.name !== packageName ||
-    manifest.version !== VERSION ||
+    manifest.version !== expectedVersion ||
     manifest.license !== "MIT" ||
     manifest.publishConfig?.registry !== REGISTRY ||
     manifest.publishConfig?.access !== "public" ||
@@ -275,11 +308,11 @@ function validatePackedManifest(manifest, packageName) {
   }
 }
 
-function queryRegistryDistribution(packageName, environment) {
+function queryRegistryDistribution(packageName, version, environment) {
   const result = runNpmProcess(
     [
       "view",
-      `${packageName}@${VERSION}`,
+      `${packageName}@${version}`,
       "dist",
       "--json",
       "--registry",
