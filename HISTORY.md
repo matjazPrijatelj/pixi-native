@@ -1,5 +1,19 @@
 # Development history
 
+## 2026-09-10
+
+- Fixed a native WebGPU surface-texture reference leak that retained one Dawn
+  object per rendered frame. A 60-minute, 500-sprite D3D12 soak grew private
+  memory by 224 MiB while GPU memory, handles, and threads stayed stable. The
+  renderer now transfers the surface-owned texture reference directly into
+  Dawn's RAII wrappers, releases temporary textures used to create views, and
+  reports failed surface-acquisition statuses explicitly.
+- Rebuilt the Win32 x64 addon from a clean CMake cache and verified matching
+  distribution hashes, native-module loading, TypeScript, and focused tests.
+  In a post-fix 500-sprite D3D12 soak, private memory grew about 31 MiB across
+  the final 50 warm minutes instead of the previous 224 MiB in 60 minutes;
+  post-GC JavaScript heap and handle counts remained stable.
+
 ## 2026-09-09
 
 - Removed redundant JavaScript and declaration outputs from `packages/core/src`;

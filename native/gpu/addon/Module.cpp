@@ -40,6 +40,25 @@ using DeviceLostPromise =
 const DawnProcTable* gProcs = nullptr;
 Napi::FunctionReference gRendererConstructor;
 
+const char* SurfaceTextureStatusName(WGPUSurfaceGetCurrentTextureStatus status) {
+    switch (status) {
+        case WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal:
+            return "success-optimal";
+        case WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal:
+            return "success-suboptimal";
+        case WGPUSurfaceGetCurrentTextureStatus_Timeout:
+            return "timeout";
+        case WGPUSurfaceGetCurrentTextureStatus_Outdated:
+            return "outdated";
+        case WGPUSurfaceGetCurrentTextureStatus_Lost:
+            return "lost";
+        case WGPUSurfaceGetCurrentTextureStatus_Error:
+            return "error";
+        default:
+            return "unknown";
+    }
+}
+
 const std::map<std::string, WGPUPresentMode> kPresentModes = {
     {"fifo", WGPUPresentMode_Fifo},
     {"fifoRelaxed", WGPUPresentMode_FifoRelaxed},
@@ -329,6 +348,33 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     bool configured_ = false;
     bool alphaFallback_ = false;
 
+    // surfaceGetCurrentTexture returns an owned reference; adopt it exactly once
+    // so every success and failure path releases the acquisition through RAII.
+    wgpu::Texture AcquireCurrentTexture(Napi::Env env) const {
+        if (!configured_ || surface_ == nullptr) {
+            Napi::Error::New(env, "WebGPU surface is not configured")
+                .ThrowAsJavaScriptException();
+            return {};
+        }
+
+        WGPUSurfaceTexture surfaceTexture = {};
+        gProcs->surfaceGetCurrentTexture(surface_, &surfaceTexture);
+        wgpu::Texture texture = wgpu::Texture::Acquire(surfaceTexture.texture);
+        const bool succeeded =
+            surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal ||
+            surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal;
+        if (!succeeded || !texture) {
+            Napi::Error::New(
+                env,
+                std::string("WebGPU surface texture acquisition failed: ") +
+                    SurfaceTextureStatusName(surfaceTexture.status))
+                .ThrowAsJavaScriptException();
+            return {};
+        }
+
+        return texture;
+    }
+
     void ConfigureInitialSurface(Napi::Env env) {
         WGPUSurfaceCapabilities capabilities = {};
         gProcs->surfaceGetCapabilities(surface_, context_->adapter.Get(), &capabilities);
@@ -407,41 +453,23 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     }
 
     Napi::Value GetCurrentTexture(const Napi::CallbackInfo& info) {
-        if (!configured_ || surface_ == nullptr) {
-            Napi::Error::New(info.Env(), "WebGPU surface is not configured")
-                .ThrowAsJavaScriptException();
-            return info.Env().Undefined();
-        }
-        WGPUSurfaceTexture surfaceTexture = {};
-        gProcs->surfaceGetCurrentTexture(surface_, &surfaceTexture);
-        if (surfaceTexture.texture == nullptr) {
-            Napi::Error::New(info.Env(), "WebGPU surface did not provide a texture")
-                .ThrowAsJavaScriptException();
-            return info.Env().Undefined();
-        }
-        gProcs->textureAddRef(surfaceTexture.texture);
+        wgpu::Texture texture = AcquireCurrentTexture(info.Env());
+        if (!texture) return info.Env().Undefined();
+
         gProcs->deviceAddRef(context_->device.Get());
         return wgpu::interop::GPUTexture::Create<wgpu::binding::GPUTexture>(
             info.Env(), wgpu::Device::Acquire(context_->device.Get()), wgpu::TextureDescriptor(),
-            wgpu::Texture::Acquire(surfaceTexture.texture));
+            std::move(texture));
     }
 
     Napi::Value GetCurrentTextureView(const Napi::CallbackInfo& info) {
-        if (!configured_ || surface_ == nullptr) {
-            Napi::Error::New(info.Env(), "WebGPU surface is not configured")
-                .ThrowAsJavaScriptException();
-            return info.Env().Undefined();
-        }
-        WGPUSurfaceTexture surfaceTexture = {};
-        gProcs->surfaceGetCurrentTexture(surface_, &surfaceTexture);
-        if (surfaceTexture.texture == nullptr) {
-            Napi::Error::New(info.Env(), "WebGPU surface did not provide a texture")
-                .ThrowAsJavaScriptException();
-            return info.Env().Undefined();
-        }
-        WGPUTextureView view = gProcs->textureCreateView(surfaceTexture.texture, nullptr);
+        wgpu::Texture texture = AcquireCurrentTexture(info.Env());
+        if (!texture) return info.Env().Undefined();
+
+        const wgpu::TextureViewDescriptor descriptor = {};
+        wgpu::TextureView view = texture.CreateView(&descriptor);
         return wgpu::interop::GPUTextureView::Create<wgpu::binding::GPUTextureView>(
-            info.Env(), wgpu::TextureViewDescriptor(), wgpu::TextureView::Acquire(view));
+            info.Env(), descriptor, std::move(view));
     }
 
     Napi::Value Swap(const Napi::CallbackInfo& info) {
