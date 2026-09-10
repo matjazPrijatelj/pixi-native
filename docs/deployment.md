@@ -245,7 +245,7 @@ may remain private, and package consumers do not need registry credentials.
 | PixiJS 8 WebGL     | GLFW/OpenGL ES                          | GLFW/OpenGL ES                  |
 | PixiJS 7 WebGL     | GLFW/OpenGL ES                          | GLFW/OpenGL ES                  |
 | Window bridge      | Native window addon                     | Native window addon             |
-| Audio output       | Native WASAPI addon                     | SDL playback                    |
+| Audio output       | Native miniaudio/WASAPI addon          | Native miniaudio/PulseAudio or ALSA addon |
 | Video acceleration | D3D11VA with CPU fallback               | VA-API with CPU fallback        |
 | Media tools        | Packaged `ffmpeg.exe` and `ffprobe.exe` | Packaged `ffmpeg` and `ffprobe` |
 

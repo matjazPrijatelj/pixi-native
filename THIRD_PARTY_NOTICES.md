@@ -10,12 +10,11 @@ Pixi Native uses these projects through direct packages or native integration:
 - [PixiJS](https://pixijs.com/) for the rendering API and scene graph
 - [@node-3d](https://github.com/node-3d) and
   [GLFW](https://www.glfw.org/) for native WebGL windows
-- [SDL](https://www.libsdl.org/) through `@kmamal/sdl` for input, display
-  information, and Linux audio output
+- [GLFW](https://www.glfw.org/) for native window and input integration
 - [@napi-rs/canvas](https://github.com/Brooooooklyn/canvas) for Canvas2D, text,
   and image decoding
 - [napi-rs](https://napi.rs/) for the Rust native addons
-- [CPAL](https://github.com/RustAudio/cpal) and crossbeam for Windows audio
+- [miniaudio](https://miniaudio.dev/) through the Rust `maudio` crate for native audio
 - [FFmpeg](https://ffmpeg.org/) for video probing, decoding, and streamed audio
 
 The installed packages and their upstream repositories contain their copyright
@@ -56,7 +55,7 @@ The pinned Dawn source contains more third-party notices in its upstream
 ## Rust native-addon dependencies
 
 The native window, audio, and video binaries include napi-rs and, where used,
-CPAL, crossbeam, and windows-rs. The checked-in Cargo lockfiles record their
+maudio/miniaudio and windows-rs. The checked-in Cargo lockfiles record their
 exact versions. Each crate remains subject to its upstream license.
 
 ## Microsoft D3DCompiler

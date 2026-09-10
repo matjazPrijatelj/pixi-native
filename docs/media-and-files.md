@@ -125,7 +125,7 @@ effects.play("win");
 
 Audio supports overlapping voices, sprites, looping, pause, stop, seek, fades,
 volume, mute, events, preload, and bounded FFmpeg streaming. Windows uses the
-native WASAPI addon. Linux uses SDL playback.
+native miniaudio addon. Linux uses the miniaudio PulseAudio/ALSA backend.
 
 The [API reference](api-reference.md#audio) lists every supported `Howl` and
 `Howler` method, overload, event, unit, and teardown rule.

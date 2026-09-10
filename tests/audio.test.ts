@@ -17,7 +17,6 @@ test(
     skip: process.env.PIXI_NATIVE_HEADLESS === "1",
   },
   async () => {
-    process.env.SDL_AUDIODRIVER = "dummy";
     const { Howl, Howler, nativeAudioEngine } = await import(
       "@pixi-native/core/audio"
     );
