@@ -12,6 +12,7 @@ build/
 /src/demo/assets/*.mp4
 !/src/demo/assets/Big_Buck_Bunny_720_10s_20MB.mp4
 !/src/demo/assets/Sync_Check-720p30fps.mp4
+!/src/demo/assets/video_combined_0.5.mp4
 /src/demo/assets/transparent-video/*.mp4
 /artifacts/.npm-cache
 

@@ -97,13 +97,6 @@ importers:
       pixi.js-v7:
         specifier: npm:pixi.js@^7.4.3
         version: pixi.js@7.4.3
-    optionalDependencies:
-      '@matjash/pixi-native-linux-x64':
-        specifier: ~0.1.2
-        version: 0.1.2
-      '@matjash/pixi-native-win32-x64':
-        specifier: ~0.1.3
-        version: 0.1.3
 
   packages/pixi7:
     dependencies:
@@ -132,16 +125,6 @@ importers:
         version: 8.20.0
 
 packages:
-
-  '@matjash/pixi-native-linux-x64@0.1.2':
-    resolution: {integrity: sha512-ai29zvnw5cMly+ottTQSW9IVmToiPemgjjhApBonuvZfTpYiXGpL20gHnRQAZNc2H+HpM6melmEdf+umIJ2kTA==}
-    cpu: [x64]
-    os: [linux]
-
-  '@matjash/pixi-native-win32-x64@0.1.3':
-    resolution: {integrity: sha512-8+TGFLNdNStAX+Hqkv0qZ7i71k+dFxEgjWkj5ogZnXSF3vqDbiBwul07hQC/CKkHxBFfVIM6tMC4rQZcbRyGKg==}
-    cpu: [x64]
-    os: [win32]
 
   '@napi-rs/canvas-android-arm64@1.0.8':
     resolution: {integrity: sha512-5+nkh8i3gt6lqS/d2jTZ1xAn6tdgtB4Lf1mW6T0Qm5/rXNwBuV1sAEyLEWan5o9gJPU/GuvHR3rvSeZ+FaGrbw==}
@@ -732,12 +715,6 @@ packages:
     engines: {node: '>= 0.4'}
 
 snapshots:
-
-  '@matjash/pixi-native-linux-x64@0.1.2':
-    optional: true
-
-  '@matjash/pixi-native-win32-x64@0.1.3':
-    optional: true
 
   '@napi-rs/canvas-android-arm64@1.0.8':
     optional: true

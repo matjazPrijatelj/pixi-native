@@ -58,6 +58,7 @@ const {
   getSpriteCountDeltaForKey,
   getVideoIndexForKey,
   isReloadShortcut,
+  normalizeDirectionalKey,
 } = await import("./sceneNavigation.ts");
 
 const supportsVideo =
@@ -264,6 +265,7 @@ globalThis.addEventListener("resize", resizeActiveScene);
 let ctrlDown = false;
 globalThis.addEventListener("keydown", (rawEvent) => {
   const event = rawEvent as KeyboardEvent;
+  const normalizedKey = normalizeDirectionalKey(event.key);
   if (event.key === "Control") {
     ctrlDown = true;
     return;
@@ -286,16 +288,16 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   }
 
   const audioScene = scene as unknown as Partial<AudioTestScene>;
-  if (audioScene.handleKey?.(event.key, Number(event.repeat))) return;
+  if (audioScene.handleKey?.(normalizedKey, Number(event.repeat))) return;
 
   const rainScene = scene as unknown as Partial<RainSpriteTestScene>;
-  if (rainScene.handleKey?.(event.key, Number(event.repeat))) return;
+  if (rainScene.handleKey?.(normalizedKey, Number(event.repeat))) return;
 
   const videoScene = scene as unknown as Partial<VideoTestScene>;
-  if (videoScene.handleKey?.(event.key, Number(event.repeat))) return;
+  if (videoScene.handleKey?.(normalizedKey, Number(event.repeat))) return;
 
   const spriteScene = scene as unknown as Partial<SpriteTestScene>;
-  const spriteCountDelta = getSpriteCountDeltaForKey(event.key, event.repeat);
+  const spriteCountDelta = getSpriteCountDeltaForKey(normalizedKey, event.repeat);
 
   if (
     spriteCountDelta !== null &&
@@ -311,7 +313,7 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   }
 
   const nextVideoIndex = getVideoIndexForKey(
-    event.key,
+    normalizedKey,
     videoIndex,
     availableVideos.length,
     event.repeat,
@@ -323,7 +325,7 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   }
 
   const nextIndex = getSceneIndexForKey(
-    event.key,
+    normalizedKey,
     index,
     scenes.length,
     event.repeat,

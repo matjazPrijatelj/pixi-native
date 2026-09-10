@@ -2,6 +2,15 @@
 
 ## 2026-09-10
 
+- Fixed native audio command serialization so Boolean `mute` and `loop`
+  values are sent through `boolValue` instead of the numeric `value` field.
+
+- Fixed PixiJS 8 rain sprite test directional input by normalizing ArrowUp and
+  ArrowDown before scene handlers receive keyboard events.
+
+- Bumped the runtime, native platform packages, Pixi facades, and generator to
+  the `0.2.0` minor release line and aligned generated runtime ranges.
+
 - Replaced the native CPAL audio output path with a process-level miniaudio
   engine (`maudio` 0.1.14) for Windows and Linux x64. FFmpeg remains the
   decoder; static voices use miniaudio buffers and streaming voices use bounded

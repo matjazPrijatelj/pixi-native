@@ -19,7 +19,7 @@ export function isReloadShortcut(
   return !repeat && (ctrlKey || ctrlDown) && key?.toLowerCase() === "r";
 }
 
-function normalizeDirectionalKey(key: string | null): string | null {
+export function normalizeDirectionalKey(key: string | null): string | null {
   switch (key) {
     case "ArrowUp":
       return "up";

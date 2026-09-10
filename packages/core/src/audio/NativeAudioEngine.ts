@@ -116,7 +116,9 @@ class NativeAudioEngineAdapter {
             fadeVersion = (this.fadeVersions.get(id) ?? 0) + 1;
             this.fadeVersions.set(id, fadeVersion);
         }
-        this.native?.command({ ownerId, command, id, value: values.value, boolValue: values.value, from: values.from, to: values.to, durationMs: values.durationMs, fadeVersion });
+        const value = typeof values.value === "number" ? values.value : undefined;
+        const boolValue = typeof values.value === "boolean" ? values.value : undefined;
+        this.native?.command({ ownerId, command, id, value, boolValue, from: values.from, to: values.to, durationMs: values.durationMs, fadeVersion });
     }
 
     public currentTime(id: number): number | undefined { return this.native?.currentTime(id) ?? undefined; }

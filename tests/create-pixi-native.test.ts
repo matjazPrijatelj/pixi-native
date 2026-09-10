@@ -53,9 +53,9 @@ test("quickboot parses explicit Pixi and backend options", () => {
 });
 
 test("quickboot keeps generator and runtime versions independent", () => {
-  assert.equal(GENERATOR_VERSION, "0.1.5");
-  assert.equal(PIXI_NATIVE_VERSION, "0.1.3");
-  assert.equal(PIXI_NATIVE_VERSION_RANGE, "~0.1.3");
+  assert.equal(GENERATOR_VERSION, "0.2.0");
+  assert.equal(PIXI_NATIVE_VERSION, "0.2.0");
+  assert.equal(PIXI_NATIVE_VERSION_RANGE, "~0.2.0");
   assert.equal(
     execFileSync(
       process.execPath,

@@ -23,7 +23,7 @@ export interface CreateProjectOptions {
 }
 
 export const GENERATOR_VERSION = "0.1.5";
-export const PIXI_NATIVE_VERSION = "0.1.3";
+export const PIXI_NATIVE_VERSION = "0.2.0";
 export const PIXI_NATIVE_VERSION_RANGE = `~${PIXI_NATIVE_VERSION}`;
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 const PROJECT_NAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
