@@ -59,7 +59,7 @@ function resolveFfmpegPath(): string {
     return existsSync(bundled) ? bundled : "ffmpeg";
 }
 
-export class NativeAudioEngine {
+class LegacySdlAudioEngine {
     private readonly owners = new Map<number, NativeAudioEventTarget>();
     private readonly positions = new Map<number, VoicePosition>();
     private readonly voiceOwners = new Map<number, number>();
@@ -391,18 +391,26 @@ interface WindowsNativeBindingModule {
     readonly NativeAudioEngine: new (eventNotifier: () => void) => WindowsNativeEngineBinding;
 }
 
+export function resolveNativeAudioBindingPath(
+    platform = process.platform,
+    arch = process.arch,
+): string {
+    if ((platform !== "win32" && platform !== "linux") || arch !== "x64") {
+        throw new Error(`Native miniaudio supports only Windows/Linux x64, not ${platform}-${arch}`);
+    }
+    const audioBinding = resolveNativePlatformModules(platform, arch).audioBinding;
+    if (!audioBinding) {
+        throw new Error(`Native miniaudio audio binding is missing for ${platform}-${arch}`);
+    }
+    return audioBinding;
+}
+
+/** @deprecated Use resolveNativeAudioBindingPath. */
 export function resolveWindowsNativeAudioBindingPath(
     platform = process.platform,
     arch = process.arch,
 ): string {
-    if (platform !== "win32" || arch !== "x64") {
-        throw new Error(`Native WASAPI audio supports only Windows x64, not ${platform}-${arch}`);
-    }
-    const audioBinding = resolveNativePlatformModules(platform, arch).audioBinding;
-    if (!audioBinding) {
-        throw new Error(`Native WASAPI audio binding is missing for ${platform}-${arch}`);
-    }
-    return audioBinding;
+    return resolveNativeAudioBindingPath(platform, arch);
 }
 
 class WindowsNativeAudioEngine {
@@ -540,7 +548,7 @@ class WindowsNativeAudioEngine {
 
     private ensureStarted(): WindowsNativeEngineBinding {
         if (this.native) return this.native;
-        const bindingPath = resolveWindowsNativeAudioBindingPath();
+        const bindingPath = resolveNativeAudioBindingPath();
         if (!existsSync(bindingPath)) {
             throw new Error(
                 `Missing Windows native audio addon: ${bindingPath}. ` +
@@ -567,6 +575,4 @@ class WindowsNativeAudioEngine {
     }
 }
 
-export const nativeAudioEngine = process.platform === "win32"
-    ? new WindowsNativeAudioEngine()
-    : new NativeAudioEngine();
+export const nativeAudioEngine = new WindowsNativeAudioEngine();

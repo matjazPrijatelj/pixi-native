@@ -2,6 +2,11 @@
 
 ## 2026-09-10
 
+- Replaced the native CPAL audio output path with a process-level miniaudio
+  engine (`maudio` 0.1.14) for Windows and Linux x64. FFmpeg remains the
+  decoder; static voices use miniaudio buffers and streaming voices use bounded
+  PCM ring buffers. Added Linux audio addon staging and retained the existing
+  N-API Howler-compatible contract.
 - Prepared the Win32 WebGPU fix for an independent npm patch release: runtime
   and Win32 packages advance to `0.1.3`, Linux remains on `0.1.2`, internal
   package links accept compatible `~0.1.x` patches, and the `0.1.5` generator
