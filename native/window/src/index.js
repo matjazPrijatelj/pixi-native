@@ -2,6 +2,7 @@ const { EventEmitter } = require("node:events");
 const Fs = require("node:fs");
 const { createRequire } = require("node:module");
 const { getBindingPath } = require("../binding-path.js");
+const { normalizeSdlKeyName } = require("./key-mapping.js");
 
 const requireNative = createRequire(__filename);
 const bindingPath = getBindingPath();
@@ -63,6 +64,9 @@ class NativeWindow extends EventEmitter {
 
 const emitNativeEvent = (window, event) => {
   const { kind, windowId, superKey, ...payload } = event;
+  if (kind === "keyDown" || kind === "keyUp") {
+    payload.key = normalizeSdlKeyName(payload.key);
+  }
   window.emit(kind, { ...payload, type: kind, super: superKey });
 };
 

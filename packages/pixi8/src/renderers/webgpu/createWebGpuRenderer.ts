@@ -189,9 +189,11 @@ export async function createWebGpuRenderer(
     waitForPresent,
   );
   domAdapter.installPixi8(DOMAdapter);
+  const modalFrameListeners = new Set<() => void>();
   const modalController = createModalFrameController(
     window.surface.window,
     () => {
+      for (const listener of [...modalFrameListeners]) listener();
       domAdapter.dispatchModalFrame(performance.now());
     },
     (active) => {
@@ -287,6 +289,7 @@ export async function createWebGpuRenderer(
     if (destroyed) return;
     destroyed = true;
     rgbaUploadBuffers.clear();
+    modalFrameListeners.clear();
     modalController.detach();
     domAdapter.dispose();
     renderer.destroy();
@@ -309,6 +312,10 @@ export async function createWebGpuRenderer(
       renderer,
       canvas,
       backend: "webgpu",
+      addModalFrameListener: (listener) => {
+        modalFrameListeners.add(listener);
+        return () => modalFrameListeners.delete(listener);
+      },
       input: {
         dispatchCanvasEvent: (type, event) =>
           canvas.dispatchNativeEvent(type, event),

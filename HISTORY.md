@@ -2,6 +2,9 @@
 
 ## 2026-09-11
 
+- Restored the previous SDL keyboard names after the SDL3 migration, including
+  lowercase letters and directional keys. Restored WebGPU GSAP animation during
+  Windows modal move/resize and added Rain sound mute/unmute parity to PixiJS 7.
 - Replaced `@kmamal/sdl` with a focused SDL3 napi-rs window addon for Windows
   and Linux. SDL3 now owns transparent windows, input events, native WebGPU
   surface handles, OpenGL ES contexts, and buffer swaps; `native-gles` remains

@@ -1,10 +1,15 @@
+import { fileURLToPath } from "node:url";
 import { AnimatedSprite, Container, Rectangle, Texture } from "pixi.js-v7";
+import { Howl } from "@pixi-native/core/audio";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 const FRAME_COLUMNS = 5;
 const FRAME_ROWS = 6;
 const FRAME_COUNT = FRAME_COLUMNS * FRAME_ROWS;
 const TITLE_MARGIN = 96;
 const FRAME_TIME_MS = 1000 / 60;
+const RAIN_DROP_SOURCE = fileURLToPath(
+  new URL("../../assets/audio/rain-drop.wav", import.meta.url),
+);
 export interface RainSpriteTestScene7 {
   handleKey(key: string | null, repeat?: number): boolean;
   update(deltaMS: number): void;
@@ -23,10 +28,16 @@ export function createRainSpriteTest(
   const scene = new Container() as Container & RainSpriteTestScene7;
   const drops: RainDrop[] = [];
   const title = createMetricBitmapText(
-    "RAIN SPRITE TEST  [8] | drops: 0 | UP +2 / DOWN -2",
+    "RAIN SPRITE TEST  [8] | drops: 0 | UP +2 / DOWN -2 | M: unmute",
     24,
   );
   scene.addChild(title);
+  let muted = true;
+  let rainSound: Howl | undefined;
+  const getRainSound = (): Howl => {
+    rainSound ??= new Howl({ src: [RAIN_DROP_SOURCE], volume: 0.65 });
+    return rainSound;
+  };
   const frames: Texture[] = [];
   for (let index = 0; index < FRAME_COUNT; index++) {
     const column = index % FRAME_COLUMNS;
@@ -44,7 +55,9 @@ export function createRainSpriteTest(
     );
   }
   const updateTitle = (): void => {
-    title.text = `RAIN SPRITE TEST  [8] | drops: ${drops.length} | UP +2 / DOWN -2`;
+    title.text =
+      `RAIN SPRITE TEST  [8] | drops: ${drops.length} | UP +2 / DOWN -2` +
+      ` | M: ${muted ? "unmute" : "mute"}`;
   };
   const addDrop = (): void => {
     const sprite = new AnimatedSprite(frames);
@@ -70,7 +83,14 @@ export function createRainSpriteTest(
   };
   for (let index = 0; index < 4; index++) addDrop();
   scene.handleKey = (key, repeat = 0): boolean => {
-    if (repeat || (key !== "up" && key !== "down")) return false;
+    if (repeat) return false;
+    if (key === "m") {
+      muted = !muted;
+      rainSound?.mute(muted);
+      updateTitle();
+      return true;
+    }
+    if (key !== "up" && key !== "down") return false;
     if (key === "up") {
       addDrop();
       addDrop();
@@ -88,7 +108,10 @@ export function createRainSpriteTest(
       const top = TITLE_MARGIN - drop.sprite.height / 2;
       const bottom = bounds.height - drop.sprite.height / 2;
       drop.sprite.y += (drop.speed * delta) / 1000;
-      if (drop.sprite.y >= bottom) drop.sprite.y = top;
+      if (drop.sprite.y >= bottom) {
+        drop.sprite.y = top;
+        if (!muted) getRainSound().play();
+      }
     }
   };
   scene.resize = (width, height): void => {
@@ -101,6 +124,7 @@ export function createRainSpriteTest(
     }
     drops.length = 0;
     for (const frame of frames) frame.destroy(false);
+    rainSound?.unload();
   };
   updateTitle();
   return scene;

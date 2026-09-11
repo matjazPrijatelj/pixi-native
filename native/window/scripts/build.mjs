@@ -50,6 +50,7 @@ for (const relativePath of [
   "package.json",
   "src/index.js",
   "src/index.d.ts",
+  "src/key-mapping.js",
   "src/lib.rs",
 ]) {
   await copyFile(resolve(root, relativePath), resolve(packageWindowRoot, relativePath));
