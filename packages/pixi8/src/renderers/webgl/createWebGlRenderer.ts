@@ -36,6 +36,7 @@ export async function createWebGlRenderer(
       canvas,
       renderer,
       webgl,
+      antialiasSamples,
       webglRenderingContextConstructor,
     } = surface;
     installWebGlImageUploadAdapter(webgl);
@@ -65,7 +66,7 @@ export async function createWebGlRenderer(
       ),
       backgroundAlpha: windowOptions.backgroundAlpha,
       resolution: 1,
-      antialias: windowOptions.antialiasSamples !== 0,
+      antialias: antialiasSamples !== 0,
       autoStart: false,
     } as never);
 
@@ -98,6 +99,7 @@ export async function createWebGlRenderer(
       backend: selectedBackend,
       size: [canvas.width, canvas.height],
       ...getWindowOptionsDiagnostics(windowOptions, window),
+      actualAntialiasSamples: antialiasSamples,
     });
 
     let destroyed = false;

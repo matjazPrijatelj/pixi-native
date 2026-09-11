@@ -8,6 +8,7 @@ import type {
 import { setNativeWindowTransparent } from "../../runtime/ModalFrameController.ts";
 import type { ResolvedNodeRendererOptions } from "../../runtime/windowOptions.ts";
 import { warnAntialiasSampleFallback } from "../../runtime/windowOptions.ts";
+import { installWebGlMultisampleScreen } from "./webglMultisampleScreen.ts";
 
 class WebGLRenderingContext {}
 
@@ -17,6 +18,7 @@ export interface NodeSdlWebGLSurface {
     readonly canvas: NodeGLCanvas;
     readonly renderer: NodeRenderSurface;
     readonly webgl: WebGL2RenderingContext;
+    readonly antialiasSamples: 0 | 2 | 4 | 8;
     readonly webglRenderingContextConstructor: { readonly prototype: object };
 }
 
@@ -70,6 +72,18 @@ export async function createNodeSdlWebGLSurface(
             throw new Error("EGL could not configure the swap interval");
         }
 
+        const multisampleScreen = installWebGlMultisampleScreen(
+            context.gl,
+            window.pixelWidth,
+            window.pixelHeight,
+            options.antialiasSamples,
+        );
+        warnAntialiasSampleFallback(
+            rendererName,
+            options.antialiasSamples,
+            multisampleScreen.sampleCount,
+        );
+
         const canvas = new NodeGLCanvas(
             context.gl,
             window.pixelWidth,
@@ -77,6 +91,7 @@ export async function createNodeSdlWebGLSurface(
             (width, height) => {
                 context.makeCurrent?.();
                 context.resize(width, height);
+                multisampleScreen.resize(width, height);
             },
         );
         context.gl.canvas = canvas as unknown as HTMLCanvasElement;
@@ -106,17 +121,12 @@ export async function createNodeSdlWebGLSurface(
         (globalThis as Record<string, unknown>).WebGLRenderingContext =
             WebGLRenderingContext;
 
-        warnAntialiasSampleFallback(
-            rendererName,
-            options.antialiasSamples,
-            Number(context.gl.getParameter(context.gl.SAMPLES)),
-        );
-
         let destroyed = false;
         const renderer: NodeRenderSurface = {
             resize: (width, height) => canvas.resize(width, height),
             swap: () => {
                 context.makeCurrent?.();
+                multisampleScreen.resolve();
                 if (!context.swapBuffers?.()) {
                     throw new Error("EGL swapBuffers failed");
                 }
@@ -125,6 +135,7 @@ export async function createNodeSdlWebGLSurface(
                 if (destroyed) return;
                 destroyed = true;
                 context.makeCurrent?.();
+                multisampleScreen.destroy();
                 context.destroy();
             },
         };
@@ -135,6 +146,7 @@ export async function createNodeSdlWebGLSurface(
             canvas,
             renderer,
             webgl: context.gl,
+            antialiasSamples: multisampleScreen.sampleCount,
             webglRenderingContextConstructor: WebGLRenderingContext,
         };
     } catch (error) {

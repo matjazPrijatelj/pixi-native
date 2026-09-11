@@ -2,6 +2,10 @@
 
 ## 2026-09-11
 
+- Restored effective WebGL and WebGL7 antialiasing on SDL/EGL by rendering the
+  screen through a shared multisample framebuffer and resolving it before each
+  buffer swap, including supported-sample fallback, resize, diagnostics, and
+  cleanup.
 - Fixed vertically mirrored PixiJS 7 Sprite, Text, and BitmapText content on
   the SDL WebGL surface. Pixi 7 now uses the shared image upload adapter once:
   normalized Canvas pixels retain their row order while raw native image data

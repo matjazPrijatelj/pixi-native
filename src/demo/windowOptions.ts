@@ -8,4 +8,5 @@ export const DEMO_WINDOW_OPTIONS = {
   backgroundAlpha: 0.5,
   x: 50,
   y: 50,
+  antialiasSamples: 4,
 } satisfies NodeRendererOptions;

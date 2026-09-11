@@ -75,6 +75,7 @@ export async function createRenderer(
     canvas,
     renderer,
     webgl,
+    antialiasSamples,
     webglRenderingContextConstructor,
   } = surface;
   const adapter = new NodeDOMAdapter(
@@ -122,7 +123,7 @@ export async function createRenderer(
     width: canvas.width,
     height: canvas.height,
     resolution: 1,
-    antialias: windowOptions.antialiasSamples !== 0,
+    antialias: antialiasSamples !== 0,
     autoStart: false,
     backgroundColor: NATIVE_BACKGROUND_COLOR,
     backgroundAlpha: windowOptions.backgroundAlpha,
@@ -149,6 +150,7 @@ export async function createRenderer(
     backend: "webgl",
     size: [canvas.width, canvas.height],
     ...getWindowOptionsDiagnostics(windowOptions, window),
+    actualAntialiasSamples: antialiasSamples,
   });
 
   let destroyed = false;

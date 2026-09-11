@@ -17,6 +17,7 @@ import {
   installWebGlImageUploadAdapter,
   type WebGlImageUploadContext,
 } from "@pixi-native/core/renderers/webgl/webglImageUpload.js";
+import { installWebGlMultisampleScreen } from "@pixi-native/core/renderers/webgl/webglMultisampleScreen.js";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -178,6 +179,127 @@ test("MSAA fallback warnings report only changed sample counts", () => {
   assert.equal(warnings.length, 2);
   assert.match(String(warnings[0][0]), /requested 2x MSAA; using 4x/);
   assert.match(String(warnings[1][0]), /requested 8x MSAA; using 4x/);
+});
+
+test("WebGL multisample screen resolves, resizes, falls back, and cleans up", () => {
+  const FRAMEBUFFER = 0x8d40;
+  const DRAW_FRAMEBUFFER = 0x8ca9;
+  const READ_FRAMEBUFFER = 0x8ca8;
+  const FRAMEBUFFER_BINDING = 0x8ca6;
+  const READ_FRAMEBUFFER_BINDING = 0x8caa;
+  const RENDERBUFFER_BINDING = 0x8ca7;
+  const framebuffers = [{ name: "first" }, { name: "resized" }];
+  const renderbuffers = [
+    { name: "first-color" },
+    { name: "first-depth" },
+    { name: "resized-color" },
+    { name: "resized-depth" },
+  ];
+  const storageCalls: Array<[number, number, number]> = [];
+  const blits: number[][] = [];
+  const deletedFramebuffers: unknown[] = [];
+  const deletedRenderbuffers: unknown[] = [];
+  let drawFramebuffer: unknown = null;
+  let readFramebuffer: unknown = null;
+  let renderbuffer: unknown = null;
+
+  const context = {
+    FRAMEBUFFER,
+    DRAW_FRAMEBUFFER,
+    READ_FRAMEBUFFER,
+    FRAMEBUFFER_BINDING,
+    DRAW_FRAMEBUFFER_BINDING: FRAMEBUFFER_BINDING,
+    READ_FRAMEBUFFER_BINDING,
+    RENDERBUFFER_BINDING,
+    RENDERBUFFER: 0x8d41,
+    SAMPLES: 0x80a9,
+    RGBA8: 0x8058,
+    DEPTH24_STENCIL8: 0x88f0,
+    COLOR_ATTACHMENT0: 0x8ce0,
+    DEPTH_STENCIL_ATTACHMENT: 0x821a,
+    FRAMEBUFFER_COMPLETE: 0x8cd5,
+    COLOR_BUFFER_BIT: 0x4000,
+    NEAREST: 0x2600,
+    createFramebuffer: () => framebuffers.shift() ?? null,
+    deleteFramebuffer: (value: unknown) => deletedFramebuffers.push(value),
+    createRenderbuffer: () => renderbuffers.shift() ?? null,
+    deleteRenderbuffer: (value: unknown) => deletedRenderbuffers.push(value),
+    bindFramebuffer(target: number, value: unknown) {
+      if (target === FRAMEBUFFER || target === DRAW_FRAMEBUFFER) {
+        drawFramebuffer = value;
+      }
+      if (target === FRAMEBUFFER || target === READ_FRAMEBUFFER) {
+        readFramebuffer = value;
+      }
+    },
+    bindRenderbuffer: (_target: number, value: unknown) => {
+      renderbuffer = value;
+    },
+    getParameter(parameter: number) {
+      if (parameter === FRAMEBUFFER_BINDING) return drawFramebuffer;
+      if (parameter === READ_FRAMEBUFFER_BINDING) return readFramebuffer;
+      if (parameter === RENDERBUFFER_BINDING) return renderbuffer;
+      return null;
+    },
+    getInternalformatParameter: (
+      _target: number,
+      internalFormat: number,
+      _parameter: number,
+    ) =>
+      internalFormat === 0x8058
+        ? new Int32Array([8, 4])
+        : new Int32Array([4, 2]),
+    getContextAttributes: () => ({ antialias: false }),
+    renderbufferStorageMultisample(
+      _target: number,
+      samples: number,
+      _format: number,
+      width: number,
+      height: number,
+    ) {
+      storageCalls.push([samples, width, height]);
+    },
+    framebufferRenderbuffer() {},
+    checkFramebufferStatus: () => 0x8cd5,
+    blitFramebuffer: (...args: number[]) => blits.push(args),
+  } as unknown as WebGL2RenderingContext;
+
+  const screen = installWebGlMultisampleScreen(context, 320, 180, 8);
+  assert.equal(screen.sampleCount, 4);
+  assert.equal(context.getContextAttributes()?.antialias, true);
+  assert.equal(context.getParameter(context.FRAMEBUFFER_BINDING), null);
+  assert.deepEqual(storageCalls, [
+    [4, 320, 180],
+    [4, 320, 180],
+  ]);
+
+  screen.resolve();
+  assert.deepEqual(blits[0], [
+    0, 0, 320, 180, 0, 0, 320, 180, context.COLOR_BUFFER_BIT, context.NEAREST,
+  ]);
+  screen.resize(640, 360);
+  assert.deepEqual(storageCalls.slice(2), [
+    [4, 640, 360],
+    [4, 640, 360],
+  ]);
+  assert.equal(deletedFramebuffers.length, 1);
+  assert.equal(deletedRenderbuffers.length, 2);
+
+  screen.destroy();
+  assert.equal(context.getContextAttributes()?.antialias, false);
+  const customFramebuffer = { name: "custom" } as unknown as WebGLFramebuffer;
+  context.bindFramebuffer(context.FRAMEBUFFER, customFramebuffer);
+  assert.equal(
+    context.getParameter(context.FRAMEBUFFER_BINDING),
+    customFramebuffer,
+  );
+  assert.equal(deletedFramebuffers.length, 2);
+  assert.equal(deletedRenderbuffers.length, 4);
+
+  const disabled = installWebGlMultisampleScreen(context, 1, 1, 0);
+  assert.equal(disabled.sampleCount, 0);
+  disabled.resolve();
+  assert.equal(blits.length, 1);
 });
 
 test("maxFps controls only timer-paced animation frames", () => {
