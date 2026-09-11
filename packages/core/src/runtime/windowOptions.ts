@@ -19,6 +19,13 @@ export function premultiplyBackgroundColor(
   ];
 }
 
+/** Reports whether a native WebGPU alpha mode preserves compositor transparency. */
+export function isTransparentWebGpuAlphaMode(
+  alphaMode: "opaque" | "premultiplied" | "inherit",
+): boolean {
+  return alphaMode !== "opaque";
+}
+
 export interface ResolvedNodeRendererOptions {
   readonly title: string;
   readonly width: number;

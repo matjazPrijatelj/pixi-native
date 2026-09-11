@@ -3032,8 +3032,7 @@ type PresentMode
 
 interface Renderer {
   getPreferredFormat(): GPUTextureFormat
-  getAlphaMode(): 'opaque' | 'premultiplied'
-  getAlphaMode(): 'opaque' | 'premultiplied'
+  getAlphaMode(): 'opaque' | 'premultiplied' | 'inherit'
   getCurrentTexture(): GPUTexture
   getCurrentTextureView(): GPUTextureView
   swap()
@@ -3094,6 +3093,8 @@ interface WebGPU {
     adapter: GPUAdapter,
     device: GPUDevice,
     renderer: Renderer,
+    requestedAlphaMode: 'opaque' | 'premultiplied',
+    alphaMode: 'opaque' | 'premultiplied' | 'inherit',
   }
   destroy(context: object)
 }

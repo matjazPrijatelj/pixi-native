@@ -2,6 +2,14 @@
 
 ## 2026-09-11
 
+- Made transparent Linux/X11 WebGPU windows use SDL's EGL/OpenGL visual
+  selection while retaining their external Vulkan context, so SDL creates a
+  32-bit ARGB window instead of the opaque default X11 visual.
+- Used Vulkan `INHERIT` when an X11 WebGPU surface cannot provide premultiplied
+  composition, preserving SDL window transparency instead of falling back to
+  opaque presentation on Intel/Mesa.
+- Fixed Linux WebGPU transparency by preserving the requested composite alpha
+  mode when Dawn creates its Vulkan swapchain instead of forcing opaque alpha.
 - Added an origin-relative Linux ELF runpath to the SDL3 window addon so it
   loads the packaged sibling `libSDL3.so.0` without a system SDL installation.
 - Gated the Win32 native-handle decoder in the SDL3 window addon so the native

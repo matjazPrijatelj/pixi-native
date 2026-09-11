@@ -432,18 +432,25 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         WGPUSurfaceCapabilities capabilities = {};
         gProcs->surfaceGetCapabilities(surface_, context_->adapter.Get(), &capabilities);
         bool alphaSupported = false;
+        bool inheritSupported = false;
         bool opaqueSupported = false;
         for (size_t index = 0; index < capabilities.alphaModeCount; ++index) {
             alphaSupported |= capabilities.alphaModes[index] == alphaMode_;
+            inheritSupported |=
+                capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Inherit;
             opaqueSupported |= capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Opaque;
         }
-        if (!alphaSupported && alphaMode_ == WGPUCompositeAlphaMode_Premultiplied &&
-            opaqueSupported) {
 #if defined(__linux__)
-            alphaMode_ = WGPUCompositeAlphaMode_Opaque;
-            alphaFallback_ = true;
-#endif
+        if (!alphaSupported && alphaMode_ == WGPUCompositeAlphaMode_Premultiplied) {
+            if (inheritSupported) {
+                alphaMode_ = WGPUCompositeAlphaMode_Inherit;
+                alphaSupported = true;
+            } else if (opaqueSupported) {
+                alphaMode_ = WGPUCompositeAlphaMode_Opaque;
+                alphaFallback_ = true;
+            }
         }
+#endif
         if ((!alphaSupported && !alphaFallback_) || capabilities.formatCount == 0) {
             gProcs->surfaceCapabilitiesFreeMembers(capabilities);
             Napi::Error::New(env, "requested WebGPU surface configuration is not supported")
@@ -499,11 +506,14 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     }
 
     Napi::Value GetAlphaMode(const Napi::CallbackInfo& info) {
+        const char* alphaMode = "opaque";
+        if (alphaMode_ == WGPUCompositeAlphaMode_Premultiplied) {
+            alphaMode = "premultiplied";
+        } else if (alphaMode_ == WGPUCompositeAlphaMode_Inherit) {
+            alphaMode = "inherit";
+        }
         return Napi::String::New(
-            info.Env(),
-            alphaMode_ == WGPUCompositeAlphaMode_Premultiplied
-                ? "premultiplied"
-                : "opaque");
+            info.Env(), alphaMode);
     }
 
     Napi::Value GetCurrentTexture(const Napi::CallbackInfo& info) {

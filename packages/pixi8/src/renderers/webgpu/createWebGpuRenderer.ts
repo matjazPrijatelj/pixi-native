@@ -23,6 +23,7 @@ import {
 import { createNativeWindow } from "@pixi-native/core/runtime/NativeWindow.js";
 import {
   getWindowOptionsDiagnostics,
+  isTransparentWebGpuAlphaMode,
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
@@ -61,15 +62,18 @@ export async function createWebGpuRenderer(
   const device = gpuContext.device;
   const renderer = gpuContext.renderer;
   const actualAlphaMode =
-    gpuContext.alphaMode ?? renderer.getAlphaMode?.() ??
+    gpuContext.alphaMode ??
+    renderer.getAlphaMode?.() ??
     (windowOptions.transparent ? "premultiplied" : "opaque");
-  if (windowOptions.transparent && actualAlphaMode !== "premultiplied") {
+  const hasTransparentAlphaMode = isTransparentWebGpuAlphaMode(actualAlphaMode);
+  if (windowOptions.transparent && !hasTransparentAlphaMode) {
     console.warn(
       `[pixi-native] transparent WebGPU surface is unavailable; using ${actualAlphaMode} alpha mode`,
     );
   }
-  const effectiveBackgroundAlpha =
-    actualAlphaMode === "opaque" ? 1 : windowOptions.backgroundAlpha;
+  const effectiveBackgroundAlpha = hasTransparentAlphaMode
+    ? windowOptions.backgroundAlpha
+    : 1;
 
   const queue = device.queue as any;
   const rgbaUploadBuffers = new Map<number, Uint8Array>();

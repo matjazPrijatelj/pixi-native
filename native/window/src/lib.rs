@@ -159,7 +159,20 @@ impl NativeSdlWindow {
         if WINDOW_COUNT.load(Ordering::SeqCst) == 0 && !unsafe { SDL_Init(SDL_INIT_VIDEO) } {
             return Err(sdl_error("could not initialize SDL3 video"));
         }
-        if use_webgl {
+        // SDL's X11 backend only asks EGL for a transparent ARGB visual when
+        // the window has the OpenGL flag. WebGPU still owns the external
+        // Vulkan context; this flag is used only for SDL's visual selection.
+        let use_x11_transparent_visual = cfg!(target_os = "linux")
+            && !use_webgl
+            && options.transparent
+            && current_video_driver() == "x11";
+        if use_x11_transparent_visual {
+            unsafe {
+                SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, c"1".as_ptr());
+                SDL_SetHint(SDL_HINT_VIDEO_FORCE_EGL, c"1".as_ptr());
+            }
+        }
+        if use_webgl || use_x11_transparent_visual {
             for (attribute, value) in [
                 (SDL_GL_CONTEXT_MAJOR_VERSION, 3),
                 (SDL_GL_CONTEXT_MINOR_VERSION, 0),
@@ -226,9 +239,10 @@ impl NativeSdlWindow {
                 SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN,
                 true,
             )?;
-            if use_webgl {
+            if use_webgl || use_x11_transparent_visual {
                 set_bool_property(properties, SDL_PROP_WINDOW_CREATE_OPENGL_BOOLEAN, true)?;
-            } else {
+            }
+            if !use_webgl {
                 set_bool_property(
                     properties,
                     SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN,

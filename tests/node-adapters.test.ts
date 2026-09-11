@@ -20,6 +20,7 @@ import {
 import { installWebGlMultisampleScreen } from "@pixi-native/core/renderers/webgl/webglMultisampleScreen.js";
 import {
   getWindowOptionsDiagnostics,
+  isTransparentWebGpuAlphaMode,
   NATIVE_BACKGROUND_COLOR,
   premultiplyBackgroundColor,
   resolveAnimationFrameRate,
@@ -345,6 +346,9 @@ test("maxFps controls only timer-paced animation frames", () => {
 });
 
 test("Pixi 8 background RGB is premultiplied for transparent presentation", () => {
+  assert.equal(isTransparentWebGpuAlphaMode("premultiplied"), true);
+  assert.equal(isTransparentWebGpuAlphaMode("inherit"), true);
+  assert.equal(isTransparentWebGpuAlphaMode("opaque"), false);
   assert.deepEqual(
     premultiplyBackgroundColor(NATIVE_BACKGROUND_COLOR, 0),
     [0, 0, 0],
