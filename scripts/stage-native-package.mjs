@@ -21,6 +21,7 @@ const target = "win32-x64";
 const nativeBinaries = [
   `gpu/dist/${target}/pixi_native_gpu.node`,
   `window/dist/${target}/native_window.node`,
+  `window/dist/${target}/SDL3.dll`,
   `audio/dist/${target}/native_audio.node`,
   `video/dist/${target}/native_video.node`,
 ];

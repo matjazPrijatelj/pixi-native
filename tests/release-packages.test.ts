@@ -63,7 +63,7 @@ test("facade exports root Pixi 8 and explicit version and core paths", async () 
   });
   assert.equal(manifest.dependencies["pixi.js"], undefined);
   assert.equal(manifest.dependencies["pixi.js-v7"], undefined);
-  assert.equal(manifest.dependencies["@kmamal/sdl"], "0.11.13");
+  assert.equal(manifest.dependencies["@kmamal/sdl"], undefined);
   assert.equal(manifest.dependencies["webgl-node"], "1.5.1");
   assert.equal(manifest.dependencies["native-gles"], "0.6.1");
   assert.equal(manifest.dependencies["@node-3d/core"], undefined);
@@ -115,7 +115,7 @@ test("core accepts patched native packages without selecting the old Win32 build
     "@matjash/pixi-native-linux-x64": "~0.1.2",
     "@matjash/pixi-native-win32-x64": "~0.1.3",
   });
-  assert.equal(manifest.dependencies["@kmamal/sdl"], "0.11.13");
+  assert.equal(manifest.dependencies["@kmamal/sdl"], undefined);
   assert.equal(manifest.dependencies["webgl-node"], "1.5.1");
   assert.equal(manifest.dependencies["native-gles"], "0.6.1");
   assert.equal(manifest.dependencies["@node-3d/core"], undefined);

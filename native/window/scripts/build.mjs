@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,8 +28,10 @@ const packageOutput = resolve(
   "dist",
   platformDirectory,
 );
+const packageWindowRoot = resolve(packageOutput, "../..");
 await mkdir(output, { recursive: true });
 await mkdir(packageOutput, { recursive: true });
+await mkdir(resolve(packageWindowRoot, "src"), { recursive: true });
 const nativeBinary = resolve(output, "native_window.node");
 await copyFile(
   resolve(
@@ -43,3 +45,32 @@ await copyFile(
   nativeBinary,
 );
 await copyFile(nativeBinary, resolve(packageOutput, "native_window.node"));
+for (const relativePath of [
+  "binding-path.js",
+  "package.json",
+  "src/index.js",
+  "src/index.d.ts",
+  "src/lib.rs",
+]) {
+  await copyFile(resolve(root, relativePath), resolve(packageWindowRoot, relativePath));
+}
+
+const releaseDirectory = resolve(root, "target", "release");
+const runtimeLibraries = (await readdir(releaseDirectory)).filter((name) =>
+  process.platform === "win32"
+    ? name === "SDL3.dll"
+    : name === "libSDL3.so" || name.startsWith("libSDL3.so."),
+);
+if (runtimeLibraries.length === 0) {
+  throw new Error("SDL3 shared runtime was not produced by the native window build");
+}
+for (const runtimeLibrary of runtimeLibraries) {
+  await copyFile(
+    resolve(releaseDirectory, runtimeLibrary),
+    resolve(output, runtimeLibrary),
+  );
+  await copyFile(
+    resolve(releaseDirectory, runtimeLibrary),
+    resolve(packageOutput, runtimeLibrary),
+  );
+}

@@ -27,7 +27,6 @@ import {
   resolveWebGpuAntialiasSamples,
   warnAntialiasSampleFallback,
 } from "@pixi-native/core/runtime/windowOptions.js";
-import { setNativeWindowTransparent } from "@pixi-native/core/runtime/ModalFrameController.js";
 
 test("native window options normalize transparency and desktop position", () => {
   assert.deepEqual(resolveNodeRendererOptions({}, "Default title", "win32"), {
@@ -343,13 +342,6 @@ test("maxFps controls only timer-paced animation frames", () => {
   }
   assert.equal(warnings.length, 1);
   assert.match(String(warnings[0][0]), /maxFps is ignored/);
-});
-
-test("Linux transparency leaves Wayland handles with SDL", () => {
-  if (process.platform !== "linux") return;
-  assert.doesNotThrow(() =>
-    setNativeWindowTransparent(new Uint8Array(8), true),
-  );
 });
 
 test("Pixi 8 background RGB is premultiplied for transparent presentation", () => {

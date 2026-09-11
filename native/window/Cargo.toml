@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 [dependencies]
 napi = { version = "3.12.2", features = ["napi9"] }
 napi-derive = "3.2.5"
+sdl3-sys = { version = "0.7.1", features = ["build-from-source"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59.0", features = [

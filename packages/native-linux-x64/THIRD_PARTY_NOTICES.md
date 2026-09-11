@@ -9,8 +9,9 @@ Pixi Native uses these projects through direct packages or native integration:
 
 - [PixiJS](https://pixijs.com/) for the rendering API and scene graph
 - [webgl-node](https://github.com/monteslu/webgl-node) and
-  [native-gles](https://github.com/monteslu/native-gles) for WebGL2 through EGL
-- [SDL](https://www.libsdl.org/) through `@kmamal/sdl` for native windows,
+  [native-gles](https://github.com/monteslu/native-gles) for the WebGL2 facade
+  and OpenGL ES call table
+- [SDL 3](https://www.libsdl.org/) through the `sdl3-sys` Rust bindings for native windows,
   input, and display information
 - [@napi-rs/canvas](https://github.com/Brooooooklyn/canvas) for Canvas2D, text,
   and image decoding

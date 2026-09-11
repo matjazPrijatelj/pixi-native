@@ -10,9 +10,6 @@ overrides:
 importers:
   .:
     dependencies:
-      "@kmamal/sdl":
-        specifier: 0.11.13
-        version: 0.11.13
       "@napi-rs/canvas":
         specifier: 1.0.8
         version: 1.0.8
@@ -59,9 +56,6 @@ importers:
 
   packages/core:
     dependencies:
-      "@kmamal/sdl":
-        specifier: 0.11.13
-        version: 0.11.13
       "@napi-rs/canvas":
         specifier: 1.0.8
         version: 1.0.8
@@ -87,9 +81,6 @@ importers:
 
   packages/pixi-native:
     dependencies:
-      "@kmamal/sdl":
-        specifier: 0.11.13
-        version: 0.11.13
       "@napi-rs/canvas":
         specifier: 1.0.8
         version: 1.0.8
@@ -128,9 +119,6 @@ importers:
 
   packages/pixi8:
     dependencies:
-      "@kmamal/sdl":
-        specifier: 0.11.13
-        version: 0.11.13
       "@napi-rs/canvas":
         specifier: 1.0.8
         version: 1.0.8
@@ -149,12 +137,6 @@ packages:
         integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==,
       }
     engines: { node: ">=18.0.0" }
-
-  "@kmamal/sdl@0.11.13":
-    resolution:
-      {
-        integrity: sha512-9WmxYNtCggi7Ovq1cU7m/s5WXD/+eKQxDMnL3bU8B5vr5GlaLg4xLykDCpcbWKkJJ2i6llTrdL7LiqikwDFz4w==,
-      }
 
   "@napi-rs/canvas-android-arm64@1.0.8":
     resolution:
@@ -1078,10 +1060,6 @@ snapshots:
   "@isaacs/fs-minipass@4.0.1":
     dependencies:
       minipass: 7.1.3
-
-  "@kmamal/sdl@0.11.13":
-    dependencies:
-      tar: 7.5.22
 
   "@napi-rs/canvas-android-arm64@1.0.8":
     optional: true

@@ -13,14 +13,13 @@ import {
   prepareRgbaPixelsForUpload,
   type RgbaUploadFormat,
 } from "@pixi-native/core/canvas/rgbaUpload.js";
-import * as sdl from "@kmamal/sdl";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
 import {
   createCompositorFrameWaiter,
   createModalFrameController,
-  setNativeWindowTransparent,
 } from "@pixi-native/core/runtime/ModalFrameController.js";
+import { createNativeWindow } from "@pixi-native/core/runtime/NativeWindow.js";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -45,21 +44,7 @@ export async function createWebGpuRenderer(
     windowOptions.antialiasSamples,
   );
 
-  const window = sdl.video.createWindow({
-    title: windowOptions.title,
-    width: windowOptions.width,
-    height: windowOptions.height,
-    resizable: windowOptions.resizable,
-    borderless: windowOptions.borderless,
-    x: windowOptions.x,
-    y: windowOptions.y,
-    webgpu: true,
-  });
-
-  setNativeWindowTransparent(
-    (window as unknown as { _native: { gpu: Uint8Array } })._native.gpu,
-    windowOptions.transparent,
-  );
+  const window = createNativeWindow(windowOptions, "webgpu");
 
   const gpu = loadNativeGpu() as NodeGPUApi;
   const backend = resolveGpuBackend();
@@ -205,7 +190,7 @@ export async function createWebGpuRenderer(
   );
   domAdapter.installPixi8(DOMAdapter);
   const modalController = createModalFrameController(
-    (window as any)._native.gpu,
+    window.surface.window,
     () => {
       domAdapter.dispatchModalFrame(performance.now());
     },

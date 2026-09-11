@@ -8,7 +8,6 @@ export {
 export {
   createCompositorFrameWaiter,
   createModalFrameController,
-  setNativeWindowTransparent,
   type ModalFrameController,
 } from "./runtime/ModalFrameController.ts";
 export {

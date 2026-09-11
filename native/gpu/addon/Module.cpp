@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <iostream>
 #include <map>
@@ -268,32 +270,65 @@ Napi::External<std::shared_ptr<T>> SharedExternal(Napi::Env env, std::shared_ptr
 WGPUSurface CreateWindowSurface(Napi::Env env,
                                 WGPUInstance instance,
                                 const Napi::Object& window) {
-    Napi::Buffer<char> nativeData = {
-        env, window.Get("_native").As<Napi::Object>().Get("gpu")};
+    Napi::Object surface = window.Get("surface").As<Napi::Object>();
+    const std::string api = surface.Get("api").As<Napi::String>().Utf8Value();
+    auto readPointer = [&](const char* name) -> uintptr_t {
+        Napi::Value value = surface.Get(name);
+        if (!value.IsBuffer()) {
+            Napi::TypeError::New(env, std::string("native surface is missing ") + name)
+                .ThrowAsJavaScriptException();
+            return 0;
+        }
+        Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
+        if (buffer.Length() < sizeof(uintptr_t)) {
+            Napi::TypeError::New(env, std::string("native surface ") + name + " is invalid")
+                .ThrowAsJavaScriptException();
+            return 0;
+        }
+        uintptr_t pointer = 0;
+        std::memcpy(&pointer, buffer.Data(), sizeof(pointer));
+        return pointer;
+    };
     WGPUSurfaceDescriptor descriptor = {};
 #if defined(_WIN32)
-    struct NativeData { HWND hwnd; HINSTANCE hinstance; };
-    const auto* native = reinterpret_cast<const NativeData*>(nativeData.Data());
+    if (api != "win32") {
+        Napi::TypeError::New(env, "expected a Win32 native surface")
+            .ThrowAsJavaScriptException();
+        return nullptr;
+    }
     WGPUSurfaceSourceWindowsHWND source = {};
     source.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
-    source.hwnd = native->hwnd;
-    source.hinstance = native->hinstance;
-#elif defined(__linux__)
-    struct NativeData { Display* display; Window window; };
-    const auto* native = reinterpret_cast<const NativeData*>(nativeData.Data());
-    WGPUSurfaceSourceXlibWindow source = {};
-    source.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
-    source.display = native->display;
-    source.window = native->window;
-#elif defined(__APPLE__)
-    struct NativeData { void* layer; };
-    const auto* native = reinterpret_cast<const NativeData*>(nativeData.Data());
-    WGPUSurfaceSourceMetalLayer source = {};
-    source.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
-    source.layer = native->layer;
-#endif
+    source.hwnd = reinterpret_cast<HWND>(readPointer("window"));
+    source.hinstance = reinterpret_cast<HINSTANCE>(readPointer("instance"));
     descriptor.nextInChain = &source.chain;
     return gProcs->instanceCreateSurface(instance, &descriptor);
+#elif defined(__linux__)
+    if (api == "x11") {
+        WGPUSurfaceSourceXlibWindow source = {};
+        source.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
+        source.display = reinterpret_cast<Display*>(readPointer("display"));
+        source.window = static_cast<Window>(readPointer("window"));
+        descriptor.nextInChain = &source.chain;
+        return gProcs->instanceCreateSurface(instance, &descriptor);
+    }
+    if (api == "wayland") {
+        WGPUSurfaceSourceWaylandSurface source = {};
+        source.chain.sType = WGPUSType_SurfaceSourceWaylandSurface;
+        source.display = reinterpret_cast<void*>(readPointer("display"));
+        source.surface = reinterpret_cast<void*>(readPointer("window"));
+        descriptor.nextInChain = &source.chain;
+        return gProcs->instanceCreateSurface(instance, &descriptor);
+    }
+    Napi::TypeError::New(env, "expected an X11 or Wayland native surface")
+        .ThrowAsJavaScriptException();
+    return nullptr;
+#elif defined(__APPLE__)
+    WGPUSurfaceSourceMetalLayer source = {};
+    source.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
+    source.layer = reinterpret_cast<void*>(readPointer("window"));
+    descriptor.nextInChain = &source.chain;
+    return gProcs->instanceCreateSurface(instance, &descriptor);
+#endif
 }
 
 class Renderer final : public Napi::ObjectWrap<Renderer> {
@@ -347,6 +382,24 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     uint32_t height_ = 0;
     bool configured_ = false;
     bool alphaFallback_ = false;
+
+    uint32_t ReadWindowDimension(Napi::Env env, const char* name) const {
+        Napi::Value value = window_.Get(name);
+        if (!value.IsNumber()) {
+            Napi::TypeError::New(
+                env, std::string("native window is missing numeric ") + name)
+                .ThrowAsJavaScriptException();
+            return 0;
+        }
+        const double dimension = value.As<Napi::Number>().DoubleValue();
+        if (!std::isfinite(dimension) || dimension < 1.0) {
+            Napi::RangeError::New(
+                env, std::string("native window has invalid ") + name)
+                .ThrowAsJavaScriptException();
+            return 0;
+        }
+        return static_cast<uint32_t>(dimension);
+    }
 
     // surfaceGetCurrentTexture returns an owned reference; adopt it exactly once
     // so every success and failure path releases the acquisition through RAII.
@@ -405,9 +458,10 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
             }
         }
         gProcs->surfaceCapabilitiesFreeMembers(capabilities);
-        ConfigureSurface(
-            std::max(1u, window_.Get("_pixelWidth").ToNumber().Uint32Value()),
-            std::max(1u, window_.Get("_pixelHeight").ToNumber().Uint32Value()));
+        const uint32_t width = ReadWindowDimension(env, "pixelWidth");
+        const uint32_t height = ReadWindowDimension(env, "pixelHeight");
+        if (env.IsExceptionPending()) return;
+        ConfigureSurface(width, height);
     }
 
     void ConfigureSurface(uint32_t width, uint32_t height) {
@@ -483,9 +537,10 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     }
 
     Napi::Value Resize(const Napi::CallbackInfo& info) {
-        ConfigureSurface(
-            std::max(1u, window_.Get("_pixelWidth").ToNumber().Uint32Value()),
-            std::max(1u, window_.Get("_pixelHeight").ToNumber().Uint32Value()));
+        const uint32_t width = ReadWindowDimension(info.Env(), "pixelWidth");
+        const uint32_t height = ReadWindowDimension(info.Env(), "pixelHeight");
+        if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+        ConfigureSurface(width, height);
         return info.Env().Undefined();
     }
 
@@ -504,7 +559,7 @@ Napi::Value CreateWindowContext(const Napi::CallbackInfo& info) {
     }
     Napi::Object options = info[0].As<Napi::Object>();
     if (!options.Get("window").IsObject()) {
-        Napi::TypeError::New(env, "window must be a native SDL window object")
+        Napi::TypeError::New(env, "window must be a native pixi-native window object")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }

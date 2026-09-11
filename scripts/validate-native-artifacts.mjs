@@ -18,6 +18,7 @@ const REQUIRED_NATIVE_ARTIFACTS = [
     ? [`native/gpu/dist/${target}/d3dcompiler_47.dll`]
     : []),
   `native/window/dist/${target}/native_window.node`,
+  `native/window/dist/${target}/${target === "win32-x64" ? "SDL3.dll" : "libSDL3.so"}`,
   ...(target === "win32-x64"
     ? [`native/audio/dist/${target}/native_audio.node`]
     : []),

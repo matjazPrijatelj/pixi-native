@@ -66,6 +66,16 @@ export interface NodeRenderSurface {
   destroy(): void;
 }
 
+/** Versioned native handles shared only between pixi-native platform add-ons. */
+export interface NativeSurfaceDescriptor {
+  readonly version: 1;
+  readonly api: "win32" | "x11" | "wayland";
+  readonly window: Uint8Array;
+  readonly display?: Uint8Array;
+  readonly instance?: Uint8Array;
+  readonly eglWindow?: Uint8Array;
+}
+
 export interface NodeWindowHandle {
   /** Current virtual-desktop X coordinate. */
   readonly x: number;
@@ -79,6 +89,10 @@ export interface NodeWindowHandle {
   readonly display: { readonly frequency: number };
   /** Whether the native window has already been released. */
   readonly destroyed: boolean;
+  /** Native surface handles; consumers must not retain these past destroy(). */
+  readonly surface?: NativeSurfaceDescriptor;
+  /** SDL3 video driver selected for this window. */
+  readonly videoDriver?: string;
   /** Polls pending native events when the backend requires explicit polling. */
   readonly pollEvents?: () => void;
   /** Moves the window to an absolute virtual-desktop position. */

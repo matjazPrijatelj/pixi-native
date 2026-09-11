@@ -185,6 +185,7 @@ if env $environment ldd packages/native-linux-x64/native/video/dist/linux-x64/ff
     exit 1
 fi
 env $environment corepack pnpm install --frozen-lockfile
+env $environment corepack pnpm native:window:build
 env $environment corepack pnpm pack:dist
 "@
 

@@ -1,14 +1,16 @@
-import * as sdl from "@kmamal/sdl";
-
 import { NodeGLCanvas } from "../../canvas/NodeGLCanvas.ts";
 import type {
     NodeRenderSurface,
     NodeWindowHandle,
 } from "../../runtime/nativeTypes.ts";
-import { setNativeWindowTransparent } from "../../runtime/ModalFrameController.ts";
+import { createNativeWindow } from "../../runtime/NativeWindow.ts";
 import type { ResolvedNodeRendererOptions } from "../../runtime/windowOptions.ts";
 import { warnAntialiasSampleFallback } from "../../runtime/windowOptions.ts";
 import { installWebGlMultisampleScreen } from "./webglMultisampleScreen.ts";
+import {
+    createSdlWebGL2Context,
+    loadNativeGl,
+} from "./SdlWebGLContext.ts";
 
 class WebGLRenderingContext {}
 
@@ -27,35 +29,13 @@ export async function createNodeSdlWebGLSurface(
     options: ResolvedNodeRendererOptions,
     rendererName: string,
 ): Promise<NodeSdlWebGLSurface> {
-    const window = sdl.video.createWindow({
-        title: options.title,
-        width: options.width,
-        height: options.height,
-        resizable: options.resizable,
-        borderless: options.borderless,
-        x: options.x,
-        y: options.y,
-        opengl: true,
-    });
-    const sdlWindow = window as unknown as {
-        readonly native: { readonly gl?: Uint8Array; readonly handle?: Uint8Array };
-        readonly _native?: { readonly gpu?: Uint8Array };
-    };
-    const nativeGlWindow = sdlWindow.native.gl ?? sdlWindow.native.handle;
-    const nativeWindowData = sdlWindow._native?.gpu ?? sdlWindow.native.handle;
-    if (!nativeGlWindow || !nativeWindowData) {
-        window.destroy();
-        throw new Error("SDL did not expose the native window handles required by WebGL");
-    }
+    const nativeGl = loadNativeGl();
+    const window = createNativeWindow(options, "webgl");
+    const nativeWindowData = window.surface.window;
 
     try {
-        setNativeWindowTransparent(nativeWindowData, options.transparent);
+        const context = await createSdlWebGL2Context(window, nativeGl);
         const webglNode = await import("webgl-node");
-        const context = webglNode.createWebGL2Context(
-            window.pixelWidth,
-            window.pixelHeight,
-            { nativeWindow: nativeGlWindow },
-        );
         if (!context.swapBuffers) {
             context.destroy();
             throw new Error("EGL created no presentable SDL window surface");

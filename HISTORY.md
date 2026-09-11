@@ -2,6 +2,15 @@
 
 ## 2026-09-11
 
+- Replaced `@kmamal/sdl` with a focused SDL3 napi-rs window addon for Windows
+  and Linux. SDL3 now owns transparent windows, input events, native WebGPU
+  surface handles, OpenGL ES contexts, and buffer swaps; `native-gles` remains
+  only as the established WebGL2 OpenGL ES call table. Native packages now
+  stage the SDL3 shared runtime alongside the addon.
+- Fixed initial and resized Dawn surfaces reading the removed private SDL2
+  `_pixelWidth`/`_pixelHeight` fields. The WebGPU bridge now validates and uses
+  the SDL3 window's public pixel dimensions instead of silently configuring a
+  1-by-1 presentation texture.
 - Restored effective WebGL and WebGL7 antialiasing on SDL/EGL by rendering the
   screen through a shared multisample framebuffer and resolving it before each
   buffer swap, including supported-sample fallback, resize, diagnostics, and

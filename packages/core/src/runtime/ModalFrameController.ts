@@ -5,9 +5,8 @@ export interface ModalFrameController {
 }
 
 interface NativeWindowApi {
-  setTransparent(nativeData: Uint8Array, transparent: boolean): void;
   waitForCompositorFrame?(timeoutMs?: number): Promise<boolean>;
-  create(
+  createModalFrameController(
     nativeData: Uint8Array,
     onFrame: () => void,
     onState: (active: boolean) => void,
@@ -26,24 +25,6 @@ export function createCompositorFrameWaiter(
   return () => nativeWindow.waitForCompositorFrame!(1_000);
 }
 
-/** Configures compositor transparency before the WebGPU surface is created. */
-export function setNativeWindowTransparent(
-  nativeData: Uint8Array,
-  transparent: boolean,
-): void {
-  if (!transparent) return;
-  // SDL owns the Linux Wayland surface. Never pass its handle to the
-  // Windows-only addon where it would be interpreted as an HWND.
-  if (process.platform === "linux") return;
-  if (process.platform !== "win32") {
-    throw new Error(
-      "transparent native windows are supported only on Windows 11",
-    );
-  }
-  const nativeWindow = loadNativeWindow<NativeWindowApi>();
-  nativeWindow.setTransparent(nativeData, true);
-}
-
 const NOOP_MODAL_FRAME_CONTROLLER: ModalFrameController = {
   detach: () => undefined,
 };
@@ -58,5 +39,5 @@ export function createModalFrameController(
   if (platform !== "win32") return NOOP_MODAL_FRAME_CONTROLLER;
 
   const nativeWindow = loadNativeWindow<NativeWindowApi>();
-  return nativeWindow.create(nativeData, onFrame, onState);
+  return nativeWindow.createModalFrameController(nativeData, onFrame, onState);
 }
