@@ -1,0 +1,198 @@
+diff --git a/binding.gyp b/binding.gyp
+index e0710a041b64dd79a62e12767e08bd6b4924e91d..55453d14e0bf5c9975ffd74f259fc1978e0b0148 100644
+--- a/binding.gyp
++++ b/binding.gyp
+@@ -31,7 +31,7 @@
+ 				'cflags': [ '-D_REENTRANT' ],
+ 				'cflags_cc': [ '-std=c++17' ],
+ 				'include_dirs': [ '$(SDL_INC)' ],
+-				'libraries': [ '-L$(SDL_LIB)', '-lSDL2' ],
++				'libraries': [ '-L$(SDL_LIB)', '-lSDL2', '-lX11', '-lXrender' ],
+ 				'link_settings': {
+ 					'libraries': [ "-Wl,-rpath,'$$ORIGIN'" ],
+ 				},
+diff --git a/scripts/install.mjs b/scripts/install.mjs
+index edab5976c5dd6a15a489162d55591d7172d7d53b..a37b975c5f9bd28335a7c23459175e5cf5dd962e 100644
+--- a/scripts/install.mjs
++++ b/scripts/install.mjs
+@@ -1,4 +1,6 @@
+ 
++if (process.platform === 'linux') process.env.NODE_SDL_FROM_SOURCE = '1'
++
+ if (!process.env.NODE_SDL_FROM_SOURCE) {
+ 	try {
+ 		await import('./download-release.mjs')
+@@ -20,4 +22,14 @@ catch (_) {
+ 	await import('./build-sdl.mjs')
+ }
+ 
++if (process.platform === 'linux') {
++	const Fs = await import('node:fs')
++	const Path = await import('node:path')
++	const { fileURLToPath } = await import('node:url')
++	const libDir = Path.join(Path.dirname(fileURLToPath(import.meta.url)), '../sdl/lib')
++	await Fs.promises.symlink('libSDL2-2.0.so', Path.join(libDir, 'libSDL2.so')).catch((error) => {
++		if (error.code !== 'EEXIST') throw error
++	})
++}
++
+ await import('./build.mjs')
+diff --git a/src/javascript/video/window.js b/src/javascript/video/window.js
+index 27094240a75ea7565042bb307978372d815426fc..469002a1f4364c49cb61c474ae6fda494b1bc570 100644
+--- a/src/javascript/video/window.js
++++ b/src/javascript/video/window.js
+@@ -57,6 +57,7 @@ class Window extends EventsViaPoll {
+ 			popupMenu = false,
+ 			tooltip = false,
+ 			utility = false,
++			transparent = false,
+ 		} = options
+ 
+ 		if (typeof title !== 'string') { throw Object.assign(new Error("title must be a string"), { title }) }
+@@ -84,6 +85,7 @@ class Window extends EventsViaPoll {
+ 		if (typeof popupMenu !== 'boolean') { throw Object.assign(new Error("popupMenu must be a boolean"), { popupMenu }) }
+ 		if (typeof tooltip !== 'boolean') { throw Object.assign(new Error("tooltip must be a boolean"), { tooltip }) }
+ 		if (typeof utility !== 'boolean') { throw Object.assign(new Error("utility must be a boolean"), { utility }) }
++		if (typeof transparent !== 'boolean') { throw Object.assign(new Error("transparent must be a boolean"), { transparent }) }
+ 		if (display !== null && (x !== null || y !== null)) { throw Object.assign(new Error("display and x/y are mutually exclusive"), { display, x, y }) }
+ 		if (resizable && borderless) { throw Object.assign(new Error("resizable and borderless are mutually exclusive"), { resizable, borderless }) }
+ 		if (opengl && webgpu) { throw Object.assign(new Error("opengl and webgpu are mutually exclusive"), { opengl, webgpu }) }
+@@ -116,6 +118,7 @@ class Window extends EventsViaPoll {
+ 			popupMenu,
+ 			tooltip,
+ 			utility,
++			transparent,
+ 		)
+ 
+ 		this._id = result.id
+diff --git a/src/native/window.cpp b/src/native/window.cpp
+index ac847040cd7def73503c8c99ce3a1ac6792a6319..803e02431a3774154780a35e28150c0bc7120cd7 100644
+--- a/src/native/window.cpp
++++ b/src/native/window.cpp
+@@ -4,6 +4,57 @@
+ #include <string>
+ #include <sstream>
+ #include <map>
++#include <cstring>
++#include <cstdio>
++
++#if defined(__LINUX__)
++#include <X11/extensions/Xrender.h>
++#include <X11/Xatom.h>
++
++// SDL2 reads the visual hint during window creation. Restore it afterwards so
++// transparent and opaque windows can coexist without inheriting each other's state.
++class TransparentVisual {
++	std::string previous;
++	bool hadPrevious;
++public:
++	bool enabled = false;
++	explicit TransparentVisual(bool requested) {
++		const char *hint = SDL_GetHint(SDL_HINT_VIDEO_X11_WINDOW_VISUALID);
++		hadPrevious = hint != nullptr;
++		if (hint) previous = hint;
++		if (!requested) return;
++		Display *display = XOpenDisplay(nullptr);
++		if (!display) return;
++		const int screen = DefaultScreen(display);
++		const std::string selection = "_NET_WM_CM_S" + std::to_string(screen);
++		const Atom compositor = XInternAtom(display, selection.c_str(), True);
++		if (compositor != None && XGetSelectionOwner(display, compositor) != None) {
++			XVisualInfo match = {};
++			match.screen = screen;
++			match.depth = 32;
++			match.c_class = TrueColor;
++			int count = 0;
++			XVisualInfo *visuals = XGetVisualInfo(display,
++				VisualScreenMask | VisualDepthMask | VisualClassMask, &match, &count);
++			for (int index = 0; index < count; ++index) {
++				const XRenderPictFormat *format = XRenderFindVisualFormat(display, visuals[index].visual);
++				if (!format || format->type != PictTypeDirect || !format->direct.alphaMask) continue;
++				const std::string id = std::to_string(visuals[index].visualid);
++				enabled = SDL_SetHintWithPriority(SDL_HINT_VIDEO_X11_WINDOW_VISUALID,
++					id.c_str(), SDL_HINT_OVERRIDE) == SDL_TRUE;
++				break;
++			}
++			if (visuals) XFree(visuals);
++		}
++		XCloseDisplay(display);
++		if (!enabled) std::fprintf(stderr, "[pixi-native] X11 compositor or ARGB visual unavailable; using opaque window\n");
++	}
++	~TransparentVisual() {
++		if (hadPrevious) SDL_SetHintWithPriority(SDL_HINT_VIDEO_X11_WINDOW_VISUALID, previous.c_str(), SDL_HINT_OVERRIDE);
++		else SDL_ResetHint(SDL_HINT_VIDEO_X11_WINDOW_VISUALID);
++	}
++};
++#endif
+ 
+ struct CachedTexture {
+ 	SDL_Texture *texture;
+@@ -121,6 +172,7 @@ window::create (const Napi::CallbackInfo &info)
+ 	bool is_popup_menu = info[16].As<Napi::Boolean>().Value();
+ 	bool is_tooltip = info[17].As<Napi::Boolean>().Value();
+ 	bool is_utility = info[18].As<Napi::Boolean>().Value();
++	bool is_transparent = info[19].As<Napi::Boolean>().Value();
+ 
+ 	int desired_flags = 0
+ 		| SDL_WINDOW_HIDDEN | SDL_WINDOW_ALLOW_HIGHDPI
+@@ -136,7 +188,22 @@ window::create (const Napi::CallbackInfo &info)
+ 		| (is_utility ? SDL_WINDOW_UTILITY : 0)
+ 		;
+ 
+-	SDL_Window *window = SDL_CreateWindow(title.c_str(), x, y, width, height, desired_flags);
++	SDL_Window *window;
++	bool transparent_visual = false;
++	#if defined(__LINUX__)
++		const char *driver = SDL_GetCurrentVideoDriver();
++		if ((is_opengl || is_webgpu) && (!driver || std::strcmp(driver, "x11") != 0)) {
++			throw Napi::Error::New(env, "native GPU windows require the SDL X11 driver");
++		}
++		{
++			TransparentVisual visual(is_transparent);
++			window = SDL_CreateWindow(title.c_str(), x, y, width, height, desired_flags);
++			transparent_visual = visual.enabled;
++		}
++	#else
++		(void)is_transparent;
++		window = SDL_CreateWindow(title.c_str(), x, y, width, height, desired_flags);
++	#endif
+ 	if (window == nullptr) {
+ 		std::ostringstream message;
+ 		message << "SDL_CreateWindow() error: " << SDL_GetError();
+@@ -203,6 +270,24 @@ window::create (const Napi::CallbackInfo &info)
+ 		native_handle = env.Null();
+ 	}
+ 	native.Set("handle", native_handle);
++	#if defined(__LINUX__)
++		if (transparent_visual && has_wm_info && sys_wm_info.subsystem == SDL_SYSWM_X11) {
++			XWindowAttributes attributes = {};
++			transparent_visual = XGetWindowAttributes(sys_wm_info.info.x11.display,
++				sys_wm_info.info.x11.window, &attributes) != 0;
++			const XRenderPictFormat *format = transparent_visual
++				? XRenderFindVisualFormat(sys_wm_info.info.x11.display, attributes.visual) : nullptr;
++			transparent_visual = format && format->type == PictTypeDirect && format->direct.alphaMask;
++			if (transparent_visual) {
++				const Atom bypass = XInternAtom(sys_wm_info.info.x11.display, "_NET_WM_BYPASS_COMPOSITOR", False);
++				const unsigned long composite = 2;
++				XChangeProperty(sys_wm_info.info.x11.display, sys_wm_info.info.x11.window,
++					bypass, XA_CARDINAL, 32, PropModeReplace,
++					reinterpret_cast<const unsigned char *>(&composite), 1);
++			}
++		} else transparent_visual = false;
++	#endif
++	native.Set("transparent", transparent_visual);
+ 
+ 	if (is_opengl) {
+ 		if (!has_wm_info) {
+diff --git a/src/types/index.d.ts b/src/types/index.d.ts
+index 08c588982643fe2e2405d912dca0573e2b762594..41fe795599de4e5dcee1d83dce914aed9ed30bc5 100644
+--- a/src/types/index.d.ts
++++ b/src/types/index.d.ts
+@@ -620,6 +620,7 @@ export namespace Sdl {
+ 				popupMenu?: boolean
+ 				tooltip?: boolean
+ 				utility?: boolean
++				transparent?: boolean
+ 			}): Window
+ 		}
+ 	}

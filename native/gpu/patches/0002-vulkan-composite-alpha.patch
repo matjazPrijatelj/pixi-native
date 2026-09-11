@@ -1,0 +1,38 @@
+diff --git a/src/dawn/native/vulkan/SwapChainVk.cpp b/src/dawn/native/vulkan/SwapChainVk.cpp
+index 41447ee57..0ba5d1367 100644
+--- a/src/dawn/native/vulkan/SwapChainVk.cpp
++++ b/src/dawn/native/vulkan/SwapChainVk.cpp
+@@ -296,7 +296,7 @@ ResultOrError<SwapChain::Config> SwapChain::ChooseConfig(
+             "Vulkan SwapChain must support %s with sRGB colorspace.", config.wgpuFormat));
+     }
+ 
+-    // Only the identity transform with opaque alpha is supported for now.
++    // Presentation must preserve the requested composite alpha mode.
+     DAWN_INVALID_IF(
+         (surfaceInfo.capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) == 0,
+         "Vulkan SwapChain must support the identity transform.");
+@@ -305,9 +305,22 @@ ResultOrError<SwapChain::Config> SwapChain::ChooseConfig(
+ 
+     config.alphaMode = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+ #if !DAWN_PLATFORM_IS(ANDROID)
++    switch (GetAlphaMode()) {
++        case wgpu::CompositeAlphaMode::Premultiplied:
++            config.alphaMode = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
++            break;
++        case wgpu::CompositeAlphaMode::Unpremultiplied:
++            config.alphaMode = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
++            break;
++        case wgpu::CompositeAlphaMode::Inherit:
++            config.alphaMode = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
++            break;
++        default:
++            break;
++    }
+     DAWN_INVALID_IF(
+-        (surfaceInfo.capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) == 0,
+-        "Vulkan SwapChain must support opaque alpha.");
++        (surfaceInfo.capabilities.supportedCompositeAlpha & config.alphaMode) == 0,
++        "Vulkan SwapChain does not support the requested composite alpha mode.");
+ #else
+     // TODO(dawn:286): investigate composite alpha for WebGPU native
+     std::array<VkCompositeAlphaFlagBitsKHR, 4u> compositeAlphaFlags = {

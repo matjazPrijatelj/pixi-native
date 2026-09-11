@@ -1,4 +1,4 @@
-import * as sdl from "@kmamal/sdl";
+import sdl from "../../runtime/sdl.ts";
 
 import { NodeGLCanvas } from "../../canvas/NodeGLCanvas.ts";
 import type {
@@ -19,6 +19,7 @@ export interface NodeSdlWebGLSurface {
     readonly renderer: NodeRenderSurface;
     readonly webgl: WebGL2RenderingContext;
     readonly antialiasSamples: 0 | 2 | 4 | 8;
+    readonly backgroundAlpha: number;
     readonly webglRenderingContextConstructor: { readonly prototype: object };
 }
 
@@ -36,26 +37,57 @@ export async function createNodeSdlWebGLSurface(
         x: options.x,
         y: options.y,
         opengl: true,
+        transparent: options.transparent,
     });
     const sdlWindow = window as unknown as {
-        readonly native: { readonly gl?: Uint8Array; readonly handle?: Uint8Array };
+        readonly native: {
+            readonly gl?: Uint8Array;
+            readonly handle?: Uint8Array;
+            readonly transparent?: boolean;
+        };
         readonly _native?: { readonly gpu?: Uint8Array };
     };
     const nativeGlWindow = sdlWindow.native.gl ?? sdlWindow.native.handle;
     const nativeWindowData = sdlWindow._native?.gpu ?? sdlWindow.native.handle;
+    const transparent =
+        options.transparent &&
+        (process.platform !== "linux" || sdlWindow.native.transparent === true);
+    if (options.transparent && !transparent) {
+        console.warn(
+            "[pixi-native] transparent X11 visual/compositor is unavailable; using opaque WebGL background (check patched SDL binary)",
+        );
+    }
     if (!nativeGlWindow || !nativeWindowData) {
         window.destroy();
-        throw new Error("SDL did not expose the native window handles required by WebGL");
+        throw new Error(
+            "SDL did not expose the native window handles required by WebGL",
+        );
     }
 
     try {
         setNativeWindowTransparent(nativeWindowData, options.transparent);
         const webglNode = await import("webgl-node");
-        const context = webglNode.createWebGL2Context(
-            window.pixelWidth,
-            window.pixelHeight,
-            { nativeWindow: nativeGlWindow },
-        );
+        let context: ReturnType<typeof webglNode.createWebGL2Context>;
+        try {
+            context = webglNode.createWebGL2Context(
+                window.pixelWidth,
+                window.pixelHeight,
+                { nativeWindow: nativeGlWindow },
+            );
+        } catch (error) {
+            if (process.platform !== "linux" || !transparent) throw error;
+            // EGL may expose no config for the ARGB visual even when XRender
+            // supports it. Retry once with a fresh opaque SDL window.
+            window.destroy();
+            console.warn(
+                "[pixi-native] EGL could not create the transparent surface; retrying an opaque WebGL window",
+                error,
+            );
+            return createNodeSdlWebGLSurface(
+                { ...options, transparent: false, backgroundAlpha: 1 },
+                rendererName,
+            );
+        }
         if (!context.swapBuffers) {
             context.destroy();
             throw new Error("EGL created no presentable SDL window surface");
@@ -115,7 +147,8 @@ export async function createNodeSdlWebGLSurface(
             "WebGLShaderPrecisionFormat",
         ]) {
             if (webglGlobals[name]) {
-                (globalThis as Record<string, unknown>)[name] = webglGlobals[name];
+                (globalThis as Record<string, unknown>)[name] =
+                    webglGlobals[name];
             }
         }
         (globalThis as Record<string, unknown>).WebGLRenderingContext =
@@ -147,10 +180,13 @@ export async function createNodeSdlWebGLSurface(
             renderer,
             webgl: context.gl,
             antialiasSamples: multisampleScreen.sampleCount,
+            backgroundAlpha: transparent ? options.backgroundAlpha : 1,
             webglRenderingContextConstructor: WebGLRenderingContext,
         };
     } catch (error) {
         if (!window.destroyed) window.destroy();
-        throw new Error("Could not create the SDL WebGL2 surface", { cause: error });
+        throw new Error("Could not create the SDL WebGL2 surface", {
+            cause: error,
+        });
     }
 }

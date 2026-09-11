@@ -13,7 +13,7 @@ import {
   prepareRgbaPixelsForUpload,
   type RgbaUploadFormat,
 } from "@pixi-native/core/canvas/rgbaUpload.js";
-import * as sdl from "@kmamal/sdl";
+import sdl from "@pixi-native/core/runtime/sdl.js";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
 import {
@@ -54,6 +54,7 @@ export async function createWebGpuRenderer(
     x: windowOptions.x,
     y: windowOptions.y,
     webgpu: true,
+    transparent: windowOptions.transparent,
   });
 
   setNativeWindowTransparent(
@@ -290,6 +291,7 @@ export async function createWebGpuRenderer(
     format: renderer.getPreferredFormat(),
     requestedAlphaMode: windowOptions.transparent ? "premultiplied" : "opaque",
     alphaMode: actualAlphaMode,
+    compositeAlphaMode: renderer.getCompositeAlphaMode?.() ?? actualAlphaMode,
     size: [canvas.width, canvas.height],
     devicePixelRatio: 1,
     refreshRateHz,

@@ -153,9 +153,10 @@ Package tarballs include these guides and the public TypeScript declarations.
 
 ## Current limitations
 
-- Windows transparency uses the compositor path. Linux transparency depends on
-  the active compositor and surface capabilities; WebGPU uses an opaque surface
-  when premultiplied alpha is unavailable.
+- Windows transparency uses the compositor path. Linux transparency uses X11
+  or XWayland, an ARGB window visual, and an active desktop compositor. WebGPU
+  accepts premultiplied or verified X11 inherited alpha; unsupported surfaces
+  use an opaque background with a warning. Pure Wayland is not supported.
 - Transparent pixels still receive pointer input. The public API does not
   provide click-through windows or custom title bars.
 - Native video outputs SDR BT.709 limited-range NV12. The decoder-to-GPU path
@@ -165,6 +166,16 @@ Package tarballs include these guides and the public TypeScript declarations.
   VSync owns pacing.
 
 ## Repository development
+
+On Linux, the patched SDL and EGL bindings compile during `pnpm install`.
+Install a C++ toolchain, Python 3, and the X11, XRender, EGL and GLES development
+headers (Ubuntu/Debian: `build-essential python3 libx11-dev libxrender-dev
+libegl1-mesa-dev libgles2-mesa-dev`). Keep the pnpm patches and package extensions
+when installing this workspace; unpatched upstream binaries omit this support.
+
+With a composited X11/XWayland desktop, run the native transparency checks with
+`PIXI_NATIVE_TEST_TRANSPARENCY=1 node --test tests/linux-transparency.test.ts`.
+These checks open temporary windows and exercise alpha and resizing.
 
 ```sh
 pnpm install

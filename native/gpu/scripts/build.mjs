@@ -3,6 +3,7 @@ import Path from "path";
 import C from "./util/common.js";
 import { removeDirectory } from "./util/remove-directory.mjs";
 import { initializeWindowsDevEnvironment } from "./windows-dev-environment.mjs";
+import { applyDawnPatches } from "./apply-dawn-patches.mjs";
 
 initializeWindowsDevEnvironment();
 await import("./preflight.mjs");
@@ -29,5 +30,6 @@ if (cleanBuild || !Fs.existsSync(Path.join(C.dir.dawn, ".git"))) {
 } else {
   console.log("reuse existing Dawn checkout", C.dir.dawn);
 }
+applyDawnPatches();
 await import("./configure.mjs");
 await import("./make.mjs");

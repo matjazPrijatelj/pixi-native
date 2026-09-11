@@ -53,6 +53,7 @@ export interface NodeGPUApi {
 export interface NodeWindowRenderer {
     getPreferredFormat(): GPUTextureFormat;
     getAlphaMode?(): "opaque" | "premultiplied";
+    getCompositeAlphaMode?(): "opaque" | "premultiplied" | "inherit";
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap(): void;

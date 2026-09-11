@@ -345,7 +345,7 @@ test("maxFps controls only timer-paced animation frames", () => {
   assert.match(String(warnings[0][0]), /maxFps is ignored/);
 });
 
-test("Linux transparency leaves Wayland handles with SDL", () => {
+test("Linux transparency leaves native handles with SDL", () => {
   if (process.platform !== "linux") return;
   assert.doesNotThrow(() =>
     setNativeWindowTransparent(new Uint8Array(8), true),

@@ -1,0 +1,93 @@
+diff --git a/binding.gyp b/binding.gyp
+index 611d24072c410e859486a4dbd1152749f9227eaa..cd81408f998aaa60ab89d0e5b4df75256d7b4574 100644
+--- a/binding.gyp
++++ b/binding.gyp
+@@ -17,7 +17,7 @@
+ 		'conditions': [
+ 			['OS == "linux"', {
+ 				'cflags_cc': [ '-std=c++17' ],
+-				'libraries': [ '-lEGL', '-lGLESv2' ],
++				'libraries': [ '-lEGL', '-lGLESv2', '-lX11' ],
+ 			}],
+ 			['OS == "mac"', {
+ 				'sources': [ 'src/mac_native_window.mm' ],
+diff --git a/scripts/install.mjs b/scripts/install.mjs
+index cda97e69dbb84fa53684dfc20a09c8c653d92ccd..d6b86c625b310541c3882366ae4d22d8fe648ea4 100644
+--- a/scripts/install.mjs
++++ b/scripts/install.mjs
+@@ -1,4 +1,6 @@
+ 
++if (process.platform === 'linux') process.env.NATIVE_GLES_FROM_SOURCE = '1'
++
+ if (!process.env.NATIVE_GLES_FROM_SOURCE) {
+ 	try {
+ 		await import('./download-release.mjs')
+@@ -14,7 +16,7 @@ else {
+ 
+ // Download ANGLE for macOS/Windows (no-op on Linux)
+ try {
+-	await import('./download-angle.mjs')
++	if (process.platform !== 'linux') await import('./download-angle.mjs')
+ }
+ catch (error) {
+ 	if (process.platform !== 'linux') {
+diff --git a/src/egl_context.cpp b/src/egl_context.cpp
+index ca70b3d867ea50dc243c3b5ebcacea8b9cf63112..01d047491c0828df5d3fdd040055f92e27d49185 100644
+--- a/src/egl_context.cpp
++++ b/src/egl_context.cpp
+@@ -3,6 +3,10 @@
+ #include <cstdlib>
+ #include <cstring>
+ #include <map>
++#include <vector>
++#if defined(__linux__)
++#include <X11/Xlib.h>
++#endif
+ 
+ // eglGetDisplay / eglGetPlatformDisplayEXT return the SAME EGLDisplay for the
+ // same arguments, and eglTerminate destroys every context and surface on it —
+@@ -230,6 +234,44 @@ bool gles_context_create(GLESContext* ctx, int width, int height, bool windowSur
+         }
+     }
+ 
++    // An RGBA EGL config may still use an opaque X11 visual. Match the SDL
++    // window's actual visual instead of trusting the first eglChooseConfig hit.
++#if defined(__linux__)
++    if (windowSurface && nativeWindow && std::getenv("DISPLAY")) {
++        Display* xDisplay = XOpenDisplay(nullptr);
++        XWindowAttributes attributes = {};
++        if (!xDisplay || !XGetWindowAttributes(xDisplay, (Window)nativeWindow, &attributes)) {
++            if (xDisplay) XCloseDisplay(xDisplay);
++            fprintf(stderr, "native-gles: cannot inspect the X11 window visual\n");
++            releaseDisplay(ctx->display);
++            return false;
++        }
++        const VisualID visualId = XVisualIDFromVisual(attributes.visual);
++        XCloseDisplay(xDisplay);
++        EGLint count = 0;
++        bool matched = false;
++        if (eglChooseConfig(ctx->display, configAttribs, nullptr, 0, &count) && count > 0) {
++            std::vector<EGLConfig> configs(count);
++            if (eglChooseConfig(ctx->display, configAttribs, configs.data(), count, &count)) {
++                for (EGLint index = 0; index < count; ++index) {
++                    EGLint candidateVisual = 0;
++                    if (eglGetConfigAttrib(ctx->display, configs[index], EGL_NATIVE_VISUAL_ID, &candidateVisual) &&
++                        static_cast<VisualID>(candidateVisual) == visualId) {
++                        ctx->config = configs[index];
++                        matched = true;
++                        break;
++                    }
++                }
++            }
++        }
++        if (!matched) {
++            fprintf(stderr, "native-gles: no EGL config matches the X11 window visual\n");
++            releaseDisplay(ctx->display);
++            return false;
++        }
++    }
++#endif
++
+     if (windowSurface) {
+         EGLNativeWindowType winHandle;
+         static fbdev_window fbdevWin; // fbdev fallback

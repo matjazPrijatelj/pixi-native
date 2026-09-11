@@ -2779,6 +2779,7 @@ type PresentMode = "fifo" | "fifoRelaxed" | "immediate" | "mailbox";
 interface Renderer {
   getPreferredFormat(): GPUTextureFormat;
   getAlphaMode(): 'opaque' | 'premultiplied';
+  getCompositeAlphaMode(): 'opaque' | 'premultiplied' | 'inherit';
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
   swap();

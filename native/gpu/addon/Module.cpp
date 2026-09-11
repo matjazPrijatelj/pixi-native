@@ -302,6 +302,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         Napi::Function constructor = DefineClass(env, "Renderer", {
             InstanceMethod("getPreferredFormat", &Renderer::GetPreferredFormat),
             InstanceMethod("getAlphaMode", &Renderer::GetAlphaMode),
+            InstanceMethod("getCompositeAlphaMode", &Renderer::GetCompositeAlphaMode),
             InstanceMethod("getCurrentTexture", &Renderer::GetCurrentTexture),
             InstanceMethod("getCurrentTextureView", &Renderer::GetCurrentTextureView),
             InstanceMethod("swap", &Renderer::Swap),
@@ -380,15 +381,38 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         gProcs->surfaceGetCapabilities(surface_, context_->adapter.Get(), &capabilities);
         bool alphaSupported = false;
         bool opaqueSupported = false;
+        bool inheritSupported = false;
         for (size_t index = 0; index < capabilities.alphaModeCount; ++index) {
             alphaSupported |= capabilities.alphaModes[index] == alphaMode_;
             opaqueSupported |= capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Opaque;
+            inheritSupported |= capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Inherit;
         }
+#if defined(__linux__)
+        // INHERIT is safe only for an SDL-verified ARGB X11 window with a compositor.
+        // The pixels remain premultiplied; only Vulkan's presentation mode changes.
+        const auto native = window_.Get("native").As<Napi::Object>();
+        const bool transparentWindow = native.Has("transparent") &&
+            native.Get("transparent").ToBoolean().Value();
+        if (alphaMode_ == WGPUCompositeAlphaMode_Premultiplied) {
+            if (!transparentWindow) {
+                alphaSupported = false;
+                std::cerr << "[pixi-native] SDL did not provide a composited ARGB X11 window; "
+                             "check the patched SDL binary and desktop compositor\n";
+            } else if (!alphaSupported && inheritSupported) {
+                alphaMode_ = WGPUCompositeAlphaMode_Inherit;
+                alphaSupported = true;
+            }
+        }
+#else
+        (void)inheritSupported;
+#endif
         if (!alphaSupported && alphaMode_ == WGPUCompositeAlphaMode_Premultiplied &&
             opaqueSupported) {
 #if defined(__linux__)
             alphaMode_ = WGPUCompositeAlphaMode_Opaque;
             alphaFallback_ = true;
+            std::cerr << "[pixi-native] using opaque WebGPU presentation; "
+                         "transparent window/composite alpha mode unavailable\n";
 #endif
         }
         if ((!alphaSupported && !alphaFallback_) || capabilities.formatCount == 0) {
@@ -447,9 +471,14 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     Napi::Value GetAlphaMode(const Napi::CallbackInfo& info) {
         return Napi::String::New(
             info.Env(),
-            alphaMode_ == WGPUCompositeAlphaMode_Premultiplied
+            (alphaMode_ == WGPUCompositeAlphaMode_Premultiplied || alphaMode_ == WGPUCompositeAlphaMode_Inherit)
                 ? "premultiplied"
                 : "opaque");
+    }
+
+    Napi::Value GetCompositeAlphaMode(const Napi::CallbackInfo& info) {
+        return Napi::String::New(info.Env(), alphaMode_ == WGPUCompositeAlphaMode_Inherit
+            ? "inherit" : alphaMode_ == WGPUCompositeAlphaMode_Premultiplied ? "premultiplied" : "opaque");
     }
 
     Napi::Value GetCurrentTexture(const Napi::CallbackInfo& info) {

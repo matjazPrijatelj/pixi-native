@@ -2,6 +2,12 @@
 
 ## 2026-09-11
 
+- Connected Linux transparency to SDL window creation for WebGPU and both Pixi WebGL renderers, using X11/XWayland with verified ARGB visuals and compositor detection.
+- Added reproducible SDL/native-gles patches to match EGL configurations to the native window visual and build the patched Linux bindings during installation.
+- Added Vulkan inherited-alpha presentation for verified transparent X11 windows, explicit opaque fallback diagnostics, and patch application for incremental Dawn builds.
+- Verified SDL transparent/opaque window isolation, EGL alpha values 0/0.5/1, and MSAA resize/presentation on XWayland. TypeScript package builds and C++ syntax checks passed; the full suite has two unrelated failures (missing Linux audio binary and generator version mismatch).
+- Smoke-tested PixiJS 7 and 8 WebGL with Sprite, Graphics, normal Text, ticker animation, and native presentation on XWayland.
+- Native WebGPU rebuild and its presentation verification are pending Matjaz's explicit build confirmation.
 - Restored effective WebGL and WebGL7 antialiasing on SDL/EGL by rendering the
   screen through a shared multisample framebuffer and resolving it before each
   buffer swap, including supported-sample fallback, resize, diagnostics, and

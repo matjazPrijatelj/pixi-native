@@ -76,6 +76,7 @@ export async function createRenderer(
     renderer,
     webgl,
     antialiasSamples,
+    backgroundAlpha,
     webglRenderingContextConstructor,
   } = surface;
   const adapter = new NodeDOMAdapter(
@@ -126,7 +127,7 @@ export async function createRenderer(
     antialias: antialiasSamples !== 0,
     autoStart: false,
     backgroundColor: NATIVE_BACKGROUND_COLOR,
-    backgroundAlpha: windowOptions.backgroundAlpha,
+    backgroundAlpha,
   });
   const modalFrameListeners = new Set<() => void>();
 
@@ -151,6 +152,7 @@ export async function createRenderer(
     size: [canvas.width, canvas.height],
     ...getWindowOptionsDiagnostics(windowOptions, window),
     actualAntialiasSamples: antialiasSamples,
+    actualBackgroundAlpha: backgroundAlpha,
   });
 
   let destroyed = false;

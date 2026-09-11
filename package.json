@@ -44,9 +44,9 @@
     "webgl-node": "1.5.1"
   },
   "devDependencies": {
-    "@pixi-native/core": "workspace:*",
     "@matjash/pixi-native-linux-x64": "workspace:*",
     "@matjash/pixi-native-win32-x64": "workspace:*",
+    "@pixi-native/core": "workspace:*",
     "@pixi-native/pixi7": "workspace:*",
     "@pixi-native/pixi8": "workspace:*",
     "@types/node": "22.15.21",
@@ -62,8 +62,26 @@
   "license": "MIT",
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
+    "packageExtensions": {
+      "@kmamal/sdl@0.11.13": {
+        "dependencies": {
+          "node-addon-api": "8.5.0",
+          "node-gyp": "11.2.0"
+        }
+      },
+      "native-gles@0.6.1": {
+        "dependencies": {
+          "node-addon-api": "8.5.0",
+          "node-gyp": "11.2.0"
+        }
+      }
+    },
     "overrides": {
       "eventemitter3": "5.0.4"
+    },
+    "patchedDependencies": {
+      "@kmamal/sdl@0.11.13": "patches/@kmamal__sdl@0.11.13.patch",
+      "native-gles@0.6.1": "patches/native-gles@0.6.1.patch"
     }
   }
 }
