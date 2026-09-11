@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -18,10 +18,8 @@ const REQUIRED_NATIVE_ARTIFACTS = [
     ? [`native/gpu/dist/${target}/d3dcompiler_47.dll`]
     : []),
   `native/window/dist/${target}/native_window.node`,
-  `native/window/dist/${target}/${target === "win32-x64" ? "SDL3.dll" : "libSDL3.so"}`,
-  ...(target === "win32-x64"
-    ? [`native/audio/dist/${target}/native_audio.node`]
-    : []),
+  `native/window/dist/${target}/${target === "win32-x64" ? "SDL3.dll" : "libSDL3.so.0"}`,
+  `native/audio/dist/${target}/native_audio.node`,
   `native/video/dist/${target}/native_video.node`,
 ];
 const REQUIRED_FFMPEG_ARTIFACTS = [
@@ -45,6 +43,28 @@ if (missing.length > 0) {
   throw new Error(
     `Missing distribution native artifacts:\n- ${missing.join("\n- ")}`,
   );
+}
+
+for (const relativePath of REQUIRED_NATIVE_ARTIFACTS) {
+  if (
+    !relativePath.endsWith(".node") &&
+    !relativePath.endsWith(".dll") &&
+    !relativePath.endsWith(".so.0")
+  ) {
+    continue;
+  }
+  const bytes = await readFile(resolve(root, relativePath));
+  const isExpectedBinary =
+    target === "win32-x64"
+      ? bytes.length >= 2 && bytes[0] === 0x4d && bytes[1] === 0x5a
+      : bytes.length >= 4 &&
+        bytes[0] === 0x7f &&
+        bytes[1] === 0x45 &&
+        bytes[2] === 0x4c &&
+        bytes[3] === 0x46;
+  if (!isExpectedBinary) {
+    throw new Error(`Invalid ${target} native artifact: ${relativePath}`);
+  }
 }
 
 const ffmpegDirectory = resolve(root, ffmpegDistribution.targetDirectory);

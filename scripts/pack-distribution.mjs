@@ -213,9 +213,8 @@ function validatePackedFiles(packageName, files) {
         "index.d.ts",
         `native/gpu/dist/${nativeTarget}/pixi_native_gpu.node`,
         `native/window/dist/${nativeTarget}/native_window.node`,
-        ...(nativeTarget === "win32-x64"
-          ? [`native/audio/dist/${nativeTarget}/native_audio.node`]
-          : []),
+        `native/window/dist/${nativeTarget}/${nativeTarget === "win32-x64" ? "SDL3.dll" : "libSDL3.so.0"}`,
+        `native/audio/dist/${nativeTarget}/native_audio.node`,
         `native/video/dist/${nativeTarget}/native_video.node`,
         ...ffmpegDistribution.packagedFiles.map(
           (filename) => `${ffmpegDistribution.targetDirectory}/${filename}`,

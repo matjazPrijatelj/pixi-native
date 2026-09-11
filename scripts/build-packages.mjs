@@ -16,7 +16,10 @@ for (const packageName of packageNames) {
   });
 }
 
-if (process.platform === "win32") {
+if (
+  (process.platform === "win32" || process.platform === "linux") &&
+  process.arch === "x64"
+) {
   execFileSync(
     process.execPath,
     [resolve(root, "scripts/stage-native-package.mjs")],

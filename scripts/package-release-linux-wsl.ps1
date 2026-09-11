@@ -184,8 +184,19 @@ if env $environment ldd packages/native-linux-x64/native/video/dist/linux-x64/ff
     echo 'Install the missing Linux libraries or pass -LinuxLibraryPath.' >&2
     exit 1
 fi
+for component in gpu window audio video; do
+    development="native/`$component/dist/linux-x64"
+    staged="packages/native-linux-x64/native/`$component/dist/linux-x64"
+    if [ ! -d "`$development" ]; then
+        if [ ! -d "`$staged" ]; then
+            echo "Missing prepared Linux native artifacts: `$staged" >&2
+            exit 1
+        fi
+        mkdir -p "`$development"
+        cp -a "`$staged/." "`$development/"
+    fi
+done
 env $environment corepack pnpm install --frozen-lockfile
-env $environment corepack pnpm native:window:build
 env $environment corepack pnpm pack:dist
 "@
 

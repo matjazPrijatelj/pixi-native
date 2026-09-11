@@ -5,7 +5,6 @@ import {
   mkdtemp,
   readdir,
   readFile,
-  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -14,14 +13,23 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const packageRoot = resolve(root, "packages/native-win32-x64");
+const targetArgument = process.argv
+  .slice(2)
+  .find((argument) => argument.startsWith("--target="));
+const target = targetArgument
+  ? targetArgument.slice("--target=".length)
+  : `${process.platform}-${process.arch}`;
+if (target !== "win32-x64" && target !== "linux-x64") {
+  throw new Error(`Native package staging supports only ${target}.`);
+}
+const packageRoot = resolve(root, `packages/native-${target}`);
 const stagedNativeRoot = resolve(packageRoot, "native");
 const temporaryRoot = resolve(root, ".tmp");
-const target = "win32-x64";
+const sdlRuntime = target === "win32-x64" ? "SDL3.dll" : "libSDL3.so.0";
 const nativeBinaries = [
   `gpu/dist/${target}/pixi_native_gpu.node`,
   `window/dist/${target}/native_window.node`,
-  `window/dist/${target}/SDL3.dll`,
+  `window/dist/${target}/${sdlRuntime}`,
   `audio/dist/${target}/native_audio.node`,
   `video/dist/${target}/native_video.node`,
 ];
@@ -44,7 +52,13 @@ const sources = [
 
 const packagedBinaries = new Map();
 for (const relativePath of nativeBinaries) {
-  const binary = await readFile(resolve(stagedNativeRoot, relativePath));
+  const binary = await readFile(resolve(stagedNativeRoot, relativePath)).catch(
+    (error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    },
+  );
+  if (!binary) continue;
   if (isNativeBinary(binary)) packagedBinaries.set(relativePath, binary);
 }
 
@@ -53,8 +67,6 @@ const temporaryPackageRoot = await mkdtemp(
   resolve(temporaryRoot, "stage-native-package-"),
 );
 const temporaryNativeRoot = resolve(temporaryPackageRoot, "native");
-const backupNativeRoot = resolve(temporaryPackageRoot, "previous-native");
-let previousNativeMoved = false;
 try {
   for (const [source, destination] of sources) {
     const sourcePath = resolve(root, source);
@@ -70,7 +82,7 @@ try {
     const packagedBinary = packagedBinaries.get(relativePath);
     if (!packagedBinary) {
       throw new Error(
-        `Native artifact is not a Windows binary: ${relativePath}. Run git lfs pull or rebuild it.`,
+        `Native artifact is not a ${target} binary: ${relativePath}. Run git lfs pull or rebuild it.`,
       );
     }
     await writeFile(destinationPath, packagedBinary);
@@ -78,22 +90,13 @@ try {
   const stagedFingerprint = await fingerprintDirectory(stagedNativeRoot);
   const candidateFingerprint = await fingerprintDirectory(temporaryNativeRoot);
   if (stagedFingerprint !== candidateFingerprint) {
-    await rename(stagedNativeRoot, backupNativeRoot);
-    previousNativeMoved = true;
-    try {
-      await rename(temporaryNativeRoot, stagedNativeRoot);
-    } catch (error) {
-      await rename(backupNativeRoot, stagedNativeRoot);
-      previousNativeMoved = false;
-      throw error;
+    await syncDirectory(temporaryNativeRoot, stagedNativeRoot);
+    const synchronizedFingerprint = await fingerprintDirectory(stagedNativeRoot);
+    if (synchronizedFingerprint !== candidateFingerprint) {
+      throw new Error(`Could not synchronize the ${target} native package.`);
     }
-    previousNativeMoved = false;
-    await rm(backupNativeRoot, { recursive: true, force: true });
   }
 } finally {
-  if (previousNativeMoved) {
-    await rename(backupNativeRoot, stagedNativeRoot).catch(() => undefined);
-  }
   await rm(temporaryPackageRoot, { recursive: true, force: true });
 }
 await cp(
@@ -102,7 +105,48 @@ await cp(
 );
 
 function isNativeBinary(binary) {
-  return binary.length >= 2 && binary[0] === 0x4d && binary[1] === 0x5a;
+  if (target === "win32-x64") {
+    return binary.length >= 2 && binary[0] === 0x4d && binary[1] === 0x5a;
+  }
+  return (
+    binary.length >= 4 &&
+    binary[0] === 0x7f &&
+    binary[1] === 0x45 &&
+    binary[2] === 0x4c &&
+    binary[3] === 0x46
+  );
+}
+
+/** Synchronizes files in place so loaded native package directories need not move. */
+async function syncDirectory(source, destination) {
+  await mkdir(destination, { recursive: true });
+  const sourceEntries = await readdir(source, { withFileTypes: true });
+  const sourceNames = new Set(sourceEntries.map((entry) => entry.name));
+  const destinationEntries = await readdir(destination, { withFileTypes: true });
+  for (const entry of destinationEntries) {
+    if (!sourceNames.has(entry.name)) {
+      await rm(resolve(destination, entry.name), { recursive: true, force: true });
+    }
+  }
+  for (const entry of sourceEntries) {
+    const sourcePath = resolve(source, entry.name);
+    const destinationPath = resolve(destination, entry.name);
+    if (entry.isDirectory()) {
+      await syncDirectory(sourcePath, destinationPath);
+      continue;
+    }
+    if (!entry.isFile()) {
+      throw new Error(`Unsupported staged native entry: ${entry.name}`);
+    }
+    const existing = await readFile(destinationPath).catch((error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    const candidate = await readFile(sourcePath);
+    if (!existing?.equals(candidate)) {
+      await writeFile(destinationPath, candidate);
+    }
+  }
 }
 
 /** Hashes a staged tree so an identical, possibly loaded Windows tree is left untouched. */

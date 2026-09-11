@@ -349,10 +349,14 @@ export class Howl implements NativeAudioEventTarget {
       throw new RangeError("Fade duration must be non-negative and finite");
     }
     this.forSounds(id, (sound, soundId) => {
-      sound.volume = nativeAudioEngine.currentVolume(soundId) ?? sound.volume;
+      const currentVolume =
+        nativeAudioEngine.currentVolume(soundId) ?? sound.volume;
+      const fadeFrom =
+        sound.fadeTarget === undefined ? normalizedFrom : currentVolume;
+      sound.volume = currentVolume;
       sound.fadeTarget = normalizedTo;
       nativeAudioEngine.command(this.ownerId, "fade", soundId, {
-        from: normalizedFrom,
+        from: fadeFrom,
         to: normalizedTo,
         durationMs,
       });

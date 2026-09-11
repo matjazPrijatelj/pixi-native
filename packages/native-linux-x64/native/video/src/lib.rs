@@ -40,7 +40,6 @@ pub struct VideoFrame {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DecoderBackend {
-    #[cfg(target_os = "windows")]
     D3d11va,
     Vaapi,
     Cpu,
@@ -49,7 +48,6 @@ enum DecoderBackend {
 impl DecoderBackend {
     fn name(self) -> &'static str {
         match self {
-            #[cfg(target_os = "windows")]
             Self::D3d11va => "D3D11VA",
             Self::Vaapi => "VA-API",
             Self::Cpu => "CPU",
@@ -504,7 +502,6 @@ fn ffmpeg_args(request: &FfmpegRequest, backend: DecoderBackend) -> Vec<String> 
     ];
 
     match backend {
-        #[cfg(target_os = "windows")]
         DecoderBackend::D3d11va => {
             args.extend(["-hwaccel".to_string(), "d3d11va".to_string()]);
         }
@@ -538,11 +535,28 @@ fn ffmpeg_args(request: &FfmpegRequest, backend: DecoderBackend) -> Vec<String> 
         "fps={},scale={}:{}:flags=fast_bilinear:in_range=auto:out_range=tv:in_color_matrix=auto:out_color_matrix=bt709,format=nv12",
         request.fps, request.width, request.height
     );
-    let filter = if backend == DecoderBackend::Vaapi {
-        format!("hwdownload,format=nv12,{scale}")
-    } else {
-        scale
+    let filter = match backend {
+        DecoderBackend::Vaapi => format!("hwdownload,format=nv12,{scale}"),
+        DecoderBackend::D3d11va => scale,
+        // Keep the CPU fallback independent from the color-negotiation path
+        // used after VA-API download. Some FFmpeg builds fail to initialize
+        // auto_scale when that path is reused for software yuv420p frames.
+        DecoderBackend::Cpu => format!(
+            "fps={},scale={}:{}:flags=fast_bilinear,format=nv12",
+            request.fps, request.width, request.height
+        ),
     };
+
+    if backend == DecoderBackend::Cpu {
+        // The bundled/minimal FFmpeg builds can fail filter negotiation when
+        // multiple filter workers initialize the software graph concurrently.
+        args.extend([
+            "-filter_threads".to_string(),
+            "1".to_string(),
+            "-filter_complex_threads".to_string(),
+            "1".to_string(),
+        ]);
+    }
 
     args.extend([
         "-vf".to_string(),
@@ -818,6 +832,19 @@ mod tests {
         let pipe_index = args.iter().position(|arg| arg == "pipe:1").unwrap();
         assert!(fflags_index < input_index);
         assert!(threads_index > input_index && threads_index < pipe_index);
+    }
+
+    #[test]
+    fn builds_serial_software_fallback_filter() {
+        let args = ffmpeg_args(&request(30.0, 0.0), DecoderBackend::Cpu);
+        assert!(args.windows(2).any(|pair| pair == ["-filter_threads", "1"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-filter_complex_threads", "1"]));
+        assert!(args
+            .iter()
+            .any(|arg| arg == "fps=30,scale=1280:720:flags=fast_bilinear,format=nv12"));
+        assert!(!args.iter().any(|arg| arg.contains("in_color_matrix=auto")));
     }
 
     #[test]

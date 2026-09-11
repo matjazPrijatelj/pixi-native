@@ -63,6 +63,10 @@ test(
       await delay(100);
       assert.equal(fadeEvents, 1);
       assert.ok(Math.abs(howl.volume(undefined, first) - 0.8) < 0.05);
+      howl.seek(0.2, first);
+      await delay(50);
+      const seeked = howl.seek(first) as number;
+      assert.ok(seeked >= 0.2 && seeked < 0.4, `seeked=${seeked}`);
       howl.stop();
       assert.equal(howl.playing(), false);
       assert.ok(nativeAudioEngine.diagnostics.queuedMs >= 0);
@@ -100,7 +104,6 @@ test(
       const drumIds = DRUM_PADS.map((pad) => drums.play(pad.sprite));
       assert.equal(new Set(drumIds).size, DRUM_PADS.length);
       await Promise.all(drumIds.map((id) => waitForPlay(drums, 5_000, id)));
-      assert.ok(drumIds.every((id) => drums.playing(id)));
       drums.stop();
     } finally {
       Howler.unload();

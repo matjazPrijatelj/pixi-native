@@ -6,7 +6,7 @@ WebGL rendering, window input, Canvas2D, audio, video, and file access. Display
 applications do not need a browser, WebView, or CEF process.
 
 > [!NOTE]
-> Version 0.1.2 is a pre-release. The API and native package layout may change
+> Version 0.2.0 is a pre-release. The API and native package layout may change
 > before 1.0.
 
 ![Pixi Native architecture and supported platforms](pixi-hero.png)
@@ -40,7 +40,7 @@ Repository source paths and unexported `dist/` files are internal.
 
 ## Support matrix
 
-Version 0.1.2 targets PixiJS 8.20.0 and PixiJS 7.4.3.
+Version 0.2.0 targets PixiJS 8.20.0 and PixiJS 7.4.3.
 
 | Platform       | PixiJS 8 WebGPU | PixiJS 8 WebGL | PixiJS 7 WebGL | Audio         | Video                  |
 | -------------- | --------------- | -------------- | -------------- | ------------- | ---------------------- |
@@ -50,6 +50,10 @@ Version 0.1.2 targets PixiJS 8.20.0 and PixiJS 7.4.3.
 Both platforms use explicit renderer selection and fail when the requested
 backend or native package is unavailable. The runtime does not switch to a
 browser renderer or another backend.
+
+Version 0.2.0 removes the exported `setNativeWindowTransparent()` helper.
+Select transparency with the `transparent` renderer/application option so the
+SDL3 window and requested renderer are configured together.
 
 ## Install
 

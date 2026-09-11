@@ -10,6 +10,25 @@
   opaque presentation on Intel/Mesa.
 - Fixed Linux WebGPU transparency by preserving the requested composite alpha
   mode when Dawn creates its Vulkan swapchain instead of forcing opaque alpha.
+- Restored ignored Linux native `dist` directories from the prepared platform
+  package inside the isolated WSL checkout, allowing package staging to run
+  without rebuilding the GPU, window, audio, or video addons.
+- Stopped the WSL release packager from rebuilding the SDL3 window addon; it
+  now validates and packages the prepared Linux artifacts without requiring a
+  Rust or CMake toolchain.
+- Prepared the SDL3 runtime line for public npm release `0.2.0` and the
+  independently versioned generator for `0.1.6`. Both platform packages now
+  stage GPU, SDL3 window, miniaudio, and video payloads through the same
+  target-aware release path, including the Linux `libSDL3.so.0` runtime.
+- Strengthened release validation to reject missing or non-native platform
+  artifacts and require miniaudio plus SDL3 in both Windows and Linux tarballs.
+- Fixed repeated miniaudio fades to continue from the live mixer volume and
+  synchronized the advancing native sound clock with seek and loop positions,
+  keeping audible playback time current while JavaScript is blocked.
+- Removed a redundant drum-kit timing assertion that required short one-shot
+  samples to remain active after all eight independent play events arrived.
+- Documented the `0.2.0` removal of `setNativeWindowTransparent()`; callers now
+  select transparency through the renderer/application `transparent` option.
 - Added an origin-relative Linux ELF runpath to the SDL3 window addon so it
   loads the packaged sibling `libSDL3.so.0` without a system SDL installation.
 - Gated the Win32 native-handle decoder in the SDL3 window addon so the native

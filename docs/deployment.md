@@ -68,8 +68,8 @@ pnpm pack:generator
 This produces an archive matching the generator's independent package version
 and its package-specific release manifest. It checks the packed CLI version and
 verifies representative PixiJS 7 and 8 projects in fresh temporary consumers.
-The current generator release is `0.1.4`; both generated Pixi majors target
-runtime `0.1.2`.
+The current generator release is `0.1.6`; both generated Pixi majors target
+runtime `0.2.0`.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
 checkout after the Windows archive exists:
@@ -85,7 +85,8 @@ artifacts, installs Linux dependencies, and runs the same package validation.
 It copies the Linux archive and manifest back to `artifacts/` and requires the
 Linux-built facade to match the Windows facade byte for byte. If FFmpeg reports
 missing shared libraries, install them in WSL or pass their directory with
-`-LinuxLibraryPath`. The helper never invokes `native:build`.
+`-LinuxLibraryPath`. The helper never invokes native build commands and does
+not require a Rust or CMake toolchain.
 
 Do not copy the development checkout's pnpm-linked `node_modules` into a
 release. Create a fresh production installation so JavaScript, `.node` addons,
@@ -101,17 +102,17 @@ both release tags must point to the same final commit:
 git diff --cached --check
 git diff --cached --stat
 git commit -m "release(npm): publish @matjash packages"
-git tag -a v0.1.2 -m "pixi-native 0.1.2"
-git tag -a create-pixi-native-v0.1.4 -m "create-pixi-native 0.1.4"
+git tag -a v0.2.0 -m "pixi-native 0.2.0"
+git tag -a create-pixi-native-v0.1.6 -m "create-pixi-native 0.1.6"
 git push origin main
-git push origin v0.1.2
-git push origin create-pixi-native-v0.1.4
+git push origin v0.2.0
+git push origin create-pixi-native-v0.1.6
 ```
 
 ## Publishing
 
 Sign in as the `matjash` npm user with 2FA enabled. The runtime publisher
-requires a clean `v0.1.2` release commit, both platform manifests, all three
+requires a clean `v0.2.0` release commit, both platform manifests, all three
 runtime archives, and matching checksums. It uses an isolated cache, the
 standard npm user credentials, and an explicit public npm registry:
 
@@ -154,8 +155,8 @@ packing:
 - the generator version in `packages/create-pixi-native/README.md`
 - `HISTORY.md`
 
-For the current patch, every generator version reference is `0.1.4`; the
-separate `PIXI_NATIVE_VERSION` is `0.1.2`.
+For the current release, every generator version reference is `0.1.6`; the
+separate `PIXI_NATIVE_VERSION` is `0.2.0`.
 
 Pack and validate the generator first:
 

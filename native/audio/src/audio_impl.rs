@@ -137,6 +137,9 @@ struct Voice {
     end_notifier: Option<EndNotifier>,
     source: VoiceSource,
     offset_seconds: f64,
+    duration_seconds: Option<f64>,
+    timeline_seconds: f64,
+    timeline_updated_at: Instant,
     volume: f32,
     muted: bool,
     looped: bool,
@@ -158,6 +161,23 @@ impl Drop for Voice {
         if let VoiceSource::Streaming { control, .. } = &self.source {
             control.stop();
         }
+    }
+}
+
+impl Voice {
+    fn update_static_timeline(&mut self, now: Instant) {
+        if self.streaming || !self.playing {
+            self.timeline_updated_at = now;
+            return;
+        }
+        self.timeline_seconds +=
+            now.duration_since(self.timeline_updated_at).as_secs_f64() * self.playback_rate;
+        if self.looped {
+            if let Some(duration_seconds) = self.duration_seconds {
+                self.timeline_seconds %= duration_seconds;
+            }
+        }
+        self.timeline_updated_at = now;
     }
 }
 
@@ -278,9 +298,7 @@ impl NativeAudioEngine {
         validate_voice_options(&options)?;
         let id = options.id;
         let owner_id = options.owner_id;
-        let stream_control = options
-            .streaming
-            .then(|| Arc::new(StreamingControl::new()));
+        let stream_control = options.streaming.then(|| Arc::new(StreamingControl::new()));
         let snapshot = Arc::new(VoiceSnapshot {
             owner_id,
             time_bits: AtomicU64::new(options.offset_seconds.to_bits()),
@@ -292,9 +310,9 @@ impl NativeAudioEngine {
         let mut stream_sender = None;
         let source = if let Some(control) = &stream_control {
             let (mut sender, mut receiver) =
-                PcmRingBuffer::new_f32(STREAM_BUFFER_FRAMES, CHANNELS as u32).map_err(
-                    |error| Error::from_reason(format!("Cannot create audio ring buffer: {error}")),
-                )?;
+                PcmRingBuffer::new_f32(STREAM_BUFFER_FRAMES, CHANNELS as u32).map_err(|error| {
+                    Error::from_reason(format!("Cannot create audio ring buffer: {error}"))
+                })?;
             sender.set_sample_rate(SampleRate::Sr48000);
             receiver.set_sample_rate(SampleRate::Sr48000);
             stream_sender = Some(sender);
@@ -312,6 +330,9 @@ impl NativeAudioEngine {
             end_notifier: None,
             source,
             offset_seconds: options.offset_seconds,
+            duration_seconds: options.duration_seconds,
+            timeline_seconds: 0.0,
+            timeline_updated_at: Instant::now(),
             volume: options.volume as f32,
             muted: options.muted,
             looped: options.loop_ && !options.streaming,
@@ -421,7 +442,8 @@ impl NativeAudioEngine {
     #[napi]
     pub fn unload_owner(&self, owner_id: u32) {
         self.remove_snapshots(owner_id, None);
-        self.state.push_command(EngineCommand::RemoveOwner(owner_id));
+        self.state
+            .push_command(EngineCommand::RemoveOwner(owner_id));
     }
 
     #[napi]
@@ -674,6 +696,7 @@ impl EngineRuntime {
             sound
                 .play_sound()
                 .map_err(|error| format!("Cannot start miniaudio sound: {error}"))?;
+            voice.timeline_updated_at = Instant::now();
             voice.play_announced = true;
         }
         voice.sound = Some(sound);
@@ -718,6 +741,7 @@ impl EngineRuntime {
     ) {
         match options.command.as_str() {
             "play" => {
+                voice.timeline_updated_at = Instant::now();
                 voice.playing = true;
                 voice.snapshot.playing.store(true, Ordering::Release);
                 if let Some(sound) = &voice.sound {
@@ -726,6 +750,7 @@ impl EngineRuntime {
                 state.queue_event(voice.owner_id, "play", Some(id), None, None);
             }
             "pause" => {
+                voice.update_static_timeline(Instant::now());
                 voice.playing = false;
                 voice.snapshot.playing.store(false, Ordering::Release);
                 if let Some(sound) = &voice.sound {
@@ -765,6 +790,8 @@ impl EngineRuntime {
                     if let Some(sound) = &voice.sound {
                         let _ = sound.seek_to_second(seconds as f32);
                     }
+                    voice.timeline_seconds = seconds;
+                    voice.timeline_updated_at = Instant::now();
                 }
                 voice.snapshot.time_bits.store(
                     (voice.offset_seconds + seconds).to_bits(),
@@ -792,9 +819,11 @@ impl EngineRuntime {
     fn poll_voices(&mut self, state: &SharedState) {
         let mut completed = Vec::new();
         for (id, voice) in &mut self.voices {
-            let Some(sound) = &voice.sound else {
+            if voice.sound.is_none() {
                 continue;
-            };
+            }
+            voice.update_static_timeline(Instant::now());
+            let sound = voice.sound.as_ref().expect("sound was checked above");
             if let VoiceSource::Streaming { receiver, control } = &voice.source {
                 let queued = receiver.available_read() as usize;
                 voice
@@ -824,13 +853,12 @@ impl EngineRuntime {
                 }
             }
 
-            let time = if voice.streaming {
-                voice.offset_seconds
-                    + sound.time_millis() as f64 * voice.playback_rate / 1000.0
+            let elapsed_seconds = if voice.streaming {
+                sound.time_millis() as f64 * voice.playback_rate / 1000.0
             } else {
-                voice.offset_seconds
-                    + sound.cursor_seconds().map_or(0.0, |seconds| seconds as f64)
+                voice.timeline_seconds
             };
+            let time = voice.offset_seconds + elapsed_seconds;
             voice
                 .snapshot
                 .time_bits
@@ -844,7 +872,11 @@ impl EngineRuntime {
                 .snapshot
                 .volume_bits
                 .store(current_volume.to_bits(), Ordering::Release);
-            if voice.fade.as_ref().is_some_and(|fade| Instant::now() >= fade.ends_at) {
+            if voice
+                .fade
+                .as_ref()
+                .is_some_and(|fade| Instant::now() >= fade.ends_at)
+            {
                 let fade = voice.fade.take().expect("fade was checked above");
                 voice.volume = fade.to;
                 state.queue_event(
@@ -855,11 +887,7 @@ impl EngineRuntime {
                     Some(fade.version),
                 );
             }
-            if voice
-                .end_notifier
-                .as_ref()
-                .is_some_and(EndNotifier::take)
-            {
+            if voice.end_notifier.as_ref().is_some_and(EndNotifier::take) {
                 state.queue_event(voice.owner_id, "end", Some(*id), None, None);
                 if !voice.looped {
                     completed.push(*id);
@@ -1090,7 +1118,10 @@ fn ffmpeg_command(
         "f32le",
         "pipe:1",
     ]);
-    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -1144,14 +1175,23 @@ fn cache_key(options: &NativeVoiceOptions) -> String {
 
 fn validate_voice_options(options: &NativeVoiceOptions) -> Result<()> {
     if !options.offset_seconds.is_finite() || options.offset_seconds < 0.0 {
-        return Err(Error::from_reason("Audio offset must be non-negative and finite"));
+        return Err(Error::from_reason(
+            "Audio offset must be non-negative and finite",
+        ));
     }
-    if options.duration_seconds.is_some_and(|value| !value.is_finite() || value <= 0.0) {
-        return Err(Error::from_reason("Audio duration must be positive and finite"));
+    if options
+        .duration_seconds
+        .is_some_and(|value| !value.is_finite() || value <= 0.0)
+    {
+        return Err(Error::from_reason(
+            "Audio duration must be positive and finite",
+        ));
     }
     required_unit_value(Some(options.volume), "volume")?;
     if !options.playback_rate.is_finite() || options.playback_rate <= 0.0 {
-        return Err(Error::from_reason("Audio playback rate must be positive and finite"));
+        return Err(Error::from_reason(
+            "Audio playback rate must be positive and finite",
+        ));
     }
     Ok(())
 }
@@ -1159,7 +1199,9 @@ fn validate_voice_options(options: &NativeVoiceOptions) -> Result<()> {
 fn required_unit_value(value: Option<f64>, name: &str) -> Result<f64> {
     let value = value.ok_or_else(|| Error::from_reason(format!("Missing audio {name}")))?;
     if !value.is_finite() || !(0.0..=1.0).contains(&value) {
-        return Err(Error::from_reason(format!("Audio {name} must be between 0 and 1")));
+        return Err(Error::from_reason(format!(
+            "Audio {name} must be between 0 and 1"
+        )));
     }
     Ok(value)
 }

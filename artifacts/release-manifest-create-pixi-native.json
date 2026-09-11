@@ -1,10 +1,10 @@
 {
-  "version": "0.1.5",
-  "sourceFingerprint": "84cd202117aed10fac5b4b230f2e96364d0e5fe8fb5bfc86f0ca370fbe40c274",
+  "version": "0.1.6",
+  "sourceFingerprint": "6f2e98c86a0f5ae543fe70f04fe0a9337a8901d098d27bb4c0efdec6604fe93b",
   "archive": {
-    "filename": "matjash-create-pixi-native-0.1.5.tgz",
+    "filename": "matjash-create-pixi-native-0.1.6.tgz",
     "packageName": "@matjash/create-pixi-native",
-    "version": "0.1.5",
-    "sha256": "947c784b0c3d61c6229461b3c30c6811a532e0acf8391c5e47d5afe856697117"
+    "version": "0.1.6",
+    "sha256": "0be4816d26177796ab26c24d9d6a5d7c9059b8144da3ae816c6904041035ed78"
   }
 }
