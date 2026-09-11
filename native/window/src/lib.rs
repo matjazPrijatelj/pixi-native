@@ -86,6 +86,7 @@ fn pointer_buffer(pointer: usize) -> Buffer {
     Buffer::from(pointer.to_ne_bytes().to_vec())
 }
 
+#[cfg(windows)]
 fn hwnd_from_native_data(native_data: &[u8]) -> Result<HWND> {
     if native_data.len() < std::mem::size_of::<usize>() {
         return Err(Error::from_reason("native window data is invalid"));

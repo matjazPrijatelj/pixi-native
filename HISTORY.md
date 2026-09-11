@@ -2,6 +2,10 @@
 
 ## 2026-09-11
 
+- Added an origin-relative Linux ELF runpath to the SDL3 window addon so it
+  loads the packaged sibling `libSDL3.so.0` without a system SDL installation.
+- Gated the Win32 native-handle decoder in the SDL3 window addon so the native
+  window crate compiles on Linux without exposing the Windows-only `HWND` type.
 - Restored the previous SDL keyboard names after the SDL3 migration, including
   lowercase letters and directional keys. Restored WebGPU GSAP animation during
   Windows modal move/resize and added Rain sound mute/unmute parity to PixiJS 7.

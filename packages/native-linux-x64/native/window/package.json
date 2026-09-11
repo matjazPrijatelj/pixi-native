@@ -1,7 +1,7 @@
 {
-    "name": "@pixi-native/native-window",
-    "version": "0.1.0",
-    "private": true,
-    "main": "./src/index.js",
-    "types": "./src/index.d.ts"
+  "name": "@pixi-native/native-window",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts"
 }
