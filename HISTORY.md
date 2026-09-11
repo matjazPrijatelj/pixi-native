@@ -778,3 +778,5 @@
   local `file:` URLs to filesystem paths.
 - Fixed PixiJS 7 external bitmap-font loading by passing the atlas as a valid
   `file:` URL to `Texture.from()`.
+- Updated generator documentation to use the `pnpm create @matjash/pixi-native`
+  command alias.

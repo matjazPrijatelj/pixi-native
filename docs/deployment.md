@@ -33,7 +33,7 @@ configuration or credentials.
 Create a starter project:
 
 ```sh
-pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm create @matjash/pixi-native my-display --pixi 8 --backend webgpu
 ```
 
 The root import and `/pixi8` use PixiJS 8. `/pixi7` uses PixiJS 7. Run displays

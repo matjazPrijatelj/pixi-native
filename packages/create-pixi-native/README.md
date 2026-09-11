@@ -3,7 +3,7 @@
 Create a minimal TypeScript application for PixiJS 7 or 8 on Pixi Native.
 
 ```sh
-pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm create @matjash/pixi-native my-display --pixi 8 --backend webgpu
 cd my-display
 pnpm install
 pnpm dev
@@ -17,7 +17,7 @@ The generated hero background uses the Pixi ticker by default. Pass
 include GSAP as an application dependency:
 
 ```sh
-pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu --animation gsap
+pnpm create @matjash/pixi-native my-display --pixi 8 --backend webgpu --animation gsap
 ```
 
 The generated project uses Node.js 24 watch mode during development, TypeScript

@@ -79,7 +79,7 @@ The quickboot package creates a small TypeScript project with Sprite, Graphics,
 Text, ticker animation, resize handling, and managed teardown:
 
 ```sh
-pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm create @matjash/pixi-native my-display --pixi 8 --backend webgpu
 cd my-display
 pnpm install
 pnpm dev

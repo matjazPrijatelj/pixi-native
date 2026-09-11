@@ -25,7 +25,7 @@ process.
 Create a PixiJS 8 WebGPU starter:
 
 ```sh
-pnpm dlx @matjash/create-pixi-native my-display --pixi 8 --backend webgpu
+pnpm create @matjash/pixi-native my-display --pixi 8 --backend webgpu
 cd my-display
 pnpm install
 pnpm dev
