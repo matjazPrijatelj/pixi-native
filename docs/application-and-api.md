@@ -64,8 +64,8 @@ try another backend and does not create a browser renderer.
 
 | Platform       | WebGPU backend | WebGL backend  |
 | -------------- | -------------- | -------------- |
-| Windows 11 x64 | D3D12          | GLFW/OpenGL ES |
-| Linux x64      | Vulkan         | GLFW/OpenGL ES |
+| Windows 11 x64 | D3D12          | SDL/ANGLE GLES |
+| Linux x64      | Vulkan         | SDL/EGL GLES   |
 
 ## Manual renderer ownership
 

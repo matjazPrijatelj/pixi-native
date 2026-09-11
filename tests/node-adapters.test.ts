@@ -11,9 +11,12 @@ import {
 import { NodeGPUCanvas } from "@pixi-native/core/canvas/NodeGPUCanvas.js";
 import { NodeCanvas } from "@pixi-native/core/canvas/NodeCanvas.js";
 import { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
-import { NodeGLWindow } from "@pixi-native/core/renderers/webgl/NodeGLWindow.js";
 import { copyRgbaRowsFlippedY } from "@pixi-native/core/canvas/rgbaUpload.js";
 import { sliceWebGlBufferData } from "@pixi-native/core/renderers/webgl/webglBufferUpload.js";
+import {
+  installWebGlImageUploadAdapter,
+  type WebGlImageUploadContext,
+} from "@pixi-native/core/renderers/webgl/webglImageUpload.js";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -24,10 +27,6 @@ import {
   warnAntialiasSampleFallback,
 } from "@pixi-native/core/runtime/windowOptions.js";
 import { setNativeWindowTransparent } from "@pixi-native/core/runtime/ModalFrameController.js";
-import {
-  assertGlfwTransparency,
-  requestGlfwTransparency,
-} from "@pixi-native/core/renderers/webgl/glfwTransparency.js";
 
 test("native window options normalize transparency and desktop position", () => {
   assert.deepEqual(resolveNodeRendererOptions({}, "Default title", "win32"), {
@@ -248,35 +247,6 @@ test("Pixi 8 background RGB is premultiplied for transparent presentation", () =
   ]);
 });
 
-test("GLFW transparency is requested and verified", () => {
-  const hints: Array<{ hint: number; value: number }> = [];
-  let transparentFramebuffer = 1;
-  const glfw = {
-    TRUE: 1,
-    FALSE: 0,
-    ALPHA_BITS: 0x00021004,
-    TRANSPARENT_FRAMEBUFFER: 0x0002000a,
-    windowHint(hint: number, value: number) {
-      hints.push({ hint, value });
-    },
-    getWindowAttrib() {
-      return transparentFramebuffer;
-    },
-  };
-
-  requestGlfwTransparency(glfw, true);
-  assert.deepEqual(hints, [
-    { hint: 0x0002000a, value: 1 },
-    { hint: 0x00021004, value: 8 },
-  ]);
-  assert.doesNotThrow(() => assertGlfwTransparency(glfw, {}, true));
-  transparentFramebuffer = 0;
-  assert.throws(
-    () => assertGlfwTransparency(glfw, {}, true),
-    /could not create a transparent framebuffer/,
-  );
-});
-
 test("WebGL buffer upload copies are compact and independent", () => {
   const data = new Float32Array([0, 1, 2, 3, 4]);
   const sliced = sliceWebGlBufferData(data, 1, 3);
@@ -288,6 +258,95 @@ test("WebGL buffer upload copies are compact and independent", () => {
 
   data[1] = 99;
   assert.deepEqual([...sliced], [1, 2, 3]);
+});
+
+test("SDL WebGL adapter preserves normalized Canvas row orientation", () => {
+  const calls: unknown[][] = [];
+  const gl = {
+    RGBA: 0x1908,
+    UNSIGNED_BYTE: 0x1401,
+    UNPACK_FLIP_Y_WEBGL: 0x9240,
+    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
+    getParameter(parameter: number) {
+      return parameter === this.UNPACK_PREMULTIPLY_ALPHA_WEBGL;
+    },
+    texImage2D(...args: unknown[]) {
+      calls.push(args);
+    },
+    texSubImage2D(...args: unknown[]) {
+      calls.push(args);
+    },
+  } satisfies WebGlImageUploadContext;
+  installWebGlImageUploadAdapter(gl);
+  const normalizedPixels = new Uint8Array([
+    10, 20, 30, 255,
+    40, 50, 60, 255,
+  ]);
+  const source = {
+    width: 1,
+    height: 2,
+    getPremultipliedRgbaPixels: () => normalizedPixels,
+  };
+
+  gl.texImage2D(1, 0, gl.RGBA, 1, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.texSubImage2D(1, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+
+  assert.deepEqual(calls[0][8], normalizedPixels);
+  assert.deepEqual(calls[1][8], normalizedPixels);
+});
+
+test("SDL WebGL adapter flips raw native image rows exactly once", () => {
+  const calls: unknown[][] = [];
+  const gl = {
+    RGBA: 0x1908,
+    UNSIGNED_BYTE: 0x1401,
+    UNPACK_FLIP_Y_WEBGL: 0x9240,
+    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
+    getParameter: () => false,
+    texImage2D(...args: unknown[]) {
+      calls.push(args);
+    },
+    texSubImage2D(...args: unknown[]) {
+      calls.push(args);
+    },
+  } satisfies WebGlImageUploadContext;
+  installWebGlImageUploadAdapter(gl);
+  const source = {
+    width: 1,
+    height: 2,
+    data: new Uint8Array([
+      10, 20, 30, 255,
+      40, 50, 60, 255,
+    ]),
+  };
+  const expected = [40, 50, 60, 255, 10, 20, 30, 255];
+
+  gl.texImage2D(1, 0, gl.RGBA, 1, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.texSubImage2D(1, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+
+  assert.deepEqual(Array.from(calls[0][8] as Uint8Array), expected);
+  assert.deepEqual(Array.from(calls[1][8] as Uint8Array), expected);
+});
+
+test("SDL WebGL adapter preserves typed-array texture uploads", () => {
+  let received: unknown[] | undefined;
+  const gl = {
+    RGBA: 0x1908,
+    UNSIGNED_BYTE: 0x1401,
+    UNPACK_FLIP_Y_WEBGL: 0x9240,
+    UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
+    getParameter: () => false,
+    texImage2D(...args: unknown[]) {
+      received = args;
+    },
+    texSubImage2D() {},
+  } satisfies WebGlImageUploadContext;
+  installWebGlImageUploadAdapter(gl);
+  const pixels = new Uint8Array([1, 2, 3, 4]);
+
+  gl.texImage2D(1, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+  assert.equal(received?.[8], pixels);
 });
 
 test("NodeGLCanvas exposes WebGL and resizes the drawing buffer", () => {
@@ -325,99 +384,6 @@ test("NodeGLCanvas delegates native drawing-buffer resizing", () => {
   assert.deepEqual(resized, [800, 600]);
   assert.equal(canvas.width, 800);
   assert.equal(canvas.height, 600);
-});
-
-test("NodeGLWindow serializes its handle and controls window state", () => {
-  let drawCalls = 0;
-  let swapCalls = 0;
-  let maximizeCalls = 0;
-  let minimizeCalls = 0;
-  let restoreCalls = 0;
-  let destroyed = false;
-  let position = { x: 10, y: 20 };
-  const glfwWindow = {
-    framebufferSize: { width: 1, height: 1 },
-    width: 1,
-    height: 1,
-    get x() {
-      return position.x;
-    },
-    get y() {
-      return position.y;
-    },
-    get pos() {
-      return position;
-    },
-    set pos(value: { x: number; y: number }) {
-      position = value;
-    },
-    shouldClose: false,
-    currentContext: {},
-    platformWindow: 0x010203040506,
-    getCurrentMonitor: () => ({ rate: 60 }),
-    makeCurrent() {},
-    swapBuffers() {
-      swapCalls++;
-    },
-    drawWindow() {
-      drawCalls++;
-    },
-    iconify() {
-      minimizeCalls++;
-    },
-    restore() {
-      restoreCalls++;
-    },
-    destroy() {
-      destroyed = true;
-    },
-    on(event: string, listener: (event: Record<string, number>) => void) {
-      if (event === "wheel") {
-        listener({ x: 4, y: 5, deltaX: 2, deltaY: -3 });
-      }
-    },
-  };
-  const window = new NodeGLWindow(glfwWindow, {
-    pollEvents() {},
-    maximize() {
-      maximizeCalls++;
-    },
-  });
-
-  assert.deepEqual(
-    Array.from(window.nativeWindowData),
-    [0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0, 0],
-  );
-  window.swapBuffers();
-  assert.equal(swapCalls, 1);
-  assert.equal(drawCalls, 0);
-  let wheelEvent: unknown;
-  window.on("mouseWheel", (event) => {
-    wheelEvent = event;
-  });
-  assert.deepEqual(wheelEvent, {
-    x: 4,
-    y: 5,
-    dx: 2,
-    dy: -3,
-    flipped: false,
-  });
-  window.setPosition(-200, 300);
-  assert.deepEqual(position, { x: -200, y: 300 });
-  assert.equal(window.x, -200);
-  assert.equal(window.y, 300);
-  window.minimize();
-  window.maximize();
-  window.restore();
-  assert.equal(minimizeCalls, 1);
-  assert.equal(maximizeCalls, 1);
-  assert.equal(restoreCalls, 1);
-  window.destroy();
-  assert.equal(destroyed, true);
-  assert.throws(() => window.setPosition(0, 0), /destroyed/);
-  assert.throws(() => window.minimize(), /destroyed/);
-  assert.throws(() => window.maximize(), /destroyed/);
-  assert.throws(() => window.restore(), /destroyed/);
 });
 
 test("Pixi 7 adapter patches an existing incomplete document", () => {

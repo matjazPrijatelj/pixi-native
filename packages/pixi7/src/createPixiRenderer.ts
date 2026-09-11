@@ -2,9 +2,8 @@ import { Assets, type Application } from "pixi.js-v7";
 import { Image as CanvasImage } from "@napi-rs/canvas";
 import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
-import { createNodeGlfwWebGLSurface } from "@pixi-native/core/renderers/webgl/NodeGlfwWebGLSurface.js";
-import { NodeCanvas } from "@pixi-native/core/canvas/NodeCanvas.js";
-import { copyRgbaRowsFlippedY } from "@pixi-native/core/canvas/rgbaUpload.js";
+import { createNodeSdlWebGLSurface } from "@pixi-native/core/renderers/webgl/NodeSdlWebGLSurface.js";
+import { installWebGlImageUploadAdapter } from "@pixi-native/core/renderers/webgl/webglImageUpload.js";
 import type {
   NodeNativeInput,
   NodeRendererOptions,
@@ -69,14 +68,13 @@ export async function createRenderer(
     options,
     "PixiJS 7 Native Node WebGL",
   );
-  const surface = await createNodeGlfwWebGLSurface(windowOptions, "WebGL7");
+  const surface = await createNodeSdlWebGLSurface(windowOptions, "WebGL7");
   const {
     window,
     nativeWindowData,
     canvas,
     renderer,
     webgl,
-    imageConstructor: legacyImage,
     webglRenderingContextConstructor,
   } = surface;
   const adapter = new NodeDOMAdapter(
@@ -90,17 +88,12 @@ export async function createRenderer(
   const { Application, settings, VERSION } = await import("pixi.js-v7");
   adapter.installPixi7(settings);
   await initializeNativeAssets();
+  installWebGlImageUploadAdapter(webgl);
   {
     const nativeBufferData = webgl.bufferData.bind(webgl) as (
       target: number,
       data: ArrayBufferView,
       usage: number,
-    ) => void;
-    const nativeTexImage2D = webgl.texImage2D.bind(webgl) as (
-      ...args: unknown[]
-    ) => void;
-    const nativeTexSubImage2D = webgl.texSubImage2D.bind(webgl) as (
-      ...args: unknown[]
     ) => void;
     const mutableWebgl = webgl as unknown as {
       bufferSubData: (
@@ -110,74 +103,6 @@ export async function createRenderer(
         srcOffset?: number,
         length?: number,
       ) => void;
-      texImage2D: (...args: unknown[]) => void;
-      texSubImage2D: (...args: unknown[]) => void;
-    };
-    const toNativeImage = (value: unknown): unknown => {
-      if (!value || typeof value !== "object") return value;
-      const source = value as {
-        width?: number;
-        height?: number;
-        getPremultipliedRgbaPixels?: () => Uint8Array;
-        data?: Uint8Array | Uint8ClampedArray;
-      };
-      if (!source.width || !source.height) {
-        return value;
-      }
-
-      // Canvas-backed resources already expose normalized top-down pixels.
-      // Prefer this API when both it and `data` exist; using the raw data
-      // first can flip a sprite twice during its initial upload.
-      if (source.getPremultipliedRgbaPixels) {
-        return legacyImage.fromPixels(
-          source.width,
-          source.height,
-          32,
-          Buffer.from(source.getPremultipliedRgbaPixels()),
-        );
-      }
-
-      // Pixi 7 ImageResource's native image data is bottom-up in this GL
-      // bridge, so reverse only this fallback path. Canvas text never uses it.
-      if (!source.data) {
-        const imageCanvas = new NodeCanvas(source.width, source.height);
-        const context = imageCanvas.getContext("2d") as {
-          drawImage?: (
-            image: unknown,
-            x: number,
-            y: number,
-            width: number,
-            height: number,
-          ) => void;
-        };
-        if (!context.drawImage) return value;
-        context.drawImage(value, 0, 0, source.width, source.height);
-        return legacyImage.fromPixels(
-          source.width,
-          source.height,
-          32,
-          Buffer.from(imageCanvas.getPremultipliedRgbaPixels()),
-        );
-      }
-      const imageCanvas = new NodeCanvas(source.width, source.height);
-      const context = imageCanvas.getContext("2d") as {
-        createImageData(width: number, height: number): ImageData;
-        putImageData(imageData: ImageData, x: number, y: number): void;
-      };
-      const imageData = context.createImageData(source.width, source.height);
-      copyRgbaRowsFlippedY(
-        imageData.data,
-        source.data,
-        source.width,
-        source.height,
-      );
-      context.putImageData(imageData, 0, 0);
-      return legacyImage.fromPixels(
-        source.width,
-        source.height,
-        32,
-        Buffer.from(imageCanvas.getPremultipliedRgbaPixels()),
-      );
     };
     mutableWebgl.bufferSubData = (target, _offset, data): void => {
       const typedData = data as ArrayBufferView & {
@@ -189,16 +114,6 @@ export async function createRenderer(
           ? typedData.slice(0, typedData.length)
           : data;
       nativeBufferData(target, compactData, webgl.DYNAMIC_DRAW);
-    };
-    mutableWebgl.texImage2D = (...args: unknown[]): void => {
-      if (args.length === 6) args[5] = toNativeImage(args[5]);
-      if (args.length === 9) args[8] = toNativeImage(args[8]);
-      nativeTexImage2D(...args);
-    };
-    mutableWebgl.texSubImage2D = (...args: unknown[]): void => {
-      if (args.length === 7) args[6] = toNativeImage(args[6]);
-      if (args.length === 9) args[8] = toNativeImage(args[8]);
-      nativeTexSubImage2D(...args);
     };
   }
 

@@ -175,7 +175,7 @@ $quotedNodeBin/node --version
     if ($LinuxLibraryPath) {
         $environment += " LD_LIBRARY_PATH=$(ConvertTo-BashLiteral $LinuxLibraryPath)"
     }
-    $environment += " SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy PIXI_NATIVE_HEADLESS=1"
+    $environment += " SDL_VIDEODRIVER=dummy PIXI_NATIVE_HEADLESS=1"
     $environment += " PIXI_NATIVE_SOURCE_FINGERPRINT=$sourceFingerprint"
     Invoke-WslCommand @"
 set -e

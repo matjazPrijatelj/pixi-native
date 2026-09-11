@@ -17,7 +17,6 @@ test(
     skip: process.env.PIXI_NATIVE_HEADLESS === "1",
   },
   async () => {
-    process.env.SDL_AUDIODRIVER = "dummy";
     const { Howl, Howler, nativeAudioEngine } = await import(
       "@pixi-native/core/audio"
     );
@@ -110,7 +109,7 @@ test(
 );
 
 test(
-  "Windows native audio advances while JS is blocked and batches audible events once",
+  "native miniaudio advances while JS is blocked and batches audible events once",
   {
     skip: process.platform !== "win32" || process.arch !== "x64",
   },
@@ -157,7 +156,7 @@ test(
 );
 
 test(
-  "Windows streaming audio keeps pace for fifteen seconds without underruns",
+  "native miniaudio streaming keeps pace for fifteen seconds without underruns",
   {
     skip: process.platform !== "win32" || process.arch !== "x64",
     timeout: 25_000,
@@ -198,17 +197,21 @@ test(
   },
 );
 
-test("Windows native audio binding preflight is platform-specific", async () => {
-  const { resolveWindowsNativeAudioBindingPath } = await import(
+test("native miniaudio binding preflight supports Windows and Linux x64", async () => {
+  const { resolveNativeAudioBindingPath } = await import(
     "@pixi-native/core/audio/NativeAudioEngine.js"
   );
   assert.throws(
-    () => resolveWindowsNativeAudioBindingPath("linux", "x64"),
-    /only Windows x64/,
+    () => resolveNativeAudioBindingPath("darwin", "x64"),
+    /only Windows\/Linux x64/,
   );
   assert.match(
-    resolveWindowsNativeAudioBindingPath("win32", "x64"),
+    resolveNativeAudioBindingPath("win32", "x64"),
     /native[\\/]audio[\\/]dist[\\/]win32-x64[\\/]native_audio\.node$/,
+  );
+  assert.match(
+    resolveNativeAudioBindingPath("linux", "x64"),
+    /native[\\/]audio[\\/]dist[\\/]linux-x64[\\/]native_audio\.node$/,
   );
 });
 

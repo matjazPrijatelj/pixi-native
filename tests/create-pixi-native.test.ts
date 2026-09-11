@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Image as Node3DImage } from "@node-3d/core";
+import { loadImage } from "@napi-rs/canvas";
 import {
   parseCliArguments,
   resolveCliArguments,
@@ -235,7 +235,7 @@ test("quickboot generates version-specific projects without credentials", async 
         await readFile(join(REPOSITORY_ROOT, "pixi-hero.png")),
       );
       if (pixi === "8" && backend === "webgl" && animation === "ticker") {
-        const hero = await Node3DImage.loadAsync(
+        const hero = await loadImage(
           join(target, "assets", "pixi-hero.png"),
         );
         assert.equal(hero.width, 1279);

@@ -1,5 +1,20 @@
 # Development history
 
+## 2026-09-11
+
+- Fixed vertically mirrored PixiJS 7 Sprite, Text, and BitmapText content on
+  the SDL WebGL surface. Pixi 7 now uses the shared image upload adapter once:
+  normalized Canvas pixels retain their row order while raw native image data
+  receives the single required Y-row reversal.
+- Replaced the GLFW-owned PixiJS 7 and 8 WebGL windows with SDL-owned windows
+  presented through `webgl-node`/`native-gles`. WebGPU remains on SDL, so all
+  renderers now share the SDL window/input lifecycle while native miniaudio
+  handles audio independently on Windows and Linux x64.
+- Removed the `@node-3d/core` and `@node-3d/glfw` runtime dependencies and their
+  GLFW-specific surface, window adapter, transparency code, and tests. Restored
+  native RGBA image upload adaptation for the EGL WebGL2 path and updated
+  package metadata, notices, and backend documentation.
+
 ## 2026-09-10
 
 - Replaced the native CPAL audio output path with a process-level miniaudio

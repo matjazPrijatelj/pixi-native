@@ -44,8 +44,8 @@ Version 0.1.2 targets PixiJS 8.20.0 and PixiJS 7.4.3.
 
 | Platform       | PixiJS 8 WebGPU | PixiJS 8 WebGL | PixiJS 7 WebGL | Audio         | Video                  |
 | -------------- | --------------- | -------------- | -------------- | ------------- | ---------------------- |
-| Windows 11 x64 | D3D12           | GLFW/OpenGL ES | GLFW/OpenGL ES | Native WASAPI | FFmpeg, D3D11VA or CPU |
-| Linux x64      | Vulkan          | GLFW/OpenGL ES | GLFW/OpenGL ES | SDL playback  | FFmpeg, VA-API or CPU  |
+| Windows 11 x64 | D3D12           | SDL/ANGLE GLES | SDL/ANGLE GLES | miniaudio     | FFmpeg, D3D11VA or CPU |
+| Linux x64      | Vulkan          | SDL/EGL GLES   | SDL/EGL GLES   | miniaudio     | FFmpeg, VA-API or CPU  |
 
 Both platforms use explicit renderer selection and fail when the requested
 backend or native package is unavailable. The runtime does not switch to a
@@ -199,10 +199,11 @@ production consumer. It uses existing native addons and FFmpeg binaries.
 
 Pixi Native builds on [PixiJS](https://pixijs.com/),
 [Dawn and Tint](https://dawn.googlesource.com/dawn/),
-[GLFW](https://www.glfw.org/), and [SDL](https://www.libsdl.org/). The Node.js
-integration also uses [@node-3d](https://github.com/node-3d),
+[SDL](https://www.libsdl.org/), [webgl-node](https://github.com/monteslu/webgl-node),
+and [native-gles](https://github.com/monteslu/native-gles). The Node.js
+integration also uses
 [@napi-rs/canvas](https://github.com/Brooooooklyn/canvas),
-[napi-rs](https://napi.rs/), [CPAL](https://github.com/RustAudio/cpal), and
+[napi-rs](https://napi.rs/), [miniaudio](https://miniaud.io/), and
 [FFmpeg](https://ffmpeg.org/).
 
 Thanks to the maintainers and contributors of those projects. Their work makes

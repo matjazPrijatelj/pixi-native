@@ -97,8 +97,8 @@ export function manageNativeApplication<TApplication, TNative>(
     pollFrameRequest = undefined;
     if (!active) return;
 
-    // Rearm first: glfwPollEvents enters a blocking Win32 modal loop while
-    // moving/resizing, where the native timer dispatches queued RAF work.
+    // Rearm first so the native timer can dispatch queued RAF work while
+    // Windows owns the blocking move/resize modal loop.
     pollFrameRequest = requestFrame(pollEvents);
     if (pollingEvents) return;
 

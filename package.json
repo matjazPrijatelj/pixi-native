@@ -40,8 +40,8 @@
   "dependencies": {
     "@kmamal/sdl": "0.11.13",
     "@napi-rs/canvas": "1.0.8",
-    "@node-3d/core": "6.3.0",
-    "@node-3d/glfw": "7.3.1"
+    "native-gles": "0.6.1",
+    "webgl-node": "1.5.1"
   },
   "devDependencies": {
     "@pixi-native/core": "workspace:*",

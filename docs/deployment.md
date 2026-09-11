@@ -242,10 +242,10 @@ may remain private, and package consumers do not need registry credentials.
 | Capability         | Windows 11 x64                          | Linux x64                       |
 | ------------------ | --------------------------------------- | ------------------------------- |
 | PixiJS 8 WebGPU    | D3D12                                   | Vulkan                          |
-| PixiJS 8 WebGL     | GLFW/OpenGL ES                          | GLFW/OpenGL ES                  |
-| PixiJS 7 WebGL     | GLFW/OpenGL ES                          | GLFW/OpenGL ES                  |
+| PixiJS 8 WebGL     | SDL/ANGLE OpenGL ES                     | SDL/EGL OpenGL ES               |
+| PixiJS 7 WebGL     | SDL/ANGLE OpenGL ES                     | SDL/EGL OpenGL ES               |
 | Window bridge      | Native window addon                     | Native window addon             |
-| Audio output       | Native WASAPI addon                     | SDL playback                    |
+| Audio output       | Native miniaudio addon                  | Native miniaudio addon          |
 | Video acceleration | D3D11VA with CPU fallback               | VA-API with CPU fallback        |
 | Media tools        | Packaged `ffmpeg.exe` and `ffprobe.exe` | Packaged `ffmpeg` and `ffprobe` |
 
