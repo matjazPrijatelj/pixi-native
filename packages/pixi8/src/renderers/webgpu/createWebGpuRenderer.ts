@@ -18,6 +18,7 @@ import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js
 import {
   createCompositorFrameWaiter,
   createModalFrameController,
+  syncNativeWindowSize,
 } from "@pixi-native/core/runtime/ModalFrameController.js";
 import { createNativeWindow } from "@pixi-native/core/runtime/NativeWindow.js";
 import {
@@ -190,16 +191,6 @@ export async function createWebGpuRenderer(
   );
   domAdapter.installPixi8(DOMAdapter);
   const modalFrameListeners = new Set<() => void>();
-  const modalController = createModalFrameController(
-    window.surface.window,
-    () => {
-      for (const listener of [...modalFrameListeners]) listener();
-      domAdapter.dispatchModalFrame(performance.now());
-    },
-    (active) => {
-      setNativeVideoModalState(active);
-    },
-  );
 
   const app = new Application();
   await app.init({
@@ -244,6 +235,28 @@ export async function createWebGpuRenderer(
 
   ensureRootStencilAttachment();
 
+  const resizeToWindow = (dispatchResize: boolean): boolean =>
+    syncNativeWindowSize(
+      window,
+      canvas,
+      (width, height) => {
+        app.renderer.resize(width, height);
+        ensureRootStencilAttachment();
+      },
+      dispatchResize
+        ? () => domAdapter.dispatchGlobalEvent("resize", new Event("resize"))
+        : undefined,
+    );
+  const modalController = createModalFrameController(
+    window.surface.window,
+    () => {
+      resizeToWindow(true);
+      for (const listener of [...modalFrameListeners]) listener();
+      domAdapter.dispatchModalFrame(performance.now());
+    },
+    setNativeVideoModalState,
+  );
+
   // Pixi 8.20 enumerates custom shader groups with `for...in`, so the group
   // index reaches the strict native Dawn binding as a string. Browser WebGPU
   // coerces it, while the Node binding correctly requires a number.
@@ -264,9 +277,7 @@ export async function createWebGpuRenderer(
   };
 
   window.on("resize", () => {
-    canvas.resize(window.pixelWidth, window.pixelHeight);
-    app.renderer.resize(window.pixelWidth, window.pixelHeight);
-    ensureRootStencilAttachment();
+    resizeToWindow(false);
   });
 
   console.log({

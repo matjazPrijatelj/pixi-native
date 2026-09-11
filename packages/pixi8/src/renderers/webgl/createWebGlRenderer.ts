@@ -7,7 +7,10 @@ import { installWebGlImageUploadAdapter } from "@pixi-native/core/renderers/webg
 import type { NodeRendererContext } from "../../createPixiRenderer.ts";
 import type { NodeRendererOptions } from "@pixi-native/core/runtime/nativeTypes.js";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
-import { createModalFrameController } from "@pixi-native/core/runtime/ModalFrameController.js";
+import {
+  createModalFrameController,
+  syncNativeWindowSize,
+} from "@pixi-native/core/runtime/ModalFrameController.js";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -78,20 +81,27 @@ export async function createWebGlRenderer(
       throw new Error(`WebGL is required; Pixi selected ${app.renderer.name}`);
     }
 
+    const resizeToWindow = (dispatchResize: boolean): boolean =>
+      syncNativeWindowSize(
+        window,
+        canvas,
+        (width, height) => app.renderer.resize(width, height),
+        dispatchResize
+          ? () => domAdapter.dispatchGlobalEvent("resize", new Event("resize"))
+          : undefined,
+      );
+
     const modalController = createModalFrameController(
       nativeWindowData,
       () => {
+        resizeToWindow(true);
         for (const listener of [...modalFrameListeners]) listener();
         domAdapter.dispatchModalFrame(performance.now());
       },
       setNativeVideoModalState,
     );
 
-    window.on("resize", () => {
-      canvas.resize(window.pixelWidth, window.pixelHeight);
-
-      app.renderer.resize(window.pixelWidth, window.pixelHeight);
-    });
+    window.on("resize", () => resizeToWindow(false));
 
     console.log({
       pixi: VERSION,

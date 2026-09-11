@@ -9,7 +9,10 @@ import type {
   NodeRendererOptions,
   NodeWindowHandle,
 } from "@pixi-native/core/runtime/nativeTypes.js";
-import { createModalFrameController } from "@pixi-native/core/runtime/ModalFrameController.js";
+import {
+  createModalFrameController,
+  syncNativeWindowSize,
+} from "@pixi-native/core/runtime/ModalFrameController.js";
 import {
   getWindowOptionsDiagnostics,
   NATIVE_BACKGROUND_COLOR,
@@ -129,20 +132,27 @@ export async function createRenderer(
     backgroundAlpha: windowOptions.backgroundAlpha,
   });
   const modalFrameListeners = new Set<() => void>();
+  const resizeToWindow = (dispatchResize: boolean): boolean =>
+    syncNativeWindowSize(
+      window,
+      canvas,
+      (width, height) => app.renderer.resize(width, height),
+      dispatchResize
+        ? () => adapter.dispatchGlobalEvent("resize", new Event("resize"))
+        : undefined,
+    );
 
   const modalController = createModalFrameController(
     nativeWindowData,
     () => {
+      resizeToWindow(true);
       for (const listener of [...modalFrameListeners]) listener();
       adapter.dispatchModalFrame(performance.now());
     },
     () => undefined,
   );
 
-  window.on("resize", () => {
-    canvas.resize(window.pixelWidth, window.pixelHeight);
-    app.renderer.resize(window.pixelWidth, window.pixelHeight);
-  });
+  window.on("resize", () => resizeToWindow(false));
 
   console.log({
     pixi: VERSION,

@@ -6,6 +6,9 @@
   loads the packaged sibling `libSDL3.so.0` without a system SDL installation.
 - Gated the Win32 native-handle decoder in the SDL3 window addon so the native
   window crate compiles on Linux without exposing the Windows-only `HWND` type.
+- Updated WebGPU, WebGL8, and WebGL7 content continuously during Windows
+  modal resize by synchronizing the live SDL3 pixel size before each modal
+  animation frame and notifying scene layout only when dimensions change.
 - Restored the previous SDL keyboard names after the SDL3 migration, including
   lowercase letters and directional keys. Restored WebGPU GSAP animation during
   Windows modal move/resize and added Rain sound mute/unmute parity to PixiJS 7.

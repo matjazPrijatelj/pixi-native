@@ -1,4 +1,5 @@
 import { loadNativeWindow } from "./platformNative.ts";
+import type { NodeWindowHandle } from "./nativeTypes.ts";
 
 export interface ModalFrameController {
   detach(): void;
@@ -28,6 +29,29 @@ export function createCompositorFrameWaiter(
 const NOOP_MODAL_FRAME_CONTROLLER: ModalFrameController = {
   detach: () => undefined,
 };
+
+interface NativeWindowResizeCanvas {
+  readonly width: number;
+  readonly height: number;
+  resize(width: number, height: number): void;
+}
+
+/** Synchronizes a live native size change before the next modal frame. */
+export function syncNativeWindowSize(
+  window: Pick<NodeWindowHandle, "pixelWidth" | "pixelHeight">,
+  canvas: NativeWindowResizeCanvas,
+  resizeRenderer: (width: number, height: number) => void,
+  dispatchResize?: () => void,
+): boolean {
+  const width = window.pixelWidth;
+  const height = window.pixelHeight;
+  if (width === canvas.width && height === canvas.height) return false;
+
+  canvas.resize(width, height);
+  resizeRenderer(width, height);
+  dispatchResize?.();
+  return true;
+}
 
 /** Loads the Win32 modal-loop bridge only on the platform that provides it. */
 export function createModalFrameController(
