@@ -7,10 +7,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use maudio::audio::sample_rate::SampleRate;
-use maudio::data_source::sources::buffer::{AudioBuffer, AudioBufferBuilder};
+use maudio::data_source::data_source_builder::DataSourceBuilder;
+use maudio::data_source::pcm_source::PcmSource;
 use maudio::data_source::sources::pcm_ring_buffer::{PcmRbRecv, PcmRbSend, PcmRingBuffer};
+use maudio::data_source::{DataSource, SourceContext};
 use maudio::engine::{engine_builder::EngineBuilder, Engine};
 use maudio::sound::{notifier::EndNotifier, sound_builder::SoundBuilder, Sound};
+use maudio::{ErrorKinds, MaResult, MaudioError};
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
@@ -112,9 +115,64 @@ impl StreamingControl {
     }
 }
 
+struct SharedPcmSource {
+    samples: Arc<Vec<f32>>,
+}
+
+impl SharedPcmSource {
+    fn new(samples: Arc<Vec<f32>>) -> Self {
+        Self { samples }
+    }
+}
+
+impl PcmSource<f32> for SharedPcmSource {
+    fn fill_pcm_frames(
+        &mut self,
+        output: &mut [f32],
+        context: &mut SourceContext,
+    ) -> MaResult<usize> {
+        let channels = context.data_format.channels as usize;
+        let frame_count = self.samples.len() / channels;
+        let cursor = usize::try_from(context.cursor).unwrap_or(usize::MAX);
+        if cursor >= frame_count {
+            return Ok(0);
+        }
+
+        let output_frames = output.len() / channels;
+        let frames_to_copy = output_frames.min(frame_count - cursor);
+        let sample_start = cursor * channels;
+        let samples_to_copy = frames_to_copy * channels;
+        output[..samples_to_copy]
+            .copy_from_slice(&self.samples[sample_start..sample_start + samples_to_copy]);
+        context.cursor += frames_to_copy as u64;
+        Ok(frames_to_copy)
+    }
+
+    fn seek_to_pcm_frame(&mut self, frame_index: u64, context: &mut SourceContext) -> MaResult<()> {
+        let frame_count = self.samples.len() / context.data_format.channels as usize;
+        if frame_index > frame_count as u64 {
+            return Err(MaudioError::new_ma_error(ErrorKinds::InvalidOperation(
+                "Audio seek is outside the cached PCM source",
+            )));
+        }
+        context.cursor = frame_index;
+        Ok(())
+    }
+
+    fn cursor_in_pcm_frames(&self, context: &SourceContext) -> MaResult<u64> {
+        Ok(context.cursor)
+    }
+
+    fn length_in_pcm_frames(&self, context: &SourceContext) -> MaResult<u64> {
+        Ok((self.samples.len() / context.data_format.channels as usize) as u64)
+    }
+}
+
+type StaticDataSource = DataSource<f32, SharedPcmSource>;
+
 enum VoiceSource {
     Loading,
-    Static(Box<AudioBuffer<f32>>),
+    Static(Box<StaticDataSource>),
     Streaming {
         receiver: Box<PcmRbRecv<f32>>,
         control: Arc<StreamingControl>,
@@ -643,8 +701,8 @@ impl EngineRuntime {
                     let Some(mut voice) = self.voices.remove(&id) else {
                         continue;
                     };
-                    let result = AudioBufferBuilder::build_f32(CHANNELS as u32, &samples)
-                        .map_err(|error| format!("Cannot create miniaudio buffer: {error}"))
+                    let result = build_static_data_source(samples)
+                        .map_err(|error| format!("Cannot create miniaudio data source: {error}"))
                         .and_then(|buffer| {
                             voice.source = VoiceSource::Static(Box::new(buffer));
                             self.attach_sound(&mut voice)
@@ -830,11 +888,12 @@ impl EngineRuntime {
                     .snapshot
                     .queued_frames
                     .store(queued, Ordering::Release);
-                if control.ready.load(Ordering::Acquire) && !voice.play_announced {
-                    if sound.play_sound().is_ok() {
-                        voice.play_announced = true;
-                        state.queue_event(voice.owner_id, "play", Some(*id), None, None);
-                    }
+                if control.ready.load(Ordering::Acquire)
+                    && !voice.play_announced
+                    && sound.play_sound().is_ok()
+                {
+                    voice.play_announced = true;
+                    state.queue_event(voice.owner_id, "play", Some(*id), None, None);
                 }
                 let starved = voice.play_announced
                     && voice.playing
@@ -913,30 +972,25 @@ fn start_static_decode(
     preload: bool,
     request_id: Option<u32>,
 ) {
+    let key = cache_key(&options);
+    if let Some(samples) = state
+        .cache
+        .lock()
+        .ok()
+        .and_then(|cache| cache.get(&key).cloned())
+    {
+        complete_static_decode(&state, &options, preload, request_id, samples);
+        return;
+    }
+
     thread::spawn(move || {
-        let key = cache_key(&options);
-        let decoded = state
-            .cache
-            .lock()
-            .ok()
-            .and_then(|cache| cache.get(&key).cloned())
-            .map_or_else(
-                || decode_static(&options, state.sample_rate).map(Arc::new),
-                Ok,
-            );
+        let decoded = decode_static(&options, state.sample_rate).map(Arc::new);
         match decoded {
             Ok(samples) => {
                 if let Ok(mut cache) = state.cache.lock() {
                     cache.insert(key, Arc::clone(&samples));
                 }
-                if preload {
-                    state.queue_event(options.owner_id, "load", request_id, None, None);
-                } else {
-                    state.push_command(EngineCommand::AttachStatic {
-                        id: options.id,
-                        samples,
-                    });
-                }
+                complete_static_decode(&state, &options, preload, request_id, samples);
             }
             Err(message) => {
                 if !preload {
@@ -952,6 +1006,28 @@ fn start_static_decode(
             }
         }
     });
+}
+
+fn complete_static_decode(
+    state: &SharedState,
+    options: &NativeVoiceOptions,
+    preload: bool,
+    request_id: Option<u32>,
+    samples: Arc<Vec<f32>>,
+) {
+    if preload {
+        state.queue_event(options.owner_id, "load", request_id, None, None);
+    } else {
+        state.push_command(EngineCommand::AttachStatic {
+            id: options.id,
+            samples,
+        });
+    }
+}
+
+fn build_static_data_source(samples: Arc<Vec<f32>>) -> MaResult<StaticDataSource> {
+    DataSourceBuilder::new(CHANNELS as u32, SampleRate::Sr48000)
+        .build_f32(SharedPcmSource::new(samples))
 }
 
 fn start_streaming_decode(
@@ -1232,6 +1308,29 @@ fn redact_credentials(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn static_voices_share_pcm_with_independent_cursors() {
+        let samples = Arc::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
+        let mut first = build_static_data_source(Arc::clone(&samples)).unwrap();
+        let second = build_static_data_source(Arc::clone(&samples)).unwrap();
+
+        assert_eq!(Arc::strong_count(&samples), 3);
+        assert_eq!(first.cursor_in_pcm_frames().unwrap(), 0);
+        assert_eq!(second.cursor_in_pcm_frames().unwrap(), 0);
+
+        assert_eq!(first.read_pcm_frames(1).unwrap().frames(), 1);
+        assert_eq!(first.cursor_in_pcm_frames().unwrap(), 1);
+        assert_eq!(second.cursor_in_pcm_frames().unwrap(), 0);
+
+        first.seek_to_pcm_frame(0).unwrap();
+        assert_eq!(first.cursor_in_pcm_frames().unwrap(), 0);
+        assert!(first.seek_to_pcm_frame(4).is_err());
+
+        drop(first);
+        drop(second);
+        assert_eq!(Arc::strong_count(&samples), 1);
+    }
 
     #[test]
     fn atempo_decomposes_extreme_rates() {

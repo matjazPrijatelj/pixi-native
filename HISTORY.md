@@ -1,5 +1,16 @@
 # Development history
 
+## 2026-09-12
+
+- Fixed continuous native memory growth under high-frequency static audio
+  playback. Cached PCM is now shared by independent miniaudio data-source
+  cursors instead of being copied into every voice, and cache hits no longer
+  create decoder threads. The pre-fix 200-drop WebGPU Rain test grew about
+  12.7 MiB over its final 4.5 minutes while the muted control stayed flat. A
+  five-minute post-fix run processed 30,936 landings with stable JS heap and
+  bounded active voices; RSS moved from 306.1 to 314.1 MiB after warm-up and
+  returned to 258.2 MiB after scene/audio disposal.
+
 ## 2026-09-11
 
 - Made transparent Linux/X11 WebGPU windows use SDL's EGL/OpenGL visual
