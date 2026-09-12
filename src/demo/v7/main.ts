@@ -18,6 +18,7 @@ import {
   loadExternalBitmapFont,
 } from "./bitmapFonts.ts";
 import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
+import { startMemoryDiagnostics } from "../memoryDiagnostics.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 import { filterVideoAssets } from "../videoAssets.ts";
 
@@ -158,6 +159,13 @@ const fpsOverlay = new FpsOverlay7();
 fpsOverlay.zIndex = 200;
 app.stage.addChild(fpsOverlay);
 fpsOverlay.alignRight(native.canvas.width);
+
+const memoryDiagnostics = startMemoryDiagnostics(() => [
+  activeScene,
+  particleEmitter.container,
+  fpsOverlay,
+  background,
+]);
 activeScene.resize?.(native.canvas.width, native.canvas.height);
 const selectScene = (nextIndex: number): void => {
   const normalized =
@@ -202,6 +210,10 @@ globalThis.addEventListener("keydown", (rawEvent) => {
     particleEmitter.setEnabled(!particleEmitter.enabled);
     return;
   }
+  if (key === "delete") {
+    void memoryDiagnostics.collect();
+    return;
+  }
   if (activeScene.handleKey?.(key, 0)) return;
   if (key === "up") activeScene.addRandomSprites?.(10);
   if (key === "down") activeScene.removeRandomSprites?.(10);
@@ -218,6 +230,7 @@ app.ticker.add((delta) => {
   fpsOverlay.tick(app.ticker.deltaMS);
 });
 addDestroyListener(async () => {
+  memoryDiagnostics.stop();
   if (shuttingDown) return;
   shuttingDown = true;
   demoLoop.destroy();

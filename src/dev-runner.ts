@@ -15,6 +15,7 @@ const startApp = (): void => {
   const child = spawn(
     process.execPath,
     [
+      "--expose-gc",
       "--enable-source-maps",
       backend === "webgl7" ? "src/demo/v7/main.ts" : "src/demo/v8/main.ts",
       backend,

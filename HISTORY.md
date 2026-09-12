@@ -2,6 +2,18 @@
 
 ## 2026-09-12
 
+- Added dev memory diagnostics for all backends: `pnpm dev` now exposes V8 GC,
+  writes startup and 150-second JSONL samples to `memoryinfo.log`, and runs a
+  before/after collection report when `Delete` is pressed. Every automatic and
+  manual-after sample forces GC first and records `gcExecuted`. Samples include
+  process/V8 memory, native audio health, scene object counts, and unique
+  textures.
+- Completed the matching 25-minute WebGPU Rain soak with 200 drops and the
+  unmuted audio path at zero master volume. Eleven GC-confirmed samples held the
+  JS heap near 28.3-28.6 MiB after warm-up, RSS near 283-288 MiB, and kept the
+  inventory fixed at 200 `AnimatedSprite` instances and 30 unique textures;
+  native audio reported zero underruns. The initial RSS increase occurred
+  during renderer/GPU warm-up and did not continue over the remaining run.
 - Prepared the `0.2.1` public npm patch release for the static-audio memory fix;
   runtime, facade, and both platform packages remain versioned in lockstep.
 - Pinned distribution consumer subprocesses to the pnpm entrypoint that started

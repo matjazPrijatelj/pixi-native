@@ -188,6 +188,11 @@ The demo covers Sprite, Graphics, Text, BitmapText, ticker animation, video,
 audio, transparency, resizing, and presentation. Use number keys `1` through
 `9` or the arrow keys to change scenes.
 
+Development runs with V8 garbage collection exposed. A startup sample and a
+sample every 150 seconds are appended as JSONL to `memoryinfo.log`; press
+`Delete` to run a manual GC and print before/after memory and scene-object
+counts.
+
 Create the platform-specific release archives from the full development
 installation:
 

@@ -7,6 +7,7 @@ import type { VideoTestScene } from "./scenes/VideoTest.ts";
 import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 import { filterVideoAssets } from "../videoAssets.ts";
+import { startMemoryDiagnostics } from "../memoryDiagnostics.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -228,6 +229,13 @@ app.stage.addChild(fpsOverlay);
 fpsOverlay.zIndex = 200;
 fpsOverlay.alignRight(native.canvas.width);
 
+const memoryDiagnostics = startMemoryDiagnostics(() => [
+  scene,
+  particleEmitter.container,
+  fpsOverlay,
+  background,
+]);
+
 const selectScene = (nextIndex: number): void => {
   if (nextIndex === index) return;
   disposeDemoScene(scene);
@@ -276,6 +284,11 @@ globalThis.addEventListener("keydown", (rawEvent) => {
 
   if (String(event.key ?? "").toLowerCase() === "tab" && !event.repeat) {
     particleEmitter.setEnabled(!particleEmitter.enabled);
+    return;
+  }
+
+  if (String(event.key ?? "").toLowerCase() === "delete" && !event.repeat) {
+    void memoryDiagnostics.collect();
     return;
   }
 
@@ -364,6 +377,7 @@ const stopActiveScene = (): void => {
 };
 
 addDestroyListener(async () => {
+  memoryDiagnostics.stop();
   stopActiveScene();
   particleEmitter.destroy();
   Howler.unload();
