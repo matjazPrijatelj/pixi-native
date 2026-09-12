@@ -19,13 +19,16 @@ import {
 } from "./ffmpeg-distribution.mjs";
 
 const archiveArguments = process.argv.slice(2);
-const installCommand = [
-  "pnpm install",
-  process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline" : "",
-  "--no-frozen-lockfile --ignore-workspace",
-]
-  .filter(Boolean)
-  .join(" ");
+const pnpmEntrypoint = process.env.npm_execpath;
+if (!pnpmEntrypoint) {
+  throw new Error("Distribution testing must be launched through pnpm.");
+}
+const installArguments = [
+  "install",
+  ...(process.env.PIXI_NATIVE_OFFLINE === "1" ? ["--offline"] : []),
+  "--no-frozen-lockfile",
+  "--ignore-workspace",
+];
 if (archiveArguments.length !== 2) {
   throw new Error("Expected the facade and one native package archive");
 }
@@ -78,7 +81,7 @@ try {
     `${JSON.stringify(
       {
         name: oppositeNativePackageName,
-        version: "0.2.0",
+        version: "0.2.1",
         os: [oppositeNativeTarget.split("-")[0]],
         cpu: ["x64"],
       },
@@ -200,12 +203,12 @@ try {
     )}\n`,
   );
 
-  execSync(`${installCommand} --prod`, {
+  runPnpm([...installArguments, "--prod"], {
     cwd: testDirectory,
     stdio: "inherit",
   });
   const productionGraph = JSON.parse(
-    execSync("pnpm list gsap --prod --depth Infinity --json", {
+    runPnpm(["list", "gsap", "--prod", "--depth", "Infinity", "--json"], {
       cwd: testDirectory,
       encoding: "utf8",
     }),
@@ -262,9 +265,9 @@ try {
       },
     };
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    execSync(installCommand, { cwd: projectDirectory, stdio: "inherit" });
-    execSync("pnpm typecheck", { cwd: projectDirectory, stdio: "inherit" });
-    execSync("pnpm build", { cwd: projectDirectory, stdio: "inherit" });
+    runPnpm(installArguments, { cwd: projectDirectory, stdio: "inherit" });
+    runPnpm(["typecheck"], { cwd: projectDirectory, stdio: "inherit" });
+    runPnpm(["build"], { cwd: projectDirectory, stdio: "inherit" });
     await access(resolve(projectDirectory, "dist", "main.js"));
   }
   execSync("node smoke-root.mjs", { cwd: testDirectory, stdio: "inherit" });
@@ -313,6 +316,10 @@ try {
 } finally {
   await rm(testDirectory, { recursive: true, force: true });
   await rm(generatedRoot, { recursive: true, force: true });
+}
+
+function runPnpm(arguments_, options) {
+  return execFileSync(process.execPath, [pnpmEntrypoint, ...arguments_], options);
 }
 
 function createRuntimeSmoke(packageName, major) {

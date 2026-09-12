@@ -1,6 +1,6 @@
 {
   "name": "@matjash/pixi-native-linux-x64",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "commonjs",
   "description": "Linux x64 native binaries for @matjash/pixi-native",
   "license": "MIT",

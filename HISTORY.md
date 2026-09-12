@@ -2,6 +2,11 @@
 
 ## 2026-09-12
 
+- Prepared the `0.2.1` public npm patch release for the static-audio memory fix;
+  runtime, facade, and both platform packages remain versioned in lockstep.
+- Pinned distribution consumer subprocesses to the pnpm entrypoint that started
+  the release, preventing a system pnpm version from bypassing local tarball
+  overrides during isolated WSL validation.
 - Fixed continuous native memory growth under high-frequency static audio
   playback. Cached PCM is now shared by independent miniaudio data-source
   cursors instead of being copied into every voice, and cache hits no longer

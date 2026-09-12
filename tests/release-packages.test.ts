@@ -58,8 +58,8 @@ test("facade exports root Pixi 8 and explicit version and core paths", async () 
   assert.ok(manifest.exports["./core/audio"]);
   assert.equal(manifest.exports["./core/audio/*.js"], undefined);
   assert.deepEqual(manifest.optionalDependencies, {
-    "@matjash/pixi-native-linux-x64": "~0.2.0",
-    "@matjash/pixi-native-win32-x64": "~0.2.0",
+    "@matjash/pixi-native-linux-x64": "~0.2.1",
+    "@matjash/pixi-native-win32-x64": "~0.2.1",
   });
   assert.equal(manifest.dependencies["pixi.js"], undefined);
   assert.equal(manifest.dependencies["pixi.js-v7"], undefined);
@@ -91,8 +91,8 @@ test("private Pixi facades use ranged peers and exact development versions", asy
     const manifest = JSON.parse(
       await readFile(new URL(packagePath, REPOSITORY_ROOT), "utf8"),
     );
-    assert.equal(manifest.version, "0.2.0", packagePath);
-    assert.equal(manifest.peerDependencies["@pixi-native/core"], "~0.2.0");
+    assert.equal(manifest.version, "0.2.1", packagePath);
+    assert.equal(manifest.peerDependencies["@pixi-native/core"], "~0.2.1");
     assert.equal(manifest.dependencies?.[peerName], undefined, packagePath);
     assert.equal(manifest.peerDependencies[peerName], peerVersion, packagePath);
     assert.equal(
@@ -110,10 +110,10 @@ test("core accepts patched native packages without selecting the old Win32 build
       "utf8",
     ),
   );
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.version, "0.2.1");
   assert.deepEqual(manifest.peerDependencies, {
-    "@matjash/pixi-native-linux-x64": "~0.2.0",
-    "@matjash/pixi-native-win32-x64": "~0.2.0",
+    "@matjash/pixi-native-linux-x64": "~0.2.1",
+    "@matjash/pixi-native-win32-x64": "~0.2.1",
   });
   assert.equal(manifest.dependencies["@kmamal/sdl"], undefined);
   assert.equal(manifest.dependencies["webgl-node"], "1.5.1");
@@ -179,15 +179,15 @@ test("publisher isolates npm configuration and compares immutable digests", () =
 });
 
 test("publisher selects package-specific versions, archives, and tags", () => {
-  assert.deepEqual(getReleaseConfiguration(true, "0.2.0", "0.1.6"), {
+  assert.deepEqual(getReleaseConfiguration(true, "0.2.1", "0.1.6"), {
     version: "0.1.6",
     tag: "create-pixi-native-v0.1.6",
     expectedPackages: ["@matjash/create-pixi-native"],
     manifestTargets: [],
   });
-  assert.deepEqual(getReleaseConfiguration(false, "0.2.0", "0.1.6"), {
-    version: "0.2.0",
-    tag: "v0.2.0",
+  assert.deepEqual(getReleaseConfiguration(false, "0.2.1", "0.1.6"), {
+    version: "0.2.1",
+    tag: "v0.2.1",
     expectedPackages: [
       "@matjash/pixi-native-win32-x64",
       "@matjash/pixi-native-linux-x64",
@@ -195,9 +195,9 @@ test("publisher selects package-specific versions, archives, and tags", () => {
     ],
     manifestTargets: ["win32-x64", "linux-x64"],
   });
-  assert.deepEqual(getReleaseConfiguration(false, "0.2.0", "0.1.6", true), {
-    version: "0.2.0",
-    tag: "v0.2.0",
+  assert.deepEqual(getReleaseConfiguration(false, "0.2.1", "0.1.6", true), {
+    version: "0.2.1",
+    tag: "v0.2.1",
     expectedPackages: [
       "@matjash/pixi-native-win32-x64",
       "@matjash/pixi-native",

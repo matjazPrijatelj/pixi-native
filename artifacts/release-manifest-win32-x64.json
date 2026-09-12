@@ -1,19 +1,19 @@
 {
-  "version": "0.2.0",
+  "version": "0.2.1",
   "target": "win32-x64",
-  "sourceFingerprint": "6f2e98c86a0f5ae543fe70f04fe0a9337a8901d098d27bb4c0efdec6604fe93b",
+  "sourceFingerprint": "8ce89fd3f8e17c13c8bc51ae19169297720441d7273d4b415b6e2197c7f2f957",
   "archives": [
     {
-      "filename": "matjash-pixi-native-0.2.0.tgz",
+      "filename": "matjash-pixi-native-0.2.1.tgz",
       "packageName": "@matjash/pixi-native",
-      "version": "0.2.0",
-      "sha256": "7114fb56a5833b775431bf74da2cbb3669fde600f54084f7c5e1e53ea51ae976"
+      "version": "0.2.1",
+      "sha256": "07ac387539f9193e9ae51e50bac0147ddd8a5117e0f770a174bef4fa011eda41"
     },
     {
-      "filename": "matjash-pixi-native-win32-x64-0.2.0.tgz",
+      "filename": "matjash-pixi-native-win32-x64-0.2.1.tgz",
       "packageName": "@matjash/pixi-native-win32-x64",
-      "version": "0.2.0",
-      "sha256": "03aaf133520ccab39848609a156a7e5fce3b90704cf364311e6b8ba12d152ad9"
+      "version": "0.2.1",
+      "sha256": "ca4cf8c966395bff2f2af575197293d173c569e13efacc5fa7e9f77072915855"
     }
   ],
   "ffmpegSource": {

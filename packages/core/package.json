@@ -1,6 +1,6 @@
 {
   "name": "@pixi-native/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -33,8 +33,8 @@
     "webgl-node": "1.5.1"
   },
   "peerDependencies": {
-    "@matjash/pixi-native-linux-x64": "~0.2.0",
-    "@matjash/pixi-native-win32-x64": "~0.2.0"
+    "@matjash/pixi-native-linux-x64": "~0.2.1",
+    "@matjash/pixi-native-win32-x64": "~0.2.1"
   },
   "peerDependenciesMeta": {
     "@matjash/pixi-native-linux-x64": {

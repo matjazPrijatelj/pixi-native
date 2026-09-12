@@ -94,25 +94,23 @@ DLLs, and FFmpeg programs are physical files under the launcher root.
 
 ## Release commit and tags
 
-Review and stage the source, documentation, tests, three release manifests,
-four npm archives, and their checksum files. For this combined npm migration,
-both release tags must point to the same final commit:
+Review and stage the source, documentation, tests, both runtime release
+manifests, three runtime npm archives, and their checksum files. The runtime
+release tag must point to the final clean release commit:
 
 ```powershell
 git diff --cached --check
 git diff --cached --stat
-git commit -m "release(npm): publish @matjash packages"
-git tag -a v0.2.0 -m "pixi-native 0.2.0"
-git tag -a create-pixi-native-v0.1.6 -m "create-pixi-native 0.1.6"
+git commit -m "release(npm): publish pixi-native 0.2.1"
+git tag -a v0.2.1 -m "pixi-native 0.2.1"
 git push origin main
-git push origin v0.2.0
-git push origin create-pixi-native-v0.1.6
+git push origin v0.2.1
 ```
 
 ## Publishing
 
 Sign in as the `matjash` npm user with 2FA enabled. The runtime publisher
-requires a clean `v0.2.0` release commit, both platform manifests, all three
+requires a clean `v0.2.1` release commit, both platform manifests, all three
 runtime archives, and matching checksums. It uses an isolated cache, the
 standard npm user credentials, and an explicit public npm registry:
 
