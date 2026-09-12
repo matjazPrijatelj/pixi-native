@@ -7,7 +7,14 @@
   before/after collection report when `Delete` is pressed. Every automatic and
   manual-after sample forces GC first and records `gcExecuted`. Samples include
   process/V8 memory, native audio health, scene object counts, and unique
-  textures.
+  textures. Sprite+GSAP samples now also record GSAP tween/timeline totals and
+  Pixi asset-cache entries to distinguish JS retention from native RSS growth.
+- Memory samples now include the active scene index/name, with GC snapshots
+  before and after every scene switch. This makes transitions such as scene 5
+  (audio) to scene 6 (RTP video) directly comparable in `memoryinfo.log`.
+- Automatic scene cycling now starts enabled, advances every 30 seconds across
+  all scenes and available video variants, and is toggled with `Space`. Toggle
+  state is printed and recorded as an `auto-scenes:*` memory sample.
 - Completed the matching 25-minute WebGPU Rain soak with 200 drops and the
   unmuted audio path at zero master volume. Eleven GC-confirmed samples held the
   JS heap near 28.3-28.6 MiB after warm-up, RSS near 283-288 MiB, and kept the

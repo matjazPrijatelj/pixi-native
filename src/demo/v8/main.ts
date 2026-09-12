@@ -7,7 +7,10 @@ import type { VideoTestScene } from "./scenes/VideoTest.ts";
 import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 import { filterVideoAssets } from "../videoAssets.ts";
-import { startMemoryDiagnostics } from "../memoryDiagnostics.ts";
+import {
+  countCacheEntries,
+  startMemoryDiagnostics,
+} from "../memoryDiagnostics.ts";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -51,7 +54,7 @@ const {
   installDynamicBitmapTextFont,
 } = await import("./DemoScene.ts");
 
-const { FpsOverlay } = await import("./FpsOverlay.ts");
+const { AutoToggleOverlay, FpsOverlay } = await import("./FpsOverlay.ts");
 const { ParticleEmitter } = await import("./ParticleEmitter.ts");
 const { Howler } = await import("@pixi-native/core/audio");
 const {
@@ -147,6 +150,7 @@ const eventVideoSources = videos
   .filter(({ fps }) => Math.abs(fps - 30) < 0.001);
 
 let videoIndex = 0;
+let autoVideoTransparent = false;
 
 const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createGraphicsTest(),
@@ -158,11 +162,13 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createTextTest(),
   () => createBitmapTextTest(),
 ];
+const sceneNames = ["graphics", "sprite-gsap", "text", "bitmap-text"];
 
 const videoSceneIndex =
   supportsVideo && availableVideos.length > 0 ? scenes.length : null;
 
 if (videoSceneIndex !== null) {
+  sceneNames.push("video");
   scenes.push(() =>
     createVideoTest(
       videoPaths[videoIndex],
@@ -181,8 +187,10 @@ scenes.push(() =>
     height: native.canvas.height,
   }),
 );
+sceneNames.push("audio");
 
 if (supportsVideo) {
+  sceneNames.push("rtp-video");
   scenes.push(() =>
     createRtpVideoTest({
       width: native.canvas.width,
@@ -197,9 +205,11 @@ scenes.push(() =>
     height: native.canvas.height,
   }),
 );
+sceneNames.push("rain");
 
 const particleSceneIndex = scenes.length;
 scenes.push(() => createParticleTest());
+sceneNames.push("particles");
 
 let index = 1;
 let scene = scenes[index]();
@@ -228,26 +238,37 @@ const fpsOverlay = new FpsOverlay();
 app.stage.addChild(fpsOverlay);
 fpsOverlay.zIndex = 200;
 fpsOverlay.alignRight(native.canvas.width);
+const autoToggleOverlay = new AutoToggleOverlay(true);
+autoToggleOverlay.zIndex = 200;
+app.stage.addChild(autoToggleOverlay);
+autoToggleOverlay.alignBottomLeft(native.canvas.height);
 
 const memoryDiagnostics = startMemoryDiagnostics(() => [
   scene,
   particleEmitter.container,
   fpsOverlay,
   background,
-]);
+], {
+  extra: () => ({
+    gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
+    gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
+    pixiAssetCache: countCacheEntries(Assets.cache),
+  }),
+  scene: () => ({ index, name: sceneNames[index] ?? "unknown" }),
+});
 
 const selectScene = (nextIndex: number): void => {
   if (nextIndex === index) return;
+  if (nextIndex !== videoSceneIndex) autoVideoTransparent = false;
+  void memoryDiagnostics.sample("scene-switch:before");
   disposeDemoScene(scene);
   if (index === particleSceneIndex) particleEmitter.setEnabled(false);
   index = nextIndex;
   scene = prepareScene(scenes[index]());
   app.stage.addChild(scene);
   if (index === particleSceneIndex) particleEmitter.setEnabled(true);
+  void memoryDiagnostics.sample("scene-switch:after");
 };
-
-const demoLoop = createDemoLoop(selectScene, () => index);
-addDestroyListener(() => demoLoop.destroy());
 
 const selectVideo = (nextVideoIndex: number): void => {
   if (index !== videoSceneIndex || nextVideoIndex === videoIndex) return;
@@ -257,6 +278,35 @@ const selectVideo = (nextVideoIndex: number): void => {
   app.stage.addChild(scene);
 };
 
+const demoLoop = createDemoLoop(() => {
+  if (index === videoSceneIndex) {
+    if (transparentVideoPath && !autoVideoTransparent &&
+        videoIndex === availableVideos.length - 1) {
+      (scene as unknown as Partial<VideoTestScene>).handleKey?.("t", 0);
+      autoVideoTransparent = true;
+      void memoryDiagnostics.sample("auto-scenes:video-transparent");
+      return;
+    }
+    if (autoVideoTransparent) {
+      (scene as unknown as Partial<VideoTestScene>).handleKey?.("t", 0);
+      autoVideoTransparent = false;
+      selectScene((index + 1) % scenes.length);
+      return;
+    }
+    if (availableVideos.length > 1) {
+      selectVideo((videoIndex + 1) % availableVideos.length);
+      void memoryDiagnostics.sample("auto-scenes:video-variant");
+      return;
+    }
+  }
+  selectScene((index + 1) % scenes.length);
+}, (enabled) => {
+  autoToggleOverlay.setEnabled(enabled);
+  autoToggleOverlay.alignBottomLeft(native.canvas.height);
+  void memoryDiagnostics.sample(`auto-scenes:${enabled ? "enabled" : "disabled"}`);
+});
+addDestroyListener(() => demoLoop.destroy());
+
 const resizeActiveScene = (): void => {
   resizeBackground();
   const resizable = scene as typeof scene & {
@@ -265,6 +315,7 @@ const resizeActiveScene = (): void => {
   resizable.resize?.(native.canvas.width, native.canvas.height);
   particleEmitter.resize(native.canvas.width, native.canvas.height);
   fpsOverlay.alignRight(native.canvas.width);
+  autoToggleOverlay.alignBottomLeft(native.canvas.height);
 };
 
 globalThis.addEventListener("resize", resizeActiveScene);
@@ -278,6 +329,11 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   }
 
   if (isLoopDemoShortcut(event.key, event.repeat)) {
+    demoLoop.toggle();
+    return;
+  }
+
+  if ((event.key === " " || event.key === "Spacebar") && !event.repeat) {
     demoLoop.toggle();
     return;
   }

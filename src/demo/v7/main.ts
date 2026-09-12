@@ -10,7 +10,7 @@ import { createRtpVideoTest } from "./scenes/RtpVideoTest.ts";
 import { createRainSpriteTest } from "./scenes/RainSpriteTest.ts";
 import { createParticleTest } from "./scenes/ParticleTest.ts";
 import { disposeDemoScene } from "./sceneLifecycle.ts";
-import { FpsOverlay7 } from "./FpsOverlay.ts";
+import { AutoToggleOverlay7, FpsOverlay7 } from "./FpsOverlay.ts";
 import { ParticleEmitter7 } from "./ParticleEmitter.ts";
 import {
   destroyBitmapFonts,
@@ -18,7 +18,10 @@ import {
   loadExternalBitmapFont,
 } from "./bitmapFonts.ts";
 import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
-import { startMemoryDiagnostics } from "../memoryDiagnostics.ts";
+import {
+  countCacheEntries,
+  startMemoryDiagnostics,
+} from "../memoryDiagnostics.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 import { filterVideoAssets } from "../videoAssets.ts";
 
@@ -144,7 +147,19 @@ const sceneFactories: Pixi7SceneFactory[] = [
     }) as Pixi7Scene,
   () => createParticleTest() as Pixi7Scene,
 ];
+const sceneNames = [
+  "graphics",
+  "sprite-gsap",
+  "text",
+  "bitmap-text",
+  "video",
+  "audio",
+  "rtp-video",
+  "rain",
+  "particles",
+];
 let sceneIndex = 0;
+let autoVideoVariantStep = 0;
 let activeScene = sceneFactories[sceneIndex]();
 let shuttingDown = false;
 app.stage.addChild(activeScene);
@@ -159,18 +174,31 @@ const fpsOverlay = new FpsOverlay7();
 fpsOverlay.zIndex = 200;
 app.stage.addChild(fpsOverlay);
 fpsOverlay.alignRight(native.canvas.width);
+const autoToggleOverlay = new AutoToggleOverlay7(true);
+autoToggleOverlay.zIndex = 200;
+app.stage.addChild(autoToggleOverlay);
+autoToggleOverlay.alignBottomLeft(native.canvas.height);
 
 const memoryDiagnostics = startMemoryDiagnostics(() => [
   activeScene,
   particleEmitter.container,
   fpsOverlay,
   background,
-]);
+], {
+  extra: () => ({
+    gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
+    gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
+    pixiAssetCache: countCacheEntries(Assets.cache),
+  }),
+  scene: () => ({ index: sceneIndex, name: sceneNames[sceneIndex] ?? "unknown" }),
+});
 activeScene.resize?.(native.canvas.width, native.canvas.height);
 const selectScene = (nextIndex: number): void => {
   const normalized =
     (nextIndex + sceneFactories.length) % sceneFactories.length;
   if (normalized === sceneIndex) return;
+  if (normalized !== 4) autoVideoVariantStep = 0;
+  void memoryDiagnostics.sample("scene-switch:before");
   disposeDemoScene(activeScene);
   if (sceneIndex === 8) particleEmitter.setEnabled(false);
   sceneIndex = normalized;
@@ -178,8 +206,30 @@ const selectScene = (nextIndex: number): void => {
   app.stage.addChild(activeScene);
   if (sceneIndex === 8) particleEmitter.setEnabled(true);
   activeScene.resize?.(native.canvas.width, native.canvas.height);
+  void memoryDiagnostics.sample("scene-switch:after");
 };
-const demoLoop = createDemoLoop(selectScene, () => sceneIndex);
+const demoLoop = createDemoLoop(() => {
+  if (sceneIndex === 4) {
+    if (autoVideoVariantStep < videos.length - 1) {
+      activeScene.handleKey?.("up", 0);
+      autoVideoVariantStep++;
+      void memoryDiagnostics.sample("auto-scenes:video-variant");
+      return;
+    }
+    if (autoVideoVariantStep === videos.length - 1) {
+      activeScene.handleKey?.("t", 0);
+      autoVideoVariantStep++;
+      void memoryDiagnostics.sample("auto-scenes:video-transparent");
+      return;
+    }
+    autoVideoVariantStep = 0;
+  }
+  selectScene((sceneIndex + 1) % sceneFactories.length);
+}, (enabled) => {
+  autoToggleOverlay.setEnabled(enabled);
+  autoToggleOverlay.alignBottomLeft(native.canvas.height);
+  void memoryDiagnostics.sample(`auto-scenes:${enabled ? "enabled" : "disabled"}`);
+});
 const normalizeKey = (key: string): string => {
   switch (key) {
     case "arrowup":
@@ -199,6 +249,10 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   const key = normalizeKey(String(event.key ?? "").toLowerCase());
   if (event.repeat) return;
   if (isLoopDemoShortcut(key)) {
+    demoLoop.toggle();
+    return;
+  }
+  if ((key === " " || key === "spacebar") && !event.repeat) {
     demoLoop.toggle();
     return;
   }
@@ -223,6 +277,7 @@ globalThis.addEventListener("resize", () => {
   activeScene.resize?.(native.canvas.width, native.canvas.height);
   particleEmitter.resize(native.canvas.width, native.canvas.height);
   fpsOverlay.alignRight(native.canvas.width);
+  autoToggleOverlay.alignBottomLeft(native.canvas.height);
 });
 app.ticker.add((delta) => {
   activeScene.update?.(delta * (1000 / 60), performance.now());

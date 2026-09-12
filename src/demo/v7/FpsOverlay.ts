@@ -47,3 +47,30 @@ export class FpsOverlay7 extends Container {
     this.nextUpdateMS = 1000;
   }
 }
+
+/** Always-visible automatic scene toggle status in the lower-left corner. */
+export class AutoToggleOverlay7 extends Container {
+  private readonly textLabel: BitmapText;
+
+  public constructor(enabled = true) {
+    super();
+    this.textLabel = createMetricBitmapText("", 16);
+    const background = new Graphics();
+    background
+      .beginFill(0x101522, 0.85)
+      .drawRoundedRect(0, 0, 380, 30, 6)
+      .endFill();
+    this.textLabel.position.set(10, 5);
+    this.addChild(background, this.textLabel);
+    this.setEnabled(enabled);
+  }
+
+  public setEnabled(enabled: boolean): void {
+    this.textLabel.text =
+      `autotoggle: ${enabled}${enabled ? " (default)" : ""} | toggle by space`;
+  }
+
+  public alignBottomLeft(viewportHeight: number): void {
+    this.position.set(12, Math.max(12, viewportHeight - this.height - 12));
+  }
+}

@@ -191,7 +191,12 @@ audio, transparency, resizing, and presentation. Use number keys `1` through
 Development runs with V8 garbage collection exposed. A startup sample and a
 sample every 150 seconds are appended as JSONL to `memoryinfo.log`; press
 `Delete` to run a manual GC and print before/after memory and scene-object
-counts.
+counts. Sprite+GSAP samples also include GSAP tween/timeline totals and the
+Pixi asset-cache size, so native RSS growth can be separated from retained JS
+objects. Every scene switch writes before/after samples with the active scene
+index and name. Automatic scene cycling is enabled by default and advances
+every 30 seconds, including available video variants; press `Space` to toggle
+it on or off. The state is printed to the console and written to the log.
 
 Create the platform-specific release archives from the full development
 installation:

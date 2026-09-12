@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { countSceneObjects } from "../src/demo/memoryDiagnostics.ts";
+import {
+  countCacheEntries,
+  countSceneObjects,
+} from "../src/demo/memoryDiagnostics.ts";
 
 class Sprite {
   readonly texture = {};
@@ -47,4 +50,10 @@ test("memory diagnostics inventories scene objects and unique textures", () => {
     Graphics: 1,
     uniqueTextures: 4,
   });
+});
+
+test("memory diagnostics counts Pixi cache entries across cache shapes", () => {
+  assert.equal(countCacheEntries({ _cacheMap: new Map([["a", {}]]) }), 1);
+  assert.equal(countCacheEntries({ _cache: { a: {}, b: {} } }), 2);
+  assert.equal(countCacheEntries(undefined), 0);
 });

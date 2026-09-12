@@ -19,6 +19,11 @@ export interface MemoryDiagnostics {
   stop(): void;
 }
 
+export interface MemoryDiagnosticsOptions {
+  readonly extra?: () => Record<string, number>;
+  readonly scene?: () => { index: number; name: string };
+}
+
 interface MemorySnapshot {
   readonly timestamp: string;
   readonly reason: string;
@@ -32,10 +37,13 @@ interface MemorySnapshot {
     readonly underruns: number;
   };
   readonly objects: Record<string, number>;
+  readonly extra: Record<string, number>;
+  readonly scene?: { index: number; name: string };
 }
 
 export function startMemoryDiagnostics(
   roots: () => readonly DiagnosticRoot[],
+  options: MemoryDiagnosticsOptions = {},
 ): MemoryDiagnostics {
   let stopped = false;
   const timer = setInterval(() => {
@@ -46,15 +54,20 @@ export function startMemoryDiagnostics(
   const sample = async (reason = "manual"): Promise<void> => {
     if (stopped) return;
     const gcExecuted = runGarbageCollection();
-    await writeSnapshot(createSnapshot(reason, roots(), gcExecuted));
+    await writeSnapshot(createSnapshot(reason, roots(), gcExecuted, options));
   };
 
   const collect = async (reason = "manual-gc"): Promise<void> => {
-    const before = createSnapshot(`${reason}:before`, roots(), false);
+    const before = createSnapshot(`${reason}:before`, roots(), false, options);
     const beforeWriteGc = runGarbageCollection();
     const beforeRecord = { ...before, gcExecuted: beforeWriteGc };
     const afterWriteGc = runGarbageCollection();
-    const afterRecord = createSnapshot(`${reason}:after`, roots(), afterWriteGc);
+    const afterRecord = createSnapshot(
+      `${reason}:after`,
+      roots(),
+      afterWriteGc,
+      options,
+    );
     console.log(
       `Manual GC ${afterWriteGc ? "executed" : "unavailable"}: ` +
         `heapUsed ${formatBytes(before.memory.heapUsed)} -> ${formatBytes(afterRecord.memory.heapUsed)}, ` +
@@ -82,6 +95,7 @@ function createSnapshot(
   reason: string,
   roots: readonly DiagnosticRoot[],
   gcExecuted: boolean,
+  options: MemoryDiagnosticsOptions,
 ): MemorySnapshot {
   const globalObject = globalThis as typeof globalThis & { gc?: GcFunction };
   return {
@@ -93,6 +107,8 @@ function createSnapshot(
     heap: getHeapStatistics(),
     audio: nativeAudioEngine.diagnostics,
     objects: countSceneObjects(roots),
+    extra: options.extra?.() ?? {},
+    scene: options.scene?.(),
   };
 }
 
@@ -144,6 +160,18 @@ export function countSceneObjects(
   for (const root of roots) visit(root);
   counts.uniqueTextures = textures.size;
   return counts;
+}
+
+/** Counts entries in Pixi's internal cache without depending on its versioned shape. */
+export function countCacheEntries(cache: unknown): number {
+  const value = cache as { _cache?: unknown; _cacheMap?: unknown } | null;
+  for (const candidate of [value?._cacheMap, value?._cache]) {
+    if (candidate instanceof Map) return candidate.size;
+    if (candidate && typeof candidate === "object") {
+      return Object.keys(candidate).length;
+    }
+  }
+  return 0;
 }
 
 function formatBytes(value: number): string {

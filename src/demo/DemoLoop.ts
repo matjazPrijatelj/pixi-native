@@ -1,5 +1,4 @@
-const CORE_DEMO_SCENE_INDICES = [0, 1, 2, 3] as const;
-const LOOP_DEMO_INTERVAL_MS = 2_000;
+const LOOP_DEMO_INTERVAL_MS = 30_000;
 
 /** Returns true only for a non-repeating plus-key press. */
 export function isLoopDemoShortcut(
@@ -9,21 +8,10 @@ export function isLoopDemoShortcut(
   return !repeat && key === "+";
 }
 
-/** Selects the next core scene while keeping media out of heap diagnostics. */
-export function getNextLoopSceneIndex(currentIndex: number): number {
-  const currentLoopIndex = CORE_DEMO_SCENE_INDICES.indexOf(
-    currentIndex as (typeof CORE_DEMO_SCENE_INDICES)[number],
-  );
-  if (currentLoopIndex < 0) return CORE_DEMO_SCENE_INDICES[0];
-  return CORE_DEMO_SCENE_INDICES[
-    (currentLoopIndex + 1) % CORE_DEMO_SCENE_INDICES.length
-  ];
-}
-
-/** Owns the diagnostic scene-loop timer shared by both demo versions. */
+/** Owns the automatic all-scene timer shared by both demo versions. */
 export function createDemoLoop(
-  selectScene: (index: number) => void,
-  getCurrentSceneIndex: () => number,
+  advanceScene: () => void,
+  onToggle?: (enabled: boolean) => void,
 ) {
   let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -31,18 +19,20 @@ export function createDemoLoop(
     if (timer === undefined) return;
     clearInterval(timer);
     timer = undefined;
-    if (announce) console.warn("LOOP_DEMO disabled");
+    if (announce) console.warn("AUTO_SCENES disabled");
+    if (announce) onToggle?.(false);
   };
 
   const start = (): void => {
     if (timer !== undefined) return;
     console.warn(
-      `LOOP_DEMO enabled: cycling core scenes every ${LOOP_DEMO_INTERVAL_MS} ms`,
+      `AUTO_SCENES enabled: advancing all scenes every ${LOOP_DEMO_INTERVAL_MS} ms`,
     );
-    timer = setInterval(() => {
-      selectScene(getNextLoopSceneIndex(getCurrentSceneIndex()));
-    }, LOOP_DEMO_INTERVAL_MS);
+    onToggle?.(true);
+    timer = setInterval(advanceScene, LOOP_DEMO_INTERVAL_MS);
   };
+
+  start();
 
   return {
     get enabled(): boolean {
