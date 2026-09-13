@@ -60,16 +60,16 @@ export class AutoToggleOverlay extends Container {
     super();
     this.textLabel = createMetricBitmapText("", 16);
     const background = new Graphics()
-      .roundRect(0, 0, 380, 30, 6)
+      .roundRect(0, 0, 500, 30, 6)
       .fill({ color: 0x101522, alpha: 0.85 });
     this.textLabel.position.set(10, 5);
     this.addChild(background, this.textLabel);
-    this.setEnabled(enabled);
+    this.setEnabled(enabled, true);
   }
 
-  public setEnabled(enabled: boolean): void {
+  public setEnabled(enabled: boolean, isDefault = false): void {
     this.textLabel.text =
-      `autotoggle: ${enabled}${enabled ? " (default)" : ""} | toggle by space`;
+      `autotoggle: ${enabled}${isDefault ? " (default)" : ""} | toggle by space | media: manual`;
   }
 
   public alignBottomLeft(viewportHeight: number): void {

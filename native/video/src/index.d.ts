@@ -19,11 +19,20 @@ export interface VideoFrame {
   data: Uint8Array;
 }
 
+export interface VideoFrameInfo {
+  width: number;
+  height: number;
+  timestampUs: number;
+}
+
 export class NativeVideoDecoder {
   public constructor(options: DecoderOptions);
   public open(source: string): void;
   public pollLatest(): VideoFrame | null;
   public pollNext(): VideoFrame | null;
+  public supportsFrameBufferReuse(): boolean;
+  public pollLatestInto(target: Buffer): VideoFrameInfo | null;
+  public pollNextInto(target: Buffer): VideoFrameInfo | null;
   public queuedFrames(): number;
   public catchUpTo(timestampUs: number): void;
   public pollError(): string | null;
@@ -31,6 +40,9 @@ export class NativeVideoDecoder {
   public decodedFrames(): number;
   public droppedFrames(): number;
   public skippedFrames(): number;
+  public frameBufferAllocations(): number;
+  public frameBufferReuses(): number;
+  public recycledFrameBuffers(): number;
   public isFinished(): boolean;
   public close(): void;
 }

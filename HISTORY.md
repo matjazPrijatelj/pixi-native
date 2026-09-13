@@ -1,20 +1,90 @@
 # Development history
 
+## 2026-09-13
+
+- Made the private Pixi WebGPU bind-group cache reset opt-in through
+  `PIXI_NATIVE_WEBGPU_BIND_GROUP_CACHE_RESET=1`; resource counters remain
+  available while the default renderer path is left untouched.
+- Added reusable caller-owned NV12 frame buffers between the native decoder and
+  TypeScript. Native queue storage is recycled after each synchronous copy,
+  avoiding a new external N-API buffer allocation for every presented frame;
+  diagnostics expose allocation, reuse, and recycled-buffer counts.
+- FFmpeg stderr reader threads are now owned and joined during decoder teardown
+  alongside the decoder worker and child process.
+- Post-build validation passed 153 Node tests, 14 native video Rust tests, and
+  a real MP4 `pollNextInto()` smoke test. Five-minute Graphics/Video soaks
+  completed on WebGL and WebGPU without freezes or lingering FFmpeg processes;
+  roughly 430 frames per cycle reused only 5-6 allocated native frame buffers.
+  The optional WebGPU cache reset bounded bind groups at 16 instead of 26 but
+  did not improve RSS, confirming it is diagnostic rather than the native fix.
+- Added phase-aware WebGPU memory diagnostics and isolated scene-pair runs.
+  Logs now report bind-group, managed texture, and managed buffer counts before
+  teardown and after the next rendered frame.
+- Bounded Pixi 8's renderer-lifetime WebGPU bind-group cache and invalidate it
+  after managed GPU resources are released. Isolation identified stale video
+  bind groups, although they were not the main RSS growth source.
+- Native video decoders now own and join their worker thread during `close()`,
+  and wait for the killed FFmpeg child process, preventing old decoder frame
+  queues and processes from surviving a scene switch.
+- Added native RSS isolation diagnostics: memory logs now support a per-run
+  `MEMORYINFO_LOG_PATH` and record renderer/target/native module paths.
+  Added `pnpm isolate-native-memory` for visible, separate WebGL/WebGPU runs
+  and extended `pnpm analyze-memory-info` with runtime grouping.
+- Consolidated diagnostics under `logs/`; startup rotates `memoryInfo.log` to
+  `memoryInfo-prev.log` before creating a fresh log, and the directory is
+  ignored by Git.
+- Autotoggle now skips only `rtp-video`; available local and transparent video
+  scenes are included in the automatic sequence.
+- Native isolation runner starts the demo as a non-hidden Windows child so the
+  SDL window remains visible when launched from an interactive desktop session.
+- Isolation runs now include a 15-second startup grace period, preventing
+  short smoke tests from being terminated before the first memory log exists.
+- Outlook report recipients are read from the ignored local `.env` via
+  `MEMORY_REPORT_EMAIL`, never from tracked history or source files.
+- WebGPU teardown now waits for submitted queue work before destroy listeners
+  release Pixi texture sources, preventing bound texture/sampler destruction
+  warnings and reducing deferred native resource retention.
+- Pixi 8 application teardown now preserves display-tree texture sources while
+  the renderer is being destroyed, avoiding bind-group notifications during
+  final stage cleanup.
+- Process restart/isolation teardown no longer unloads Pixi assets after the
+  native renderer is gone; process exit releases them without late bind-group
+  destruction warnings.
+- Space autotoggle handling now accepts the SDL-normalized `Space` key name in
+  addition to browser-style space key values.
+- Centralized space-key normalization for both Pixi 7 and Pixi 8 demos, logs
+  each manual toggle, and marks `(default)` only on the initial overlay state.
+
 ## 2026-09-12
 
 - Added dev memory diagnostics for all backends: `pnpm dev` now exposes V8 GC,
-  writes startup and 150-second JSONL samples to `memoryinfo.log`, and runs a
+  writes startup and 150-second JSONL samples to `logs/memoryInfo.log`, and runs a
   before/after collection report when `Delete` is pressed. Every automatic and
   manual-after sample forces GC first and records `gcExecuted`. Samples include
   process/V8 memory, native audio health, scene object counts, and unique
   textures. Sprite+GSAP samples now also record GSAP tween/timeline totals and
   Pixi asset-cache entries to distinguish JS retention from native RSS growth.
-- Memory samples now include the active scene index/name, with GC snapshots
-  before and after every scene switch. This makes transitions such as scene 5
-  (audio) to scene 6 (RTP video) directly comparable in `memoryinfo.log`.
-- Automatic scene cycling now starts enabled, advances every 30 seconds across
-  all scenes and available video variants, and is toggled with `Space`. Toggle
-  state is printed and recorded as an `auto-scenes:*` memory sample.
+- Memory samples now include the active scene index/name, with a GC snapshot on
+  scene entry and a 150-second snapshot when the same scene remains active.
+  This makes transitions such as scene 5 (audio) to scene 6 (RTP video)
+  directly comparable in `logs/memoryInfo.log`.
+- Added `pnpm analyze-memory-info` for a quick memory-log summary: RSS/heap/
+  external trends, scene counts, and timestamp/sequence gap warnings.
+- Automatic scene cycling now starts enabled, advances every 15 seconds by
+  default across non-media scenes, and is toggled with `Space`; set
+  `AUTOTOGGLE_INTERVAL` in `.env` to change the interval. Video, transparent-video, and
+  RTP scenes remain manual-only to avoid native decoder freezes. Toggle state
+  is printed and recorded as an `auto-scenes:*` memory sample.
+- Hardened RTP teardown: Pixi 7 now destroys every `NativeVideo` before its
+  sprites on scene changes, and native video invalidates reconnect state during
+  `destroy()`. Memory records now include epoch/monotonic timestamps and a
+  serialized sequence so stalled or reordered writes are diagnosable.
+- Completed a 10-minute unavailable-RTP soak with visible WebGPU window and
+  RTP/Graphics scene changes every 30 seconds. RSS moved from 252.7 to 273.9
+  MiB, JS heap from 26.4 to 28.8 MiB, and external memory from 14.9 to 16.3
+  MiB; final post-dispose sampling showed no continuing growth. Native live
+  reconnects remain active while the scene is alive and are stopped only by
+  the explicit video dispose path.
 - Completed the matching 25-minute WebGPU Rain soak with 200 drops and the
   unmuted audio path at zero master volume. Eleven GC-confirmed samples held the
   JS heap near 28.3-28.6 MiB after warm-up, RSS near 283-288 MiB, and kept the

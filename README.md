@@ -189,14 +189,29 @@ audio, transparency, resizing, and presentation. Use number keys `1` through
 `9` or the arrow keys to change scenes.
 
 Development runs with V8 garbage collection exposed. A startup sample and a
-sample every 150 seconds are appended as JSONL to `memoryinfo.log`; press
+sample every 150 seconds are appended as JSONL to `logs/memoryInfo.log`; on
+startup an existing log is rotated to `logs/memoryInfo-prev.log`. Press
 `Delete` to run a manual GC and print before/after memory and scene-object
 counts. Sprite+GSAP samples also include GSAP tween/timeline totals and the
 Pixi asset-cache size, so native RSS growth can be separated from retained JS
-objects. Every scene switch writes before/after samples with the active scene
-index and name. Automatic scene cycling is enabled by default and advances
-every 30 seconds, including available video variants; press `Space` to toggle
-it on or off. The state is printed to the console and written to the log.
+objects. A scene-entry sample is written after each scene change; if the scene
+stays unchanged, another sample is written every 150 seconds. Automatic scene
+cycling is enabled by default and advances every 15 seconds through non-media
+scenes; press `Space` to toggle it on or off. Set `AUTOTOGGLE_INTERVAL` in
+`.env` to change the interval (in seconds). The state is printed to the
+console and written to the log.
+Run `pnpm analyze-memory-info` for a compact summary of the log, including
+memory deltas, scene counts, and timestamp/sequence gaps.
+Run `pnpm isolate-native-memory -- --duration-seconds 600 --backend=both` to
+launch visible, separate WebGL and WebGPU RSS runs; each result is written to
+`logs/native-memory-isolation/<backend>.log` for comparison.
+Pass `--scenes=graphics,video` to cycle only named scenes; isolated scene runs
+are kept in their own `logs/native-memory-isolation/<scene-pair>/` directory.
+RTP remains manual-only in this automatic mode to avoid reconnect attempts when
+the stream is unavailable. Local video and transparent-video variants are part
+of automatic cycling; their manual controls are unchanged.
+RTP streams are explicitly destroyed when leaving their scene so reconnect
+workers cannot outlive the scene.
 
 Create the platform-specific release archives from the full development
 installation:

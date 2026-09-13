@@ -58,16 +58,16 @@ export class AutoToggleOverlay7 extends Container {
     const background = new Graphics();
     background
       .beginFill(0x101522, 0.85)
-      .drawRoundedRect(0, 0, 380, 30, 6)
+      .drawRoundedRect(0, 0, 500, 30, 6)
       .endFill();
     this.textLabel.position.set(10, 5);
     this.addChild(background, this.textLabel);
-    this.setEnabled(enabled);
+    this.setEnabled(enabled, true);
   }
 
-  public setEnabled(enabled: boolean): void {
+  public setEnabled(enabled: boolean, isDefault = false): void {
     this.textLabel.text =
-      `autotoggle: ${enabled}${enabled ? " (default)" : ""} | toggle by space`;
+      `autotoggle: ${enabled}${isDefault ? " (default)" : ""} | toggle by space | media: manual`;
   }
 
   public alignBottomLeft(viewportHeight: number): void {

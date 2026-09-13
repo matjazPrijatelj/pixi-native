@@ -18,6 +18,7 @@ const CATCH_UP_LAG_FRAMES = 3;
 const MAXIMUM_SOFTWARE_4K_FPS = 30;
 const UHD_PIXEL_COUNT = 3840 * 2160;
 const SOFTWARE_CHROMA_PIXEL_FORMAT = /^yuv(?:422|444)p/;
+const REUSABLE_FRAME_BUFFER_COUNT = 5;
 
 export interface Nv12FrameLayout {
   readonly yBytes: number;
@@ -45,10 +46,21 @@ interface NativePackedVideoFrame {
   readonly data: Uint8Array;
 }
 
+interface NativePackedVideoFrameInfo {
+  readonly width: number;
+  readonly height: number;
+  readonly timestampUs: number;
+}
+
 interface NativeDecoderBinding {
   open(source: string): void;
   pollLatest(): NativePackedVideoFrame | null;
   pollNext(): NativePackedVideoFrame | null;
+  supportsFrameBufferReuse?(): boolean;
+  pollLatestInto?(
+    target: Buffer,
+  ): NativePackedVideoFrameInfo | null;
+  pollNextInto?(target: Buffer): NativePackedVideoFrameInfo | null;
   queuedFrames(): number;
   catchUpTo(timestampUs: number): void;
   pollError(): string | null;
@@ -56,6 +68,9 @@ interface NativeDecoderBinding {
   decodedFrames(): number;
   droppedFrames(): number;
   skippedFrames(): number;
+  frameBufferAllocations?(): number;
+  frameBufferReuses?(): number;
+  recycledFrameBuffers?(): number;
   isFinished(): boolean;
   close(): void;
 }
@@ -122,6 +137,9 @@ export interface NativeVideoStats {
   readonly queuedFrames: number;
   readonly syncOffsetMs: number;
   readonly bytesPerFrame: number;
+  readonly frameBufferAllocations: number;
+  readonly frameBufferReuses: number;
+  readonly recycledFrameBuffers: number;
 }
 
 export interface NativeVideoDecoderLike {
@@ -136,6 +154,9 @@ export interface NativeVideoDecoderLike {
   decodedFrames(): number;
   droppedFrames(): number;
   skippedFrames(): number;
+  frameBufferAllocations?(): number;
+  frameBufferReuses?(): number;
+  recycledFrameBuffers?(): number;
   isFinished(): boolean;
   close(): void;
 }
@@ -333,9 +354,11 @@ function probeMedia(
 
 export class NativeVideoDecoder implements NativeVideoDecoderLike {
   private readonly decoder: NativeDecoderBinding;
+  private readonly frameBuffers: Buffer[];
+  private nextFrameBuffer = 0;
 
   public constructor(options: NativeVideoDecoderOptions) {
-    getNv12FrameLayout(options.width, options.height);
+    const layout = getNv12FrameLayout(options.width, options.height);
     const fps = options.fps ?? 30;
     if (!Number.isFinite(fps) || fps <= 0) {
       throw new Error("Video FPS must be positive and finite");
@@ -365,6 +388,10 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
         explicitPath: options.ffmpegPath,
       }),
     });
+    this.frameBuffers = Array.from(
+      { length: REUSABLE_FRAME_BUFFER_COUNT },
+      () => Buffer.allocUnsafe(layout.frameBytes),
+    );
   }
 
   public open(source: string): void {
@@ -372,11 +399,17 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
   }
 
   public pollLatest(): NativeVideoFrame | null {
+    if (this.decoder.supportsFrameBufferReuse?.()) {
+      return this.pollInto("latest");
+    }
     const frame = this.decoder.pollLatest();
     return frame ? splitNv12Frame(frame) : null;
   }
 
   public pollNext(): NativeVideoFrame | null {
+    if (this.decoder.supportsFrameBufferReuse?.()) {
+      return this.pollInto("next");
+    }
     const frame = this.decoder.pollNext();
     return frame ? splitNv12Frame(frame) : null;
   }
@@ -413,12 +446,36 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
     return this.decoder.skippedFrames();
   }
 
+  public frameBufferAllocations(): number {
+    return this.decoder.frameBufferAllocations?.() ?? 0;
+  }
+
+  public frameBufferReuses(): number {
+    return this.decoder.frameBufferReuses?.() ?? 0;
+  }
+
+  public recycledFrameBuffers(): number {
+    return this.decoder.recycledFrameBuffers?.() ?? 0;
+  }
+
   public isFinished(): boolean {
     return this.decoder.isFinished();
   }
 
   public close(): void {
     this.decoder.close();
+  }
+
+  private pollInto(mode: "latest" | "next"): NativeVideoFrame | null {
+    const data = this.frameBuffers[this.nextFrameBuffer];
+    const frame =
+      mode === "latest"
+        ? this.decoder.pollLatestInto!(data)
+        : this.decoder.pollNextInto!(data);
+    if (!frame) return null;
+    this.nextFrameBuffer =
+      (this.nextFrameBuffer + 1) % this.frameBuffers.length;
+    return splitNv12Frame({ ...frame, data });
   }
 }
 
@@ -560,6 +617,32 @@ export function setNativeVideoModalState(active: boolean): void {
     if (video) video.setModalState(active);
     else activeVideos.delete(reference);
   }
+}
+
+/** Aggregates active decoder buffer counters for development diagnostics. */
+export function getNativeVideoMemoryStats(): Record<string, number> {
+  let activeNativeVideos = 0;
+  let nativeVideoFrameBufferAllocations = 0;
+  let nativeVideoFrameBufferReuses = 0;
+  let nativeVideoRecycledFrameBuffers = 0;
+  for (const reference of activeVideos) {
+    const video = reference.deref();
+    if (!video) {
+      activeVideos.delete(reference);
+      continue;
+    }
+    activeNativeVideos++;
+    const stats = video.stats;
+    nativeVideoFrameBufferAllocations += stats.frameBufferAllocations;
+    nativeVideoFrameBufferReuses += stats.frameBufferReuses;
+    nativeVideoRecycledFrameBuffers += stats.recycledFrameBuffers;
+  }
+  return {
+    activeNativeVideos,
+    nativeVideoFrameBufferAllocations,
+    nativeVideoFrameBufferReuses,
+    nativeVideoRecycledFrameBuffers,
+  };
 }
 
 /**
@@ -862,6 +945,9 @@ export class NativeVideo extends EventTarget {
         (this.decoder?.queuedFrames() ?? 0) + (this.pendingFrame ? 1 : 0),
       syncOffsetMs: this.syncOffsetMilliseconds,
       bytesPerFrame: layout.frameBytes,
+      frameBufferAllocations: this.decoder?.frameBufferAllocations?.() ?? 0,
+      frameBufferReuses: this.decoder?.frameBufferReuses?.() ?? 0,
+      recycledFrameBuffers: this.decoder?.recycledFrameBuffers?.() ?? 0,
     };
   }
 
@@ -999,6 +1085,8 @@ export class NativeVideo extends EventTarget {
   public destroy(): void {
     if (this.destroyed) return;
     this.playbackGeneration++;
+    this.sourceGeneration++;
+    this.reconnectAtMs = 0;
     this.stopDecoder();
     this.stopAudio();
     this.isPaused = true;
@@ -1441,6 +1529,7 @@ export class NativeVideo extends EventTarget {
   }
 
   private scheduleReconnect(): void {
+    if (this.destroyed || this.isPaused) return;
     this.playingDispatched = false;
     const reconnect = this.options.reconnect || {};
     const initialDelay = reconnect.initialDelayMs ?? 500;

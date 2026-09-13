@@ -4,13 +4,20 @@ import type { SpriteTestScene } from "./scenes/SpriteTest.ts";
 import type { AudioTestScene } from "./scenes/AudioTest.ts";
 import type { RainSpriteTestScene } from "./scenes/RainSpriteTest.ts";
 import type { VideoTestScene } from "./scenes/VideoTest.ts";
-import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
+import {
+  createDemoLoop,
+  isAutoToggleShortcut,
+  isLoopDemoShortcut,
+  shouldSkipAutoScene,
+} from "../DemoLoop.ts";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 import { filterVideoAssets } from "../videoAssets.ts";
 import {
   countCacheEntries,
   startMemoryDiagnostics,
 } from "../memoryDiagnostics.ts";
+import { resolveNativePlatformModules } from "@pixi-native/core/runtime/platformNative.js";
+import { getNativeVideoMemoryStats } from "@pixi-native/core/video/NativeVideo.js";
 
 if (!(globalThis as any).navigator) {
   Object.defineProperty(globalThis, "navigator", {
@@ -150,7 +157,6 @@ const eventVideoSources = videos
   .filter(({ fps }) => Math.abs(fps - 30) < 0.001);
 
 let videoIndex = 0;
-let autoVideoTransparent = false;
 
 const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createGraphicsTest(),
@@ -164,7 +170,7 @@ const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
 ];
 const sceneNames = ["graphics", "sprite-gsap", "text", "bitmap-text"];
 
-const videoSceneIndex =
+let videoSceneIndex =
   supportsVideo && availableVideos.length > 0 ? scenes.length : null;
 
 if (videoSceneIndex !== null) {
@@ -207,11 +213,35 @@ scenes.push(() =>
 );
 sceneNames.push("rain");
 
-const particleSceneIndex = scenes.length;
 scenes.push(() => createParticleTest());
 sceneNames.push("particles");
 
-let index = 1;
+const requestedMemoryScenes = process.env.MEMORY_TEST_SCENES
+  ?.split(",")
+  .map((name) => name.trim())
+  .filter(Boolean);
+if (requestedMemoryScenes?.length) {
+  const requested = new Set(requestedMemoryScenes);
+  const selected = sceneNames
+    .map((name, sceneIndex) => ({ name, factory: scenes[sceneIndex] }))
+    .filter(({ name }) => requested.has(name) && name !== "rtp-video");
+  if (selected.length === 0) {
+    throw new Error(
+      `MEMORY_TEST_SCENES did not match a testable scene: ${requestedMemoryScenes.join(", ")}`,
+    );
+  }
+  scenes.length = 0;
+  sceneNames.length = 0;
+  for (const selectedScene of selected) {
+    scenes.push(selectedScene.factory);
+    sceneNames.push(selectedScene.name);
+  }
+  const selectedVideoIndex = sceneNames.indexOf("video");
+  videoSceneIndex = selectedVideoIndex >= 0 ? selectedVideoIndex : null;
+  console.warn(`MEMORY_TEST_SCENES: ${sceneNames.join(" -> ")}`);
+}
+
+let index = Math.min(1, scenes.length - 1);
 let scene = scenes[index]();
 
 const prepareScene = (nextScene: typeof scene): typeof scene => {
@@ -253,53 +283,79 @@ const memoryDiagnostics = startMemoryDiagnostics(() => [
     gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
     gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
     pixiAssetCache: countCacheEntries(Assets.cache),
+    ...getNativeVideoMemoryStats(),
+    ...(
+      app.renderer as typeof app.renderer & {
+        __pixiNativeResourceStats?: () => Record<string, number>;
+      }
+    ).__pixiNativeResourceStats?.(),
   }),
   scene: () => ({ index, name: sceneNames[index] ?? "unknown" }),
+  runtime: () => {
+    const modules = resolveNativePlatformModules();
+    return {
+      backend,
+      target: modules.target,
+      gpuModule: modules.gpuModule,
+      windowModule: modules.windowModule,
+      videoModule: modules.videoModule,
+      audioBinding: modules.audioBinding ?? "",
+    };
+  },
 });
 
-const selectScene = (nextIndex: number): void => {
-  if (nextIndex === index) return;
-  if (nextIndex !== videoSceneIndex) autoVideoTransparent = false;
-  void memoryDiagnostics.sample("scene-switch:before");
-  disposeDemoScene(scene);
-  if (index === particleSceneIndex) particleEmitter.setEnabled(false);
-  index = nextIndex;
-  scene = prepareScene(scenes[index]());
-  app.stage.addChild(scene);
-  if (index === particleSceneIndex) particleEmitter.setEnabled(true);
-  void memoryDiagnostics.sample("scene-switch:after");
+const waitForGpuSceneResources = async (): Promise<void> => {
+  await native.device?.queue.onSubmittedWorkDone?.();
 };
 
-const selectVideo = (nextVideoIndex: number): void => {
-  if (index !== videoSceneIndex || nextVideoIndex === videoIndex) return;
-  disposeDemoScene(scene);
-  videoIndex = nextVideoIndex;
-  scene = prepareScene(scenes[index]());
-  app.stage.addChild(scene);
+let sceneTransitioning = false;
+const selectScene = async (nextIndex: number): Promise<void> => {
+  if (nextIndex === index || sceneTransitioning) return;
+  sceneTransitioning = true;
+  try {
+    await memoryDiagnostics.sample("scene-exit:before");
+    await waitForGpuSceneResources();
+    disposeDemoScene(scene);
+    await memoryDiagnostics.sample("scene-exit:after");
+    if (sceneNames[index] === "particles") particleEmitter.setEnabled(false);
+    index = nextIndex;
+    scene = prepareScene(scenes[index]());
+    app.stage.addChild(scene);
+    if (sceneNames[index] === "particles") particleEmitter.setEnabled(true);
+    requestAnimationFrame(() => {
+      void waitForGpuSceneResources().then(() =>
+        memoryDiagnostics.sceneEntry("scene-entry:rendered"),
+      );
+    });
+  } finally {
+    sceneTransitioning = false;
+  }
+};
+
+const selectVideo = async (nextVideoIndex: number): Promise<void> => {
+  if (
+    index !== videoSceneIndex ||
+    nextVideoIndex === videoIndex ||
+    sceneTransitioning
+  ) return;
+  sceneTransitioning = true;
+  try {
+    await waitForGpuSceneResources();
+    disposeDemoScene(scene);
+    videoIndex = nextVideoIndex;
+    scene = prepareScene(scenes[index]());
+    app.stage.addChild(scene);
+  } finally {
+    sceneTransitioning = false;
+  }
 };
 
 const demoLoop = createDemoLoop(() => {
-  if (index === videoSceneIndex) {
-    if (transparentVideoPath && !autoVideoTransparent &&
-        videoIndex === availableVideos.length - 1) {
-      (scene as unknown as Partial<VideoTestScene>).handleKey?.("t", 0);
-      autoVideoTransparent = true;
-      void memoryDiagnostics.sample("auto-scenes:video-transparent");
-      return;
-    }
-    if (autoVideoTransparent) {
-      (scene as unknown as Partial<VideoTestScene>).handleKey?.("t", 0);
-      autoVideoTransparent = false;
-      selectScene((index + 1) % scenes.length);
-      return;
-    }
-    if (availableVideos.length > 1) {
-      selectVideo((videoIndex + 1) % availableVideos.length);
-      void memoryDiagnostics.sample("auto-scenes:video-variant");
-      return;
-    }
+  let nextIndex = (index + 1) % scenes.length;
+  while (shouldSkipAutoScene(sceneNames[nextIndex])) {
+    nextIndex = (nextIndex + 1) % scenes.length;
   }
-  selectScene((index + 1) % scenes.length);
+  void selectScene(nextIndex);
 }, (enabled) => {
   autoToggleOverlay.setEnabled(enabled);
   autoToggleOverlay.alignBottomLeft(native.canvas.height);
@@ -333,8 +389,9 @@ globalThis.addEventListener("keydown", (rawEvent) => {
     return;
   }
 
-  if ((event.key === " " || event.key === "Spacebar") && !event.repeat) {
+  if (isAutoToggleShortcut(event.key, event.repeat, event.code)) {
     demoLoop.toggle();
+    console.warn(`AUTO_SCENES toggled by Space: ${demoLoop.enabled}`);
     return;
   }
 
@@ -387,7 +444,7 @@ globalThis.addEventListener("keydown", (rawEvent) => {
   );
 
   if (nextVideoIndex !== null) {
-    selectVideo(nextVideoIndex);
+    void selectVideo(nextVideoIndex);
     return;
   }
 
@@ -409,24 +466,10 @@ globalThis.addEventListener("keyup", (rawEvent) => {
 });
 
 app.ticker.add((ticker) => {
-  animateDemoScene(scene, ticker.deltaMS);
+  if (!sceneTransitioning) animateDemoScene(scene, ticker.deltaMS);
   particleEmitter.update(ticker.deltaMS);
   fpsOverlay.tick(ticker.deltaMS);
 });
-
-let bitmapFontsDestroyed = false;
-const destroyBitmapFonts = async (): Promise<void> => {
-  if (bitmapFontsDestroyed) return;
-  bitmapFontsDestroyed = true;
-  BitmapFont.uninstall(DYNAMIC_BITMAP_FONT_NAME);
-  await Assets.unload(bitmapFontPath);
-};
-
-const destroySpriteTextures = async (): Promise<void> => {
-  await Promise.all(texturePaths.map((path) => Assets.unload(path)));
-  await Assets.unload(drumTexturePath);
-  await Assets.unload(rainDropTexturePath);
-};
 
 const stopActiveScene = (): void => {
   (scene as typeof scene & { dispose?: () => void }).dispose?.();
@@ -438,8 +481,7 @@ addDestroyListener(async () => {
   particleEmitter.destroy();
   Howler.unload();
   app.stage.removeChild(background);
-  background.destroy();
-  await Assets.unload(backgroundTexturePath);
+  background.destroy({ texture: false, textureSource: false });
 });
 
 const RESTART_EXIT_CODE = 75;
@@ -452,9 +494,14 @@ const restartApp = async (): Promise<void> => {
 
   try {
     await destroy();
-    await destroySpriteTextures();
-    await destroyBitmapFonts();
   } catch {}
 
   process.exit(RESTART_EXIT_CODE);
 };
+
+const isolationDurationMs = Number(process.env.MEMORY_ISOLATION_DURATION_MS);
+if (Number.isFinite(isolationDurationMs) && isolationDurationMs > 0) {
+  setTimeout(() => {
+    void destroy().then(() => process.exit(0));
+  }, isolationDurationMs).unref?.();
+}

@@ -1,20 +1,24 @@
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getHeapStatistics } from "node:v8";
 import { nativeAudioEngine } from "@pixi-native/core/audio";
 
 const SAMPLE_INTERVAL_MS = 150_000;
-const LOG_PATH = resolve(
+const DEFAULT_LOG_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../memoryinfo.log",
+  "../../logs/memoryInfo.log",
 );
+const diagnosticsStartedAt = performance.now();
+let sequence = 0;
+let writeQueue = Promise.resolve();
 
 type DiagnosticRoot = unknown;
 type GcFunction = (() => void) | undefined;
 
 export interface MemoryDiagnostics {
   sample(reason?: string): Promise<void>;
+  sceneEntry(reason?: string): Promise<void>;
   collect(reason?: string): Promise<void>;
   stop(): void;
 }
@@ -22,10 +26,14 @@ export interface MemoryDiagnostics {
 export interface MemoryDiagnosticsOptions {
   readonly extra?: () => Record<string, number>;
   readonly scene?: () => { index: number; name: string };
+  readonly runtime?: () => Record<string, string | number | boolean>;
 }
 
 interface MemorySnapshot {
   readonly timestamp: string;
+  readonly timestampMs: number;
+  readonly elapsedMs: number;
+  readonly sequence: number;
   readonly reason: string;
   readonly gcAvailable: boolean;
   readonly gcExecuted: boolean;
@@ -38,6 +46,7 @@ interface MemorySnapshot {
   };
   readonly objects: Record<string, number>;
   readonly extra: Record<string, number>;
+  readonly runtime: Record<string, string | number | boolean>;
   readonly scene?: { index: number; name: string };
 }
 
@@ -45,19 +54,36 @@ export function startMemoryDiagnostics(
   roots: () => readonly DiagnosticRoot[],
   options: MemoryDiagnosticsOptions = {},
 ): MemoryDiagnostics {
+  const logPath = resolve(process.env.MEMORYINFO_LOG_PATH ?? DEFAULT_LOG_PATH);
+  const rotation = rotateLogOnStartup(logPath);
   let stopped = false;
+  let lastSceneKey: string | undefined;
+  let lastSceneEntryAt = performance.now();
   const timer = setInterval(() => {
-    void sample("interval");
+    const currentSceneKey = getSceneKey(options.scene?.());
+    if (performance.now() - lastSceneEntryAt < SAMPLE_INTERVAL_MS) return;
+    void (currentSceneKey !== lastSceneKey
+      ? sceneEntry("interval:scene-changed")
+      : sample("interval:same-scene"));
   }, SAMPLE_INTERVAL_MS);
   timer.unref?.();
 
   const sample = async (reason = "manual"): Promise<void> => {
     if (stopped) return;
+    await rotation;
     const gcExecuted = runGarbageCollection();
-    await writeSnapshot(createSnapshot(reason, roots(), gcExecuted, options));
+    await writeSnapshot(createSnapshot(reason, roots(), gcExecuted, options), logPath);
+  };
+
+  const sceneEntry = async (reason = "scene-entry"): Promise<void> => {
+    if (stopped) return;
+    lastSceneKey = getSceneKey(options.scene?.());
+    lastSceneEntryAt = performance.now();
+    await sample(reason);
   };
 
   const collect = async (reason = "manual-gc"): Promise<void> => {
+    await rotation;
     const before = createSnapshot(`${reason}:before`, roots(), false, options);
     const beforeWriteGc = runGarbageCollection();
     const beforeRecord = { ...before, gcExecuted: beforeWriteGc };
@@ -74,14 +100,15 @@ export function startMemoryDiagnostics(
         `rss ${formatBytes(before.memory.rss)} -> ${formatBytes(afterRecord.memory.rss)}, ` +
         `objects ${formatObjects(afterRecord.objects)}`,
     );
-    await writeSnapshot(beforeRecord);
-    await writeSnapshot(afterRecord);
+    await writeSnapshot(beforeRecord, logPath);
+    await writeSnapshot(afterRecord, logPath);
   };
 
-  void sample("startup");
+  void sceneEntry("startup");
 
   return {
     sample,
+    sceneEntry,
     collect,
     stop(): void {
       if (stopped) return;
@@ -89,6 +116,28 @@ export function startMemoryDiagnostics(
       clearInterval(timer);
     },
   };
+}
+
+/** Moves the previous memory log aside before the first sample is written. */
+async function rotateLogOnStartup(logPath: string): Promise<void> {
+  await mkdir(dirname(logPath), { recursive: true });
+  if (logPath.toLowerCase() !== resolve("logs/memoryInfo.log").toLowerCase()) return;
+  const previousPath = resolve(dirname(logPath), "memoryInfo-prev.log");
+  try {
+    await rm(previousPath, { force: true });
+    await rename(logPath, previousPath);
+  } catch (error) {
+    const code = error as NodeJS.ErrnoException;
+    if (code.code !== "ENOENT") {
+      console.warn("Memory diagnostics could not rotate memoryInfo.log:", error);
+    }
+  }
+}
+
+function getSceneKey(
+  scene: { index: number; name: string } | undefined,
+): string | undefined {
+  return scene ? `${scene.index}:${scene.name}` : undefined;
 }
 
 function createSnapshot(
@@ -100,6 +149,9 @@ function createSnapshot(
   const globalObject = globalThis as typeof globalThis & { gc?: GcFunction };
   return {
     timestamp: new Date().toISOString(),
+    timestampMs: 0,
+    elapsedMs: 0,
+    sequence: 0,
     reason,
     gcAvailable: typeof globalObject.gc === "function",
     gcExecuted,
@@ -108,6 +160,7 @@ function createSnapshot(
     audio: nativeAudioEngine.diagnostics,
     objects: countSceneObjects(roots),
     extra: options.extra?.() ?? {},
+    runtime: options.runtime?.() ?? {},
     scene: options.scene?.(),
   };
 }
@@ -122,13 +175,22 @@ function runGarbageCollection(): boolean {
   return true;
 }
 
-async function writeSnapshot(snapshot: MemorySnapshot): Promise<void> {
-  try {
-    await mkdir(dirname(LOG_PATH), { recursive: true });
-    await appendFile(LOG_PATH, `${JSON.stringify(snapshot)}\n`, "utf8");
-  } catch (error) {
-    console.warn("Memory diagnostics could not write memoryinfo.log:", error);
-  }
+async function writeSnapshot(snapshot: MemorySnapshot, logPath: string): Promise<void> {
+  const record = {
+    ...snapshot,
+    timestampMs: Date.now(),
+    elapsedMs: performance.now() - diagnosticsStartedAt,
+    sequence: ++sequence,
+  };
+  writeQueue = writeQueue.then(async () => {
+    try {
+      await mkdir(dirname(logPath), { recursive: true });
+      await appendFile(logPath, `${JSON.stringify(record)}\n`, "utf8");
+    } catch (error) {
+      console.warn(`Memory diagnostics could not write ${logPath}:`, error);
+    }
+  });
+  await writeQueue;
 }
 
 export function countSceneObjects(

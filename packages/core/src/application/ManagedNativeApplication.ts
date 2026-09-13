@@ -250,6 +250,10 @@ export function manageNativeApplication<TApplication, TNative>(
       app.ticker.stop();
       app.ticker.remove(present);
       removeProcessListeners();
+      // Stop all submissions before destroy listeners release Pixi resources.
+      // WebGPU warns (and may retain resources) when a bound texture source is
+      // destroyed while commands using it are still in flight.
+      await run(async () => native.device?.queue.onSubmittedWorkDone?.());
       for (const listener of [...destroyListeners]) await run(listener);
       destroyListeners.clear();
       await run(async () => native.device?.queue.onSubmittedWorkDone?.());

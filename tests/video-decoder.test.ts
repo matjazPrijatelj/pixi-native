@@ -268,8 +268,11 @@ test("NativeVideo records end and latest-frame decoder statistics", async () => 
     droppedFrames: 3,
     skippedFrames: 0,
     queuedFrames: 0,
-    syncOffsetMs: 0,
-    bytesPerFrame: 6,
+      syncOffsetMs: 0,
+      bytesPerFrame: 6,
+      frameBufferAllocations: 0,
+      frameBufferReuses: 0,
+      recycledFrameBuffers: 0,
   });
 });
 

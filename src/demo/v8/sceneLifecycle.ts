@@ -10,6 +10,8 @@ const SCENE_DESTROY_OPTIONS: DestroyOptions = {
   children: true,
   context: true,
   style: true,
+  texture: false,
+  textureSource: false,
 };
 
 /** Releases one scene and all resources it owns, while preserving shared textures. */

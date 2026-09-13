@@ -38,6 +38,13 @@ pub struct VideoFrame {
     pub data: Buffer,
 }
 
+#[napi(object)]
+pub struct VideoFrameInfo {
+    pub width: i64,
+    pub height: i64,
+    pub timestamp_us: i64,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DecoderBackend {
     D3d11va,
@@ -84,7 +91,10 @@ struct DecoderState {
     decoded_frames: Arc<AtomicU64>,
     dropped_frames: Arc<AtomicU64>,
     skipped_frames: Arc<AtomicU64>,
+    frame_buffer_allocations: Arc<AtomicU64>,
+    frame_buffer_reuses: Arc<AtomicU64>,
     backend: Arc<Mutex<String>>,
+    stderr_workers: Arc<Mutex<Vec<thread::JoinHandle<()>>>>,
 }
 
 struct PendingFrame {
@@ -95,6 +105,7 @@ struct PendingFrame {
 #[derive(Default)]
 struct FrameQueue {
     frames: VecDeque<PendingFrame>,
+    recycled: Vec<Vec<u8>>,
 }
 
 impl FrameQueue {
@@ -108,6 +119,19 @@ impl FrameQueue {
         recycled
     }
 
+    fn take_recycled(&mut self, frame_bytes: usize) -> Option<Vec<u8>> {
+        while let Some(buffer) = self.recycled.pop() {
+            if buffer.len() == frame_bytes {
+                return Some(buffer);
+            }
+        }
+        None
+    }
+
+    fn recycle(&mut self, buffer: Vec<u8>) {
+        self.recycled.push(buffer);
+    }
+
     fn push_back(&mut self, frame: PendingFrame) {
         self.frames.push_back(frame);
     }
@@ -119,7 +143,9 @@ impl FrameQueue {
     fn pop_latest(&mut self) -> (Option<PendingFrame>, usize) {
         let latest = self.frames.pop_back();
         let skipped = self.frames.len();
-        self.frames.clear();
+        while let Some(frame) = self.frames.pop_front() {
+            self.recycle(frame.data);
+        }
         (latest, skipped)
     }
 
@@ -127,14 +153,22 @@ impl FrameQueue {
         self.frames.len()
     }
 
+    fn recycle_queued(&mut self) {
+        while let Some(frame) = self.frames.pop_front() {
+            self.recycle(frame.data);
+        }
+    }
+
     fn clear(&mut self) {
         self.frames.clear();
+        self.recycled.clear();
     }
 }
 
 struct SpawnedFfmpeg {
     child: Child,
     stdout: ChildStdout,
+    stderr_worker: Option<thread::JoinHandle<()>>,
 }
 
 #[derive(Clone)]
@@ -155,6 +189,7 @@ struct FfmpegRequest {
 pub struct NativeVideoDecoder {
     options: DecoderOptions,
     state: DecoderState,
+    worker: Option<thread::JoinHandle<()>>,
 }
 
 #[napi]
@@ -171,6 +206,7 @@ impl NativeVideoDecoder {
 
         Ok(Self {
             options,
+            worker: None,
             state: DecoderState {
                 closed: Arc::new(AtomicBool::new(true)),
                 finished: Arc::new(AtomicBool::new(false)),
@@ -182,13 +218,19 @@ impl NativeVideoDecoder {
                 decoded_frames: Arc::new(AtomicU64::new(0)),
                 dropped_frames: Arc::new(AtomicU64::new(0)),
                 skipped_frames: Arc::new(AtomicU64::new(0)),
+                frame_buffer_allocations: Arc::new(AtomicU64::new(0)),
+                frame_buffer_reuses: Arc::new(AtomicU64::new(0)),
                 backend: Arc::new(Mutex::new(backend)),
+                stderr_workers: Arc::new(Mutex::new(Vec::new())),
             },
         })
     }
 
     #[napi]
     pub fn open(&mut self, source: String) -> Result<()> {
+        if self.state.closed.load(Ordering::SeqCst) {
+            self.join_worker();
+        }
         if !self.state.closed.swap(false, Ordering::SeqCst) {
             return Err(Error::from_reason("Video decoder is already open"));
         }
@@ -197,6 +239,10 @@ impl NativeVideoDecoder {
         self.state.decoded_frames.store(0, Ordering::SeqCst);
         self.state.dropped_frames.store(0, Ordering::SeqCst);
         self.state.skipped_frames.store(0, Ordering::SeqCst);
+        self.state
+            .frame_buffer_allocations
+            .store(0, Ordering::SeqCst);
+        self.state.frame_buffer_reuses.store(0, Ordering::SeqCst);
 
         if let Ok(mut error) = self.state.error.lock() {
             *error = None;
@@ -268,7 +314,7 @@ impl NativeVideoDecoder {
         let initial_stdout = install_child(&state, spawned)
             .map_err(|error| Error::from_reason(error.to_string()))?;
 
-        thread::spawn(move || {
+        self.worker = Some(thread::spawn(move || {
             let mut result =
                 consume_decoder_attempt(initial_stdout, width, height, fps, start_time, &state);
 
@@ -334,7 +380,7 @@ impl NativeVideoDecoder {
                 state.finished.store(true, Ordering::SeqCst);
             }
             state.closed.store(true, Ordering::SeqCst);
-        });
+        }));
 
         Ok(())
     }
@@ -361,6 +407,41 @@ impl NativeVideoDecoder {
     }
 
     #[napi]
+    pub fn poll_latest_into(&self, mut target: BufferSlice) -> Result<Option<VideoFrameInfo>> {
+        let (frames, available) = &*self.state.frames;
+        let (pending, skipped) = frames
+            .lock()
+            .map_err(|_| Error::from_reason("Video frame queue lock poisoned"))?
+            .pop_latest();
+        if skipped > 0 {
+            self.state
+                .skipped_frames
+                .fetch_add(skipped as u64, Ordering::SeqCst);
+        }
+        let result = pending
+            .map(|pending| self.copy_video_frame_into(pending, &mut target))
+            .transpose();
+        available.notify_all();
+        result
+    }
+
+    #[napi]
+    pub fn poll_next_into(&self, mut target: BufferSlice) -> Result<Option<VideoFrameInfo>> {
+        let (frames, available) = &*self.state.frames;
+        let pending = frames
+            .lock()
+            .map_err(|_| Error::from_reason("Video frame queue lock poisoned"))?
+            .pop_next();
+        let result = pending
+            .map(|pending| self.copy_video_frame_into(pending, &mut target))
+            .transpose();
+        if result.as_ref().is_ok_and(Option::is_some) {
+            available.notify_one();
+        }
+        result
+    }
+
+    #[napi]
     pub fn queued_frames(&self) -> i64 {
         let (frames, _) = &*self.state.frames;
         frames
@@ -383,7 +464,7 @@ impl NativeVideoDecoder {
         let (frames, available) = &*self.state.frames;
         if let Ok(mut frames) = frames.lock() {
             let skipped = frames.len();
-            frames.clear();
+            frames.recycle_queued();
             self.state
                 .skipped_frames
                 .fetch_add(skipped as u64, Ordering::SeqCst);
@@ -431,6 +512,26 @@ impl NativeVideoDecoder {
     }
 
     #[napi]
+    pub fn frame_buffer_allocations(&self) -> i64 {
+        i64::try_from(self.state.frame_buffer_allocations.load(Ordering::SeqCst))
+            .unwrap_or(i64::MAX)
+    }
+
+    #[napi]
+    pub fn frame_buffer_reuses(&self) -> i64 {
+        i64::try_from(self.state.frame_buffer_reuses.load(Ordering::SeqCst)).unwrap_or(i64::MAX)
+    }
+
+    #[napi]
+    pub fn recycled_frame_buffers(&self) -> i64 {
+        let (frames, _) = &*self.state.frames;
+        frames
+            .lock()
+            .map(|frames| i64::try_from(frames.recycled.len()).unwrap_or(i64::MAX))
+            .unwrap_or(0)
+    }
+
+    #[napi]
     pub fn is_finished(&self) -> bool {
         self.state.finished.load(Ordering::SeqCst)
     }
@@ -438,12 +539,46 @@ impl NativeVideoDecoder {
     #[napi]
     pub fn close(&mut self) {
         close_state(&self.state);
+        self.join_worker();
+    }
+
+    fn join_worker(&mut self) {
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+
+    fn copy_video_frame_into(
+        &self,
+        pending: PendingFrame,
+        target: &mut [u8],
+    ) -> Result<VideoFrameInfo> {
+        if target.len() != pending.data.len() {
+            let actual = target.len();
+            let expected = pending.data.len();
+            if let Ok(mut frames) = self.state.frames.0.lock() {
+                frames.recycle(pending.data);
+            }
+            return Err(Error::from_reason(format!(
+                "NV12 target has {actual} bytes; expected {expected}"
+            )));
+        }
+        target.copy_from_slice(&pending.data);
+        if let Ok(mut frames) = self.state.frames.0.lock() {
+            frames.recycle(pending.data);
+        }
+        Ok(VideoFrameInfo {
+            width: self.options.width,
+            height: self.options.height,
+            timestamp_us: pending.timestamp_us,
+        })
     }
 }
 
 impl Drop for NativeVideoDecoder {
     fn drop(&mut self) {
         close_state(&self.state);
+        self.join_worker();
     }
 }
 
@@ -582,14 +717,18 @@ fn spawn_ffmpeg(request: &FfmpegRequest, backend: DecoderBackend) -> io::Result<
         .stdout
         .take()
         .ok_or_else(|| io::Error::other("FFmpeg stdout unavailable"))?;
-    if let Some(stderr) = child.stderr.take() {
+    let stderr_worker = child.stderr.take().map(|stderr| {
         thread::spawn(move || {
             for line in BufReader::new(stderr).lines().map_while(|line| line.ok()) {
                 eprintln!("{}", redact_url_credentials(&line));
             }
-        });
-    }
-    Ok(SpawnedFfmpeg { child, stdout })
+        })
+    });
+    Ok(SpawnedFfmpeg {
+        child,
+        stdout,
+        stderr_worker,
+    })
 }
 
 fn redact_url_credentials(value: &str) -> String {
@@ -613,6 +752,13 @@ fn redact_url_credentials(value: &str) -> String {
 }
 
 fn install_child(state: &DecoderState, spawned: SpawnedFfmpeg) -> io::Result<ChildStdout> {
+    if let Some(worker) = spawned.stderr_worker {
+        state
+            .stderr_workers
+            .lock()
+            .map_err(|_| io::Error::other("FFmpeg stderr worker lock poisoned"))?
+            .push(worker);
+    }
     *state
         .child
         .lock()
@@ -631,7 +777,7 @@ fn consume_ffmpeg_output(
     let frame_bytes = nv12_frame_bytes(width, height)?;
     let start_timestamp_us = (start_time * 1_000_000.0).round() as i64;
     let mut frame_index = 0_i64;
-    let mut data = vec![0_u8; frame_bytes];
+    let mut data = acquire_frame_buffer(frame_bytes, state)?;
     let read_result = loop {
         if state.closed.load(Ordering::SeqCst) {
             break Ok(());
@@ -644,7 +790,8 @@ fn consume_ffmpeg_output(
                 frame_index += 1;
                 state.decoded_frames.fetch_add(1, Ordering::SeqCst);
 
-                data = enqueue_frame(PendingFrame { timestamp_us, data }, frame_bytes, state)?;
+                enqueue_frame(PendingFrame { timestamp_us, data }, state)?;
+                data = acquire_frame_buffer(frame_bytes, state)?;
             }
             Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break Ok(()),
             Err(error) => break Err(error),
@@ -658,6 +805,7 @@ fn consume_ffmpeg_output(
         .take()
         .map(|mut process| process.wait())
         .transpose()?;
+    join_stderr_workers(state);
 
     read_result?;
     if !state.closed.load(Ordering::SeqCst) && status.is_some_and(|status| !status.success()) {
@@ -709,15 +857,16 @@ fn wait_for_hardware_retry(state: &DecoderState) -> io::Result<bool> {
     Ok(!state.closed.load(Ordering::SeqCst))
 }
 
-fn enqueue_frame(
-    frame: PendingFrame,
-    frame_bytes: usize,
-    state: &DecoderState,
-) -> io::Result<Vec<u8>> {
+fn enqueue_frame(frame: PendingFrame, state: &DecoderState) -> io::Result<()> {
     let catch_up_timestamp_us = state.catch_up_timestamp_us.load(Ordering::SeqCst);
     if catch_up_timestamp_us >= 0 && frame.timestamp_us < catch_up_timestamp_us {
         state.skipped_frames.fetch_add(1, Ordering::SeqCst);
-        return Ok(frame.data);
+        let (frames, _) = &*state.frames;
+        frames
+            .lock()
+            .map_err(|_| io::Error::other("Video frame queue lock poisoned"))?
+            .recycle(frame.data);
+        return Ok(());
     }
     if catch_up_timestamp_us >= 0 {
         state.catch_up_timestamp_us.store(-1, Ordering::SeqCst);
@@ -731,7 +880,7 @@ fn enqueue_frame(
     if state.source_paced {
         if let Some(recycled) = frames.push_latest(frame) {
             state.dropped_frames.fetch_add(1, Ordering::SeqCst);
-            return Ok(recycled);
+            frames.recycle(recycled);
         }
     } else {
         while frames.len() >= FRAME_QUEUE_CAPACITY
@@ -743,12 +892,14 @@ fn enqueue_frame(
                 .map_err(|_| io::Error::other("Video frame queue lock poisoned"))?;
         }
         if state.closed.load(Ordering::SeqCst) {
-            return Ok(frame.data);
+            frames.recycle(frame.data);
+            return Ok(());
         }
         let target = state.catch_up_timestamp_us.load(Ordering::SeqCst);
         if target >= 0 && frame.timestamp_us < target {
             state.skipped_frames.fetch_add(1, Ordering::SeqCst);
-            return Ok(frame.data);
+            frames.recycle(frame.data);
+            return Ok(());
         }
         if target >= 0 {
             state.catch_up_timestamp_us.store(-1, Ordering::SeqCst);
@@ -756,7 +907,34 @@ fn enqueue_frame(
         frames.push_back(frame);
     }
 
+    Ok(())
+}
+
+fn acquire_frame_buffer(frame_bytes: usize, state: &DecoderState) -> io::Result<Vec<u8>> {
+    let (frames, _) = &*state.frames;
+    if let Some(buffer) = frames
+        .lock()
+        .map_err(|_| io::Error::other("Video frame queue lock poisoned"))?
+        .take_recycled(frame_bytes)
+    {
+        state.frame_buffer_reuses.fetch_add(1, Ordering::SeqCst);
+        return Ok(buffer);
+    }
+    state
+        .frame_buffer_allocations
+        .fetch_add(1, Ordering::SeqCst);
     Ok(vec![0_u8; frame_bytes])
+}
+
+fn join_stderr_workers(state: &DecoderState) {
+    let workers = state
+        .stderr_workers
+        .lock()
+        .map(|mut workers| workers.drain(..).collect::<Vec<_>>())
+        .unwrap_or_default();
+    for worker in workers {
+        let _ = worker.join();
+    }
 }
 
 fn set_backend_name(state: &DecoderState, name: &str) {
@@ -779,11 +957,13 @@ fn close_state(state: &DecoderState) {
     if let Ok(mut child) = state.child.lock() {
         if let Some(mut process) = child.take() {
             let _ = process.kill();
+            let _ = process.wait();
         }
     }
     if let Ok(mut frames) = frames.lock() {
         frames.clear();
     }
+    join_stderr_workers(state);
 }
 
 #[cfg(test)]
@@ -906,13 +1086,13 @@ mod tests {
     fn file_queue_applies_backpressure_until_a_frame_is_consumed() {
         let state = decoder_state(false);
         for timestamp_us in 0..FRAME_QUEUE_CAPACITY as i64 {
-            enqueue_frame(pending(timestamp_us), 1, &state).unwrap();
+            enqueue_frame(pending(timestamp_us), &state).unwrap();
         }
 
         let producer_state = state.clone();
         let (sent, received) = mpsc::channel();
         thread::spawn(move || {
-            let result = enqueue_frame(pending(99), 1, &producer_state);
+            let result = enqueue_frame(pending(99), &producer_state);
             sent.send(result.is_ok()).unwrap();
         });
 
@@ -928,14 +1108,76 @@ mod tests {
         let state = decoder_state(false);
         state.catch_up_timestamp_us.store(30, Ordering::SeqCst);
 
-        assert_eq!(enqueue_frame(pending(10), 1, &state).unwrap(), vec![10]);
-        assert_eq!(enqueue_frame(pending(20), 1, &state).unwrap(), vec![20]);
-        enqueue_frame(pending(30), 1, &state).unwrap();
+        enqueue_frame(pending(10), &state).unwrap();
+        enqueue_frame(pending(20), &state).unwrap();
+        enqueue_frame(pending(30), &state).unwrap();
 
         assert_eq!(state.skipped_frames.load(Ordering::SeqCst), 2);
         let (frames, _) = &*state.frames;
         let mut frames = frames.lock().unwrap();
         assert_eq!(frames.pop_next().unwrap().timestamp_us, 30);
+        assert_eq!(frames.recycled.len(), 2);
+    }
+
+    #[test]
+    fn copies_frame_into_caller_buffer_and_recycles_native_storage() {
+        let decoder = NativeVideoDecoder::new(DecoderOptions {
+            width: 2,
+            height: 2,
+            fps: Some(30.0),
+            start_time: None,
+            ffmpeg_path: None,
+            vaapi_device: None,
+            playback_rate: None,
+            end_time: None,
+            source_paced: None,
+            input_args: None,
+            output_args: None,
+        })
+        .unwrap();
+        let mut target = vec![0; 6];
+        let info = decoder
+            .copy_video_frame_into(
+                PendingFrame {
+                    timestamp_us: 42,
+                    data: vec![1, 2, 3, 4, 5, 6],
+                },
+                &mut target,
+            )
+            .unwrap();
+
+        assert_eq!(target, vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(info.timestamp_us, 42);
+        assert_eq!(decoder.state.frames.0.lock().unwrap().recycled.len(), 1);
+    }
+
+    #[test]
+    fn rejects_wrong_caller_buffer_size_without_losing_native_storage() {
+        let decoder = NativeVideoDecoder::new(DecoderOptions {
+            width: 2,
+            height: 2,
+            fps: Some(30.0),
+            start_time: None,
+            ffmpeg_path: None,
+            vaapi_device: None,
+            playback_rate: None,
+            end_time: None,
+            source_paced: None,
+            input_args: None,
+            output_args: None,
+        })
+        .unwrap();
+        let mut target = vec![0; 5];
+        let result = decoder.copy_video_frame_into(
+            PendingFrame {
+                timestamp_us: 42,
+                data: vec![1, 2, 3, 4, 5, 6],
+            },
+            &mut target,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(decoder.state.frames.0.lock().unwrap().recycled.len(), 1);
     }
 
     #[test]
@@ -973,7 +1215,10 @@ mod tests {
             decoded_frames: Arc::new(AtomicU64::new(0)),
             dropped_frames: Arc::new(AtomicU64::new(0)),
             skipped_frames: Arc::new(AtomicU64::new(0)),
+            frame_buffer_allocations: Arc::new(AtomicU64::new(0)),
+            frame_buffer_reuses: Arc::new(AtomicU64::new(0)),
             backend: Arc::new(Mutex::new("test".to_string())),
+            stderr_workers: Arc::new(Mutex::new(Vec::new())),
         }
     }
 

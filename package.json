@@ -24,6 +24,8 @@
     "build": "node scripts/build-packages.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
+    "analyze-memory-info": "node scripts/analyze-memory-info.mjs",
+    "isolate-native-memory": "node scripts/run-native-memory-isolation.mjs",
     "package:prepare": "pnpm typecheck && pnpm test && pnpm build && node scripts/validate-native-artifacts.mjs",
     "pack:dist": "node scripts/pack-distribution.mjs",
     "pack:generator": "node scripts/pack-generator.mjs",

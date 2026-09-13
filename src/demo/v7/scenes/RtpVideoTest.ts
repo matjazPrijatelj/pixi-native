@@ -63,7 +63,12 @@ export function createRtpVideoTest(viewport: {
     if (videos.length)
       title.text = `RTP VIDEO TEST [7] | ${videos.map((video) => video.stats.presentedFrames).join(" / ")} frames`;
   };
+  let disposed = false;
   scene.dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    scene.update = (): void => undefined;
+    for (const video of videos) video.destroy();
     for (const sprite of sprites) sprite.destroy();
     sprites = [];
     videos = [];

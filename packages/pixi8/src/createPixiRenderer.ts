@@ -98,7 +98,15 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
       // before GPU systems. Native textures can still notify bind groups,
       // so release the renderer first and then the display tree/ticker.
       app.renderer.destroy({ removeView: true });
-      app.stage.destroy({ children: true, context: true, style: true });
+      // The renderer has already been destroyed; keep display-tree texture
+      // sources intact so Pixi cannot notify bind groups during teardown.
+      app.stage.destroy({
+        children: true,
+        context: true,
+        style: true,
+        texture: false,
+        textureSource: false,
+      });
       app.ticker.destroy();
     },
   });

@@ -17,11 +17,18 @@ import {
   installDynamicBitmapTextFont,
   loadExternalBitmapFont,
 } from "./bitmapFonts.ts";
-import { createDemoLoop, isLoopDemoShortcut } from "../DemoLoop.ts";
+import {
+  createDemoLoop,
+  isAutoToggleShortcut,
+  isLoopDemoShortcut,
+  shouldSkipAutoScene,
+} from "../DemoLoop.ts";
 import {
   countCacheEntries,
   startMemoryDiagnostics,
 } from "../memoryDiagnostics.ts";
+import { resolveNativePlatformModules } from "@pixi-native/core/runtime/platformNative.js";
+import { getNativeVideoMemoryStats } from "@pixi-native/core/video/NativeVideo.js";
 import { DEMO_WINDOW_OPTIONS } from "../windowOptions.ts";
 import { filterVideoAssets } from "../videoAssets.ts";
 
@@ -159,7 +166,6 @@ const sceneNames = [
   "particles",
 ];
 let sceneIndex = 0;
-let autoVideoVariantStep = 0;
 let activeScene = sceneFactories[sceneIndex]();
 let shuttingDown = false;
 app.stage.addChild(activeScene);
@@ -189,16 +195,26 @@ const memoryDiagnostics = startMemoryDiagnostics(() => [
     gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
     gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
     pixiAssetCache: countCacheEntries(Assets.cache),
+    ...getNativeVideoMemoryStats(),
   }),
   scene: () => ({ index: sceneIndex, name: sceneNames[sceneIndex] ?? "unknown" }),
+  runtime: () => {
+    const modules = resolveNativePlatformModules();
+    return {
+      backend: "webgl",
+      target: modules.target,
+      gpuModule: modules.gpuModule,
+      windowModule: modules.windowModule,
+      videoModule: modules.videoModule,
+      audioBinding: modules.audioBinding ?? "",
+    };
+  },
 });
 activeScene.resize?.(native.canvas.width, native.canvas.height);
 const selectScene = (nextIndex: number): void => {
   const normalized =
     (nextIndex + sceneFactories.length) % sceneFactories.length;
   if (normalized === sceneIndex) return;
-  if (normalized !== 4) autoVideoVariantStep = 0;
-  void memoryDiagnostics.sample("scene-switch:before");
   disposeDemoScene(activeScene);
   if (sceneIndex === 8) particleEmitter.setEnabled(false);
   sceneIndex = normalized;
@@ -206,25 +222,14 @@ const selectScene = (nextIndex: number): void => {
   app.stage.addChild(activeScene);
   if (sceneIndex === 8) particleEmitter.setEnabled(true);
   activeScene.resize?.(native.canvas.width, native.canvas.height);
-  void memoryDiagnostics.sample("scene-switch:after");
+  void memoryDiagnostics.sceneEntry("scene-entry");
 };
 const demoLoop = createDemoLoop(() => {
-  if (sceneIndex === 4) {
-    if (autoVideoVariantStep < videos.length - 1) {
-      activeScene.handleKey?.("up", 0);
-      autoVideoVariantStep++;
-      void memoryDiagnostics.sample("auto-scenes:video-variant");
-      return;
-    }
-    if (autoVideoVariantStep === videos.length - 1) {
-      activeScene.handleKey?.("t", 0);
-      autoVideoVariantStep++;
-      void memoryDiagnostics.sample("auto-scenes:video-transparent");
-      return;
-    }
-    autoVideoVariantStep = 0;
+  let nextIndex = (sceneIndex + 1) % sceneFactories.length;
+  while (shouldSkipAutoScene(sceneNames[nextIndex])) {
+    nextIndex = (nextIndex + 1) % sceneFactories.length;
   }
-  selectScene((sceneIndex + 1) % sceneFactories.length);
+  selectScene(nextIndex);
 }, (enabled) => {
   autoToggleOverlay.setEnabled(enabled);
   autoToggleOverlay.alignBottomLeft(native.canvas.height);
@@ -252,8 +257,9 @@ globalThis.addEventListener("keydown", (rawEvent) => {
     demoLoop.toggle();
     return;
   }
-  if ((key === " " || key === "spacebar") && !event.repeat) {
+  if (isAutoToggleShortcut(key, event.repeat, event.code)) {
     demoLoop.toggle();
+    console.warn(`AUTO_SCENES toggled by Space: ${demoLoop.enabled}`);
     return;
   }
   if (key === "left" || key === "arrowleft") return selectScene(sceneIndex - 1);

@@ -14,6 +14,10 @@ import {
   type RgbaUploadFormat,
 } from "@pixi-native/core/canvas/rgbaUpload.js";
 import { normalizeGpuBindGroupIndex } from "./gpuCompatibility.ts";
+import {
+  createWebGpuBindGroupCacheController,
+  shouldResetWebGpuBindGroupCache,
+} from "./webGpuBindGroupCache.ts";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
 import {
   createCompositorFrameWaiter,
@@ -219,6 +223,25 @@ export async function createWebGpuRenderer(
   if (app.renderer.name !== "webgpu") {
     app.destroy(true);
     throw new Error(`WebGPU is required; Pixi selected ${app.renderer.name}`);
+  }
+
+  const bindGroupCacheController = createWebGpuBindGroupCacheController(
+    app.renderer,
+  );
+  const pixiRenderer = app.renderer as typeof app.renderer & {
+    __pixiNativeResourceStats?: () => Record<string, number>;
+  };
+  Object.defineProperty(pixiRenderer, "__pixiNativeResourceStats", {
+    configurable: true,
+    value: () => bindGroupCacheController.getStats(),
+  });
+  if (shouldResetWebGpuBindGroupCache()) {
+    const render = app.renderer.render.bind(app.renderer);
+    app.renderer.render = ((...args: Parameters<typeof render>) => {
+      const result = render(...args);
+      bindGroupCacheController.afterRender();
+      return result;
+    }) as typeof app.renderer.render;
   }
 
   const ensureRootStencilAttachment = (): void => {
