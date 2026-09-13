@@ -25,6 +25,7 @@ export interface CreateProjectOptions {
 export const GENERATOR_VERSION = "0.1.6";
 export const PIXI_NATIVE_VERSION = "0.2.0";
 export const PIXI_NATIVE_VERSION_RANGE = `~${PIXI_NATIVE_VERSION}`;
+export const PNPM_VERSION = "12.4.1";
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));
 const PROJECT_NAME_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const TEXT_TEMPLATE_EXTENSIONS = new Set([".json", ".md", ".template", ".ts"]);
@@ -65,6 +66,7 @@ export async function createProject(
     PIXI_MAJOR: options.pixi,
     BACKEND: options.backend,
     PIXI_NATIVE_VERSION: PIXI_NATIVE_VERSION_RANGE,
+    PNPM_VERSION,
     PIXI_PACKAGE_NAME: options.pixi === "7" ? "pixi.js-v7" : "pixi.js",
     PIXI_PACKAGE_VERSION:
       options.pixi === "7" ? "npm:pixi.js@^7.4.3" : "^8.20.0",

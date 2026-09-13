@@ -21,6 +21,7 @@ import {
   GENERATOR_VERSION,
   PIXI_NATIVE_VERSION,
   PIXI_NATIVE_VERSION_RANGE,
+  PNPM_VERSION,
   createProject,
 } from "../packages/create-pixi-native/src/generator.ts";
 
@@ -56,6 +57,7 @@ test("quickboot keeps generator and runtime versions independent", () => {
   assert.equal(GENERATOR_VERSION, "0.1.6");
   assert.equal(PIXI_NATIVE_VERSION, "0.2.0");
   assert.equal(PIXI_NATIVE_VERSION_RANGE, "~0.2.0");
+  assert.equal(PNPM_VERSION, "12.4.1");
   assert.equal(
     execFileSync(
       process.execPath,
@@ -188,6 +190,10 @@ test("quickboot generates version-specific projects without credentials", async 
       const tsconfig = JSON.parse(
         await readFile(join(target, "tsconfig.json"), "utf8"),
       );
+      const pnpmWorkspace = await readFile(
+        join(target, "pnpm-workspace.yaml"),
+        "utf8",
+      );
       assert.equal(
         manifest.dependencies["@matjash/pixi-native"],
         PIXI_NATIVE_VERSION_RANGE,
@@ -204,6 +210,8 @@ test("quickboot generates version-specific projects without credentials", async 
         [pixiPackage],
       );
       assert.equal(manifest.devDependencies.prettier, "3.9.6");
+      assert.equal(manifest.packageManager, `pnpm@${PNPM_VERSION}`);
+      assert.match(pnpmWorkspace, /native-gles:\s+true/);
       assert.match(manifest.scripts.dev, /node --watch .*src\/main\.ts/);
       assert.ok(source.includes(`from "${importPath}"`));
       assert.match(source, /from "\.\/backgroundAnimation\.ts"/);
@@ -235,9 +243,7 @@ test("quickboot generates version-specific projects without credentials", async 
         await readFile(join(REPOSITORY_ROOT, "pixi-hero.png")),
       );
       if (pixi === "8" && backend === "webgl" && animation === "ticker") {
-        const hero = await loadImage(
-          join(target, "assets", "pixi-hero.png"),
-        );
+        const hero = await loadImage(join(target, "assets", "pixi-hero.png"));
         assert.equal(hero.width, 1279);
         assert.equal(hero.height, 720);
       }

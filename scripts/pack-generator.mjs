@@ -19,6 +19,13 @@ const packageRoot = resolve(repositoryRoot, "packages/create-pixi-native");
 const artifactsDirectory = resolve(repositoryRoot, "artifacts");
 const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
 const NPM_CONFIG_ENV_PATTERN = /^npm_config_/i;
+
+async function writePnpmWorkspaceSettings(directory, overrides) {
+  await writeFile(
+    resolve(directory, "pnpm-workspace.yaml"),
+    `${JSON.stringify({ allowBuilds: { "native-gles": true }, overrides }, null, 2)}\n`,
+  );
+}
 const manifest = JSON.parse(
   await readFile(resolve(packageRoot, "package.json"), "utf8"),
 );
@@ -30,6 +37,7 @@ const expectedFiles = new Set([
   "templates/common/assets/pixi-hero.png",
   "templates/common/gitignore.template",
   "templates/common/package.json.template",
+  "templates/common/pnpm-workspace.yaml",
   "templates/common/prettierignore.template",
   "templates/common/README.md",
   "templates/common/tsconfig.build.json",
@@ -117,7 +125,7 @@ try {
     )}\n`,
   );
   execSync(
-    `pnpm install ${process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline " : ""}--no-frozen-lockfile --ignore-workspace`,
+    `pnpm install ${process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline " : ""}--no-frozen-lockfile`,
     { cwd: consumerRoot, stdio: "inherit" },
   );
   const cliPath = resolve(
@@ -218,19 +226,17 @@ try {
     ) {
       throw new Error(`${directory} has invalid generated dependencies.`);
     }
-    generatedManifest.pnpm = {
-      overrides: {
-        "@matjash/pixi-native": `file:${facadeArchive.replaceAll("\\", "/")}`,
-        ...nativeOverrides,
-      },
-    };
     const projectRoot = resolve(consumerRoot, directory);
     await writeFile(
       resolve(projectRoot, "package.json"),
       `${JSON.stringify(generatedManifest, null, 2)}\n`,
     );
+    await writePnpmWorkspaceSettings(projectRoot, {
+      "@matjash/pixi-native": `file:${facadeArchive.replaceAll("\\", "/")}`,
+      ...nativeOverrides,
+    });
     const offline = process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline " : "";
-    execSync(`pnpm install ${offline}--no-frozen-lockfile --ignore-workspace`, {
+    execSync(`pnpm install ${offline}--no-frozen-lockfile`, {
       cwd: projectRoot,
       stdio: "inherit",
     });

@@ -23,6 +23,18 @@ const run = (command, args) =>
 
 await run("cargo", ["build", "--release"]);
 const output = resolve(root, "dist", `${process.platform}-${process.arch}`);
+const packageOutput = resolve(
+  root,
+  "../../packages",
+  `native-${process.platform}-${process.arch}`,
+  "native",
+  "audio",
+  "dist",
+  `${process.platform}-${process.arch}`,
+);
 await mkdir(output, { recursive: true });
+await mkdir(packageOutput, { recursive: true });
 const libraryName = process.platform === "win32" ? "pixi_node_audio.dll" : "libpixi_node_audio.so";
-await copyFile(resolve(root, "target", "release", libraryName), resolve(output, "native_audio.node"));
+const nativeBinary = resolve(output, "native_audio.node");
+await copyFile(resolve(root, "target", "release", libraryName), nativeBinary);
+await copyFile(nativeBinary, resolve(packageOutput, "native_audio.node"));

@@ -59,10 +59,5 @@
     "node": ">=24.13.0 <25"
   },
   "license": "MIT",
-  "packageManager": "pnpm@9.15.9",
-  "pnpm": {
-    "overrides": {
-      "eventemitter3": "5.0.4"
-    }
-  }
+  "packageManager": "pnpm@12.4.1"
 }

@@ -145,7 +145,7 @@ The generator has its own version, archive, release manifest, and
 publishing the runtime/native packages. Never run `native:build` as part of this
 workflow.
 
-Use Node.js 24 LTS and pnpm 9.15.9. Start from the repository root with all
+Use Node.js 24 LTS and pnpm 12.4.1. Start from the repository root with all
 intended generator changes present. Update these version references before
 packing:
 

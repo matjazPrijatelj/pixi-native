@@ -2,6 +2,12 @@ packages:
   - "."
   - "packages/*"
 
+allowBuilds:
+  native-gles: true
+
+overrides:
+  eventemitter3: 5.0.4
+
 supportedArchitectures:
   os:
     - win32
