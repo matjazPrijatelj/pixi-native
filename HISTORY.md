@@ -1,5 +1,18 @@
 # Development history
 
+## 2026-09-14
+
+- Prepared the `0.2.2` public npm release with reusable native video frame
+  buffers and deterministic FFmpeg worker/process teardown for Windows and
+  Linux x64 packages.
+- Resolved committed merge markers in distribution smoke testing while keeping
+  pnpm 12 workspace build approvals and platform-package overrides isolated in
+  each temporary consumer.
+- Restored local workspace linking so pre-publication version bumps do not try
+  to resolve the not-yet-published platform packages from npm.
+- Distribution smoke tests now launch pnpm 12's native executable directly
+  while retaining Node execution for JavaScript pnpm entrypoints.
+
 ## 2026-09-13
 
 - Allowed the required `native-gles` install script in pnpm 12 quickstarts and

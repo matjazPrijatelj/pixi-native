@@ -9,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   runFfmpegSmokeTests,
@@ -19,7 +19,6 @@ import {
 } from "./ffmpeg-distribution.mjs";
 
 const archiveArguments = process.argv.slice(2);
-<<<<<<< HEAD
 const pnpmEntrypoint = process.env.npm_execpath;
 if (!pnpmEntrypoint) {
   throw new Error("Distribution testing must be launched through pnpm.");
@@ -28,17 +27,7 @@ const installArguments = [
   "install",
   ...(process.env.PIXI_NATIVE_OFFLINE === "1" ? ["--offline"] : []),
   "--no-frozen-lockfile",
-  "--ignore-workspace",
 ];
-=======
-const installCommand = [
-  "pnpm install",
-  process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline" : "",
-  "--no-frozen-lockfile",
-]
-  .filter(Boolean)
-  .join(" ");
->>>>>>> sdl3-only
 if (archiveArguments.length !== 2) {
   throw new Error("Expected the facade and one native package archive");
 }
@@ -101,7 +90,7 @@ try {
     `${JSON.stringify(
       {
         name: oppositeNativePackageName,
-        version: "0.2.1",
+        version: repositoryManifest.version,
         os: [oppositeNativeTarget.split("-")[0]],
         cpu: ["x64"],
       },
@@ -276,20 +265,14 @@ try {
       throw new Error(`${project.directory} has invalid runtime dependencies`);
     }
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-<<<<<<< HEAD
-    runPnpm(installArguments, { cwd: projectDirectory, stdio: "inherit" });
-    runPnpm(["typecheck"], { cwd: projectDirectory, stdio: "inherit" });
-    runPnpm(["build"], { cwd: projectDirectory, stdio: "inherit" });
-=======
     await writePnpmWorkspaceSettings(projectDirectory, {
       "@matjash/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
       [nativePackageName]: `file:${localNativeArchive.replaceAll("\\", "/")}`,
       [oppositeNativePackageName]: `file:${oppositeNativeStub.replaceAll("\\", "/")}`,
     });
-    execSync(installCommand, { cwd: projectDirectory, stdio: "inherit" });
-    execSync("pnpm typecheck", { cwd: projectDirectory, stdio: "inherit" });
-    execSync("pnpm build", { cwd: projectDirectory, stdio: "inherit" });
->>>>>>> sdl3-only
+    runPnpm(installArguments, { cwd: projectDirectory, stdio: "inherit" });
+    runPnpm(["typecheck"], { cwd: projectDirectory, stdio: "inherit" });
+    runPnpm(["build"], { cwd: projectDirectory, stdio: "inherit" });
     await access(resolve(projectDirectory, "dist", "main.js"));
   }
   execSync("node smoke-root.mjs", { cwd: testDirectory, stdio: "inherit" });
@@ -341,7 +324,11 @@ try {
 }
 
 function runPnpm(arguments_, options) {
-  return execFileSync(process.execPath, [pnpmEntrypoint, ...arguments_], options);
+  const extension = extname(pnpmEntrypoint).toLowerCase();
+  const isJavaScriptEntrypoint = [".cjs", ".js", ".mjs"].includes(extension);
+  return isJavaScriptEntrypoint
+    ? execFileSync(process.execPath, [pnpmEntrypoint, ...arguments_], options)
+    : execFileSync(pnpmEntrypoint, arguments_, options);
 }
 
 function createRuntimeSmoke(packageName, major) {

@@ -1,6 +1,6 @@
 {
   "name": "@matjash/pixi-native-win32-x64",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "commonjs",
   "description": "Windows x64 native binaries for @matjash/pixi-native",
   "license": "MIT",

@@ -257,11 +257,11 @@ importers:
         version: 1.5.1
     optionalDependencies:
       '@matjash/pixi-native-linux-x64':
-        specifier: ~0.2.1
-        version: 0.2.1
+        specifier: ~0.2.2
+        version: link:../native-linux-x64
       '@matjash/pixi-native-win32-x64':
-        specifier: ~0.2.1
-        version: 0.2.1
+        specifier: ~0.2.2
+        version: link:../native-win32-x64
 
   packages/pixi7:
     dependencies:
@@ -294,16 +294,6 @@ packages:
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
-
-  '@matjash/pixi-native-linux-x64@0.2.1':
-    resolution: {integrity: sha512-naSeA2EyPGRd26RDJaORNBaK5k2TyOfEttwaRxir85/5sFFMKg2orQlRVjzt7ykDzCxfhsXa1pT5Y+j2LVakMg==}
-    cpu: [x64]
-    os: [linux]
-
-  '@matjash/pixi-native-win32-x64@0.2.1':
-    resolution: {integrity: sha512-ILPZIcEyJdo4FuaYxnQTdiMBYAtnEtl6LkmiI/IzmOnm/bgy0QZBGIo39uTmmYEKkc4SB5MGkrZMoO8VcDPD1A==}
-    cpu: [x64]
-    os: [win32]
 
   '@napi-rs/canvas-android-arm64@1.0.8':
     resolution: {integrity: sha512-5+nkh8i3gt6lqS/d2jTZ1xAn6tdgtB4Lf1mW6T0Qm5/rXNwBuV1sAEyLEWan5o9gJPU/GuvHR3rvSeZ+FaGrbw==}
@@ -879,12 +869,6 @@ snapshots:
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
       minipass: 7.1.3
-
-  '@matjash/pixi-native-linux-x64@0.2.1':
-    optional: true
-
-  '@matjash/pixi-native-win32-x64@0.2.1':
-    optional: true
 
   '@napi-rs/canvas-android-arm64@1.0.8':
     optional: true
