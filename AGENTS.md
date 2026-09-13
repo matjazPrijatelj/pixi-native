@@ -6,7 +6,7 @@ This repository is a TypeScript native runtime for rendering PixiJS directly to 
 
 ## Commands
 
-Use Node.js 24 LTS and pnpm 9.15.9:
+Use Node.js 24 LTS and pnpm 12.4.1:
 
 - `pnpm install` installs dependencies and prebuilt native binaries.
 - `pnpm dev` launches the native GPU window.

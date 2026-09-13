@@ -22,5 +22,6 @@
   },
   "engines": {
     "node": ">=24.13.0 <25"
-  }
+  },
+  "packageManager": "pnpm@{{PNPM_VERSION}}"
 }

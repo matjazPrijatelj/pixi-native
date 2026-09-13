@@ -58,7 +58,7 @@ SDL3 window and requested renderer are configured together.
 ## Install
 
 Use Node.js 24.13 or newer from the Node.js 24 LTS line. The repository uses
-pnpm 9.15.9.
+pnpm 12.4.1.
 
 Install the facade package together with the Pixi major used by the display:
 

@@ -228,15 +228,51 @@ impl Voice {
             self.timeline_updated_at = now;
             return;
         }
-        self.timeline_seconds +=
-            now.duration_since(self.timeline_updated_at).as_secs_f64() * self.playback_rate;
-        if self.looped {
-            if let Some(duration_seconds) = self.duration_seconds {
-                self.timeline_seconds %= duration_seconds;
-            }
-        }
+        self.timeline_seconds = advance_timeline(
+            self.timeline_seconds,
+            now.duration_since(self.timeline_updated_at).as_secs_f64(),
+            self.playback_rate,
+            self.duration_seconds,
+            self.looped,
+        );
         self.timeline_updated_at = now;
     }
+
+    fn store_snapshot_time(&self, elapsed_seconds: f64) {
+        if let Some(time) = finite_absolute_time(self.offset_seconds, elapsed_seconds) {
+            self.snapshot
+                .time_bits
+                .store(time.to_bits(), Ordering::Release);
+        }
+    }
+}
+
+fn advance_timeline(
+    current_seconds: f64,
+    elapsed_seconds: f64,
+    playback_rate: f64,
+    duration_seconds: Option<f64>,
+    looped: bool,
+) -> f64 {
+    let current_seconds = if current_seconds.is_finite() {
+        current_seconds.max(0.0)
+    } else {
+        0.0
+    };
+    let advanced_seconds = current_seconds + elapsed_seconds * playback_rate;
+    if !advanced_seconds.is_finite() {
+        return current_seconds;
+    }
+    match duration_seconds {
+        Some(duration) if looped => advanced_seconds % duration,
+        Some(duration) => advanced_seconds.min(duration),
+        None => advanced_seconds,
+    }
+}
+
+fn finite_absolute_time(offset_seconds: f64, elapsed_seconds: f64) -> Option<f64> {
+    let time = offset_seconds + elapsed_seconds;
+    time.is_finite().then_some(time)
 }
 
 enum EngineCommand {
@@ -507,7 +543,8 @@ impl NativeAudioEngine {
     #[napi]
     pub fn current_time(&self, id: u32) -> Option<f64> {
         let snapshot = self.state.snapshots.lock().ok()?.get(&id).cloned()?;
-        Some(f64::from_bits(snapshot.time_bits.load(Ordering::Acquire)))
+        let time = f64::from_bits(snapshot.time_bits.load(Ordering::Acquire));
+        time.is_finite().then_some(time)
     }
 
     #[napi]
@@ -917,11 +954,7 @@ impl EngineRuntime {
             } else {
                 voice.timeline_seconds
             };
-            let time = voice.offset_seconds + elapsed_seconds;
-            voice
-                .snapshot
-                .time_bits
-                .store(time.to_bits(), Ordering::Release);
+            voice.store_snapshot_time(elapsed_seconds);
             let current_volume = if voice.fade.is_some() {
                 sound.current_fade_volume()
             } else {
@@ -1344,5 +1377,28 @@ mod tests {
             redact_credentials("https://user:secret@example.test/audio.mp3"),
             "https://***:***@example.test/audio.mp3"
         );
+    }
+
+    #[test]
+    fn static_timeline_stays_finite_and_within_sprite_duration() {
+        assert_eq!(advance_timeline(0.2, 0.05, 1.0, Some(0.8), false), 0.25);
+        assert_eq!(advance_timeline(0.7, 0.2, 1.0, Some(0.8), false), 0.8);
+        let looped = advance_timeline(0.7, 0.2, 1.0, Some(0.8), true);
+        assert!((looped - 0.1).abs() < f64::EPSILON);
+        assert_eq!(
+            advance_timeline(f64::INFINITY, 0.05, 1.0, Some(0.8), false),
+            0.05
+        );
+        assert_eq!(
+            advance_timeline(0.2, f64::INFINITY, 1.0, Some(0.8), false),
+            0.2
+        );
+    }
+
+    #[test]
+    fn snapshot_time_rejects_non_finite_values() {
+        assert_eq!(finite_absolute_time(1.0, 0.2), Some(1.2));
+        assert_eq!(finite_absolute_time(0.0, f64::INFINITY), None);
+        assert_eq!(finite_absolute_time(f64::INFINITY, 0.0), None);
     }
 }

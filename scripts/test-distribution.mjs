@@ -19,6 +19,7 @@ import {
 } from "./ffmpeg-distribution.mjs";
 
 const archiveArguments = process.argv.slice(2);
+<<<<<<< HEAD
 const pnpmEntrypoint = process.env.npm_execpath;
 if (!pnpmEntrypoint) {
   throw new Error("Distribution testing must be launched through pnpm.");
@@ -29,6 +30,15 @@ const installArguments = [
   "--no-frozen-lockfile",
   "--ignore-workspace",
 ];
+=======
+const installCommand = [
+  "pnpm install",
+  process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline" : "",
+  "--no-frozen-lockfile",
+]
+  .filter(Boolean)
+  .join(" ");
+>>>>>>> sdl3-only
 if (archiveArguments.length !== 2) {
   throw new Error("Expected the facade and one native package archive");
 }
@@ -50,6 +60,9 @@ for (const key of ["facade", "native"]) {
 }
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryManifest = JSON.parse(
+  await readFile(resolve(repositoryRoot, "package.json"), "utf8"),
+);
 const nativeArchiveName = basename(archives.get("native"));
 const nativePackageName = nativeArchiveName.includes("native-linux-x64")
   ? "@matjash/pixi-native-linux-x64"
@@ -73,6 +86,13 @@ await cp(archives.get("native"), localNativeArchive);
 const toFileSpecifier = (path) =>
   `file:${relative(testDirectory, path).replaceAll("\\", "/")}`;
 
+async function writePnpmWorkspaceSettings(directory, overrides) {
+  await writeFile(
+    join(directory, "pnpm-workspace.yaml"),
+    `${JSON.stringify({ allowBuilds: { "native-gles": true }, overrides }, null, 2)}\n`,
+  );
+}
+
 try {
   const oppositeNativeStub = join(testDirectory, "opposite-native-stub");
   await mkdir(oppositeNativeStub, { recursive: true });
@@ -93,24 +113,22 @@ try {
     name: "pixi-native-launcher-smoke",
     private: true,
     type: "module",
-    packageManager: "pnpm@9.15.9",
+    packageManager: repositoryManifest.packageManager,
     dependencies: {
       "@matjash/pixi-native": toFileSpecifier(localFacadeArchive),
       "pixi.js": "8.20.0",
       "pixi.js-v7": "npm:pixi.js@7.4.3",
       [nativePackageName]: toFileSpecifier(localNativeArchive),
     },
-    pnpm: {
-      overrides: {
-        [nativePackageName]: toFileSpecifier(localNativeArchive),
-        [oppositeNativePackageName]: "file:./opposite-native-stub",
-      },
-    },
   };
   await writeFile(
     join(testDirectory, "package.json"),
     `${JSON.stringify(packageJson, null, 2)}\n`,
   );
+  await writePnpmWorkspaceSettings(testDirectory, {
+    [nativePackageName]: toFileSpecifier(localNativeArchive),
+    [oppositeNativePackageName]: "file:./opposite-native-stub",
+  });
 
   await writeFile(
     join(testDirectory, "smoke-root.mjs"),
@@ -257,17 +275,21 @@ try {
     ) {
       throw new Error(`${project.directory} has invalid runtime dependencies`);
     }
-    manifest.pnpm = {
-      overrides: {
-        "@matjash/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
-        [nativePackageName]: `file:${localNativeArchive.replaceAll("\\", "/")}`,
-        [oppositeNativePackageName]: `file:${oppositeNativeStub.replaceAll("\\", "/")}`,
-      },
-    };
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+<<<<<<< HEAD
     runPnpm(installArguments, { cwd: projectDirectory, stdio: "inherit" });
     runPnpm(["typecheck"], { cwd: projectDirectory, stdio: "inherit" });
     runPnpm(["build"], { cwd: projectDirectory, stdio: "inherit" });
+=======
+    await writePnpmWorkspaceSettings(projectDirectory, {
+      "@matjash/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
+      [nativePackageName]: `file:${localNativeArchive.replaceAll("\\", "/")}`,
+      [oppositeNativePackageName]: `file:${oppositeNativeStub.replaceAll("\\", "/")}`,
+    });
+    execSync(installCommand, { cwd: projectDirectory, stdio: "inherit" });
+    execSync("pnpm typecheck", { cwd: projectDirectory, stdio: "inherit" });
+    execSync("pnpm build", { cwd: projectDirectory, stdio: "inherit" });
+>>>>>>> sdl3-only
     await access(resolve(projectDirectory, "dist", "main.js"));
   }
   execSync("node smoke-root.mjs", { cwd: testDirectory, stdio: "inherit" });

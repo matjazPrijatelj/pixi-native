@@ -2,6 +2,22 @@
 
 ## 2026-09-13
 
+- Allowed the required `native-gles` install script in pnpm 12 quickstarts and
+  temporary distribution consumers, avoiding `ERR_PNPM_IGNORED_BUILDS` while
+  keeping build-script approval limited to that dependency. Isolated smoke
+  installs retain their own workspace settings instead of disabling them with
+  `--ignore-workspace`.
+- Made `native:audio:build` stage the fresh addon into the active platform
+  package, preventing tests and release packaging from loading an older binary.
+- Kept native audio seek snapshots finite by bounding non-looping sprite
+  timelines, wrapping loops, preserving the last valid time on invalid native
+  calculations, and rejecting non-finite values at the JavaScript boundary.
+- Standardized repository, quickstart, documentation, and distribution smoke
+  projects on pnpm 12.4.1 so Corepack no longer downloads the obsolete pnpm 9
+  toolchain during packaging.
+- Moved pnpm overrides from deprecated `package.json` fields into
+  `pnpm-workspace.yaml`, including temporary release-consumer projects, so
+  packaging runs cleanly with pnpm 12 while retaining pinned dependencies.
 - Made the private Pixi WebGPU bind-group cache reset opt-in through
   `PIXI_NATIVE_WEBGPU_BIND_GROUP_CACHE_RESET=1`; resource counters remain
   available while the default renderer path is left untouched.

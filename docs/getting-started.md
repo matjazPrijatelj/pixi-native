@@ -4,7 +4,7 @@
 
 - Node.js 24.13 or newer from the Node.js 24 LTS line
 - Windows 11 x64 or Linux x64
-- pnpm 9.15.9 for repository development and the examples below
+- pnpm 12.4.1 for repository development and the examples below
 
 Install the public facade package directly from npm:
 
