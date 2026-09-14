@@ -82,7 +82,7 @@ for (const backend of backends) {
     );
   }
   console.log(
-    `Completed ${backend}; analyze with: pnpm analyze-memory-info ${logPath}`,
+    `Completed ${backend}; analyze with: node scripts/analyze-memory-info.mjs ${logPath}`,
   );
 }
 

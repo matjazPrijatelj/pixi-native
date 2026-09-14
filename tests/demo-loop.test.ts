@@ -13,10 +13,18 @@ test("autotoggle interval reads seconds from environment with 15s fallback", () 
   assert.equal(getAutotoggleIntervalMs({ AUTOTOGGLE_INTERVAL: "bad" }), 15000);
 });
 
-test("autotoggle skips only RTP video", () => {
-  assert.equal(shouldSkipAutoScene("rtp-video"), true);
-  assert.equal(shouldSkipAutoScene("video"), false);
-  assert.equal(shouldSkipAutoScene("audio"), false);
+test("autotoggle skips RTP unless the environment explicitly includes it", () => {
+  assert.equal(shouldSkipAutoScene("rtp-video", {}), true);
+  assert.equal(
+    shouldSkipAutoScene("rtp-video", { AUTOTOGGLE_INCLUDE_RTP: "1" }),
+    false,
+  );
+  assert.equal(
+    shouldSkipAutoScene("rtp-video", { AUTOTOGGLE_INCLUDE_RTP: "0" }),
+    true,
+  );
+  assert.equal(shouldSkipAutoScene("video", {}), false);
+  assert.equal(shouldSkipAutoScene("audio", {}), false);
 });
 
 test("space key names toggle autotoggle", () => {

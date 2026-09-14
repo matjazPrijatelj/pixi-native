@@ -2,6 +2,15 @@
 
 ## 2026-09-14
 
+- Added Windows and Linux x64 portable distributions for the complete PixiJS 8
+  native demo, including WebGPU/WebGL launchers, soak-test and memory-analysis
+  tools, all available demo assets, physical production dependencies, and a
+  checksum-verified embedded Node.js 24 runtime.
+- Portable demo archives load a root `.env` with the same settings as the
+  development runner while including only `.env.example`; local environment
+  values, logs, credentials, and workspace links are excluded.
+- Added `AUTOTOGGLE_INCLUDE_RTP=1` as an explicit `.env` opt-in for including
+  the indefinitely reconnecting RTP scene in automatic scene rotation.
 - Prepared the `0.2.2` public npm release with reusable native video frame
   buffers and deterministic FFmpeg worker/process teardown for Windows and
   Linux x64 packages.

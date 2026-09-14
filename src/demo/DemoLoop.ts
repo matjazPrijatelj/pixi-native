@@ -31,9 +31,14 @@ export function isAutoToggleShortcut(
     normalizedKeys.includes("spacebar");
 }
 
-/** RTP remains manual-only because an unavailable stream can reconnect forever. */
-export function shouldSkipAutoScene(sceneName: string): boolean {
-  return sceneName === "rtp-video";
+/** RTP stays manual-only unless the local environment explicitly opts in. */
+export function shouldSkipAutoScene(
+  sceneName: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    sceneName === "rtp-video" && environment.AUTOTOGGLE_INCLUDE_RTP !== "1"
+  );
 }
 
 /** Owns the automatic all-scene timer shared by both demo versions. */

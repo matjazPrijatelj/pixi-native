@@ -14,6 +14,8 @@ build/
 !/src/demo/assets/Sync_Check-720p30fps.mp4
 /src/demo/assets/transparent-video/*.mp4
 /artifacts/.npm-cache
+/artifacts/pixi-native-demo-*.zip
+/artifacts/pixi-native-demo-*.zip.sha256
 
 # Coverage and temporary caches
 coverage/
