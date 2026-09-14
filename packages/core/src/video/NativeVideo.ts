@@ -75,6 +75,13 @@ interface NativeDecoderBinding {
   close(): void;
 }
 
+interface NativeVideoShutdownDiagnostics {
+  readonly activeDecoderWorkers: number;
+  readonly pendingDecoderShutdowns: number;
+  readonly completedDecoderShutdowns: number;
+  readonly maxDecoderShutdownMs: number;
+}
+
 interface NativeVideoModule {
   NativeVideoDecoder: new (options: {
     width: number;
@@ -89,7 +96,10 @@ interface NativeVideoModule {
     inputArgs?: string[];
     outputArgs?: string[];
   }) => NativeDecoderBinding;
+  videoShutdownDiagnostics?(): NativeVideoShutdownDiagnostics;
 }
+
+let loadedNativeVideoModule: NativeVideoModule | undefined;
 
 /** Playback, decoding, and reconnect options for {@link NativeVideo}. */
 export interface NativeVideoOptions {
@@ -373,6 +383,7 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
     }
 
     const nativeVideo = loadNativeVideo<NativeVideoModule>();
+    loadedNativeVideoModule = nativeVideo;
     this.decoder = new nativeVideo.NativeVideoDecoder({
       width: options.width,
       height: options.height,
@@ -625,6 +636,12 @@ export function getNativeVideoMemoryStats(): Record<string, number> {
   let nativeVideoFrameBufferAllocations = 0;
   let nativeVideoFrameBufferReuses = 0;
   let nativeVideoRecycledFrameBuffers = 0;
+  const shutdown = loadedNativeVideoModule?.videoShutdownDiagnostics?.() ?? {
+    activeDecoderWorkers: 0,
+    pendingDecoderShutdowns: 0,
+    completedDecoderShutdowns: 0,
+    maxDecoderShutdownMs: 0,
+  };
   for (const reference of activeVideos) {
     const video = reference.deref();
     if (!video) {
@@ -642,6 +659,10 @@ export function getNativeVideoMemoryStats(): Record<string, number> {
     nativeVideoFrameBufferAllocations,
     nativeVideoFrameBufferReuses,
     nativeVideoRecycledFrameBuffers,
+    nativeVideoActiveDecoderWorkers: shutdown.activeDecoderWorkers,
+    nativeVideoPendingDecoderShutdowns: shutdown.pendingDecoderShutdowns,
+    nativeVideoCompletedDecoderShutdowns: shutdown.completedDecoderShutdowns,
+    nativeVideoMaxDecoderShutdownMs: shutdown.maxDecoderShutdownMs,
   };
 }
 

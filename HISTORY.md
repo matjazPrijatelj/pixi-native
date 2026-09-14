@@ -2,6 +2,22 @@
 
 ## 2026-09-14
 
+- Changed native video teardown to signal FFmpeg immediately and reap its
+  process and decoder worker away from the N-API/UI thread, preventing a scene
+  switch from freezing while synchronous shutdown waits on native resources.
+- Added native video shutdown counters and incomplete scene-exit analysis so
+  soak logs identify active workers, pending cleanup, completed cleanup, and
+  the longest asynchronous teardown. Demo shutdown waits up to two seconds for
+  pending decoder cleanup and records its final state before exiting.
+- Brought PixiJS 7 isolation lifecycle logging in line with PixiJS 8 and added
+  visible parallel `webgl`, `webgpu`, and `webgl7` runs through
+  `--backend=all --parallel`; requested isolation scenes continue to exclude
+  only the indefinitely reconnecting RTP scene.
+- Built and staged the updated native video addon for Windows x64 and Linux x64
+  through WSL. A visible ten-minute parallel Graphics/Video soak completed 20
+  decoder shutdowns per backend without a freeze or an incomplete scene exit;
+  final shutdown logging confirmed no pending decoder cleanup. Rebuilt the
+  Windows x64 portable demo with the verified native module.
 - Added Windows and Linux x64 portable distributions for the complete PixiJS 8
   native demo, including WebGPU/WebGL launchers, soak-test and memory-analysis
   tools, all available demo assets, physical production dependencies, and a
@@ -14,6 +30,8 @@
 - Portable demo instances now write backend-, timestamp-, PID-, and
   restart-specific memory logs. Concurrent soak tests use separate run
   directories, and the analyzer selects the newest instance log by default.
+- Portable Windows and Linux demos now include the PixiJS 7 WebGL scenes,
+  aliased PixiJS 7 dependency, and dedicated `start-webgl7` launchers.
 - Prepared the `0.2.2` public npm release with reusable native video frame
   buffers and deterministic FFmpeg worker/process teardown for Windows and
   Linux x64 packages.

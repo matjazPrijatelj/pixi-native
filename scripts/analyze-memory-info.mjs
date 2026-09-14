@@ -38,6 +38,16 @@ export function analyzeRows(rows) {
   const external = rows.map((row) => row.memory?.external ?? 0);
   const gaps = [];
   const sequenceGaps = [];
+  let pendingSceneExit;
+  const interruptedSceneExits = [];
+  for (const row of rows) {
+    if (row.reason === "scene-exit:before") {
+      if (pendingSceneExit) interruptedSceneExits.push(pendingSceneExit);
+      pendingSceneExit = `${row.scene?.index ?? "?"}:${row.scene?.name ?? "unknown"} at sequence ${row.sequence ?? "?"}`;
+    } else if (row.reason === "scene-exit:after") {
+      pendingSceneExit = undefined;
+    }
+  }
   for (let index = 1; index < rows.length; index++) {
     const previous = rows[index - 1];
     const current = rows[index];
@@ -99,6 +109,19 @@ export function analyzeRows(rows) {
     return values.length ? [`${name} max=${Math.max(...values)}`] : [];
   });
   if (videoPeaks.length) lines.push(`Native video buffers: ${videoPeaks.join(", ")}`);
+  const shutdownMetrics = [
+    "nativeVideoActiveDecoderWorkers",
+    "nativeVideoPendingDecoderShutdowns",
+    "nativeVideoCompletedDecoderShutdowns",
+    "nativeVideoMaxDecoderShutdownMs",
+  ];
+  const shutdownTrends = shutdownMetrics.flatMap((name) => {
+    const values = rows.map((row) => row.extra?.[name]).filter(Number.isFinite);
+    return values.length
+      ? [`${name}=${values[0]}->${values.at(-1)} (max ${Math.max(...values)})`]
+      : [];
+  });
+  if (shutdownTrends.length) lines.push(`Native video shutdowns: ${shutdownTrends.join(", ")}`);
   if (renderedSceneRss.size) {
     lines.push(`Rendered-scene RSS: ${[...renderedSceneRss.entries()].map(([name, values]) =>
       `${name}=${formatBytes(values[0])}->${formatBytes(values.at(-1))}`,
@@ -106,7 +129,17 @@ export function analyzeRows(rows) {
   }
   if (gaps.length) lines.push(`WARNING time gaps: ${gaps.join(", ")}`);
   if (sequenceGaps.length) lines.push(`WARNING sequence gaps: ${sequenceGaps.join(", ")}`);
-  if (!gaps.length && !sequenceGaps.length) lines.push("Ordering: continuous timestamps and sequence.");
+  if (pendingSceneExit) interruptedSceneExits.push(pendingSceneExit);
+  if (interruptedSceneExits.length) {
+    lines.push(`WARNING incomplete scene exits: ${interruptedSceneExits.join(", ")}`);
+  }
+  const finalPendingShutdowns = last.extra?.nativeVideoPendingDecoderShutdowns;
+  if (Number.isFinite(finalPendingShutdowns) && finalPendingShutdowns > 0) {
+    lines.push(`WARNING pending native video shutdowns at final entry: ${finalPendingShutdowns}`);
+  }
+  if (!gaps.length && !sequenceGaps.length && !interruptedSceneExits.length) {
+    lines.push("Ordering: continuous timestamps, sequence, and scene exits.");
+  }
   return { count: rows.length, lines };
 }
 

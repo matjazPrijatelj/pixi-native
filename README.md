@@ -202,9 +202,10 @@ scenes; press `Space` to toggle it on or off. Set `AUTOTOGGLE_INTERVAL` in
 console and written to the log.
 Run `pnpm analyze-memory-info` for a compact summary of the log, including
 memory deltas, scene counts, and timestamp/sequence gaps.
-Run `pnpm isolate-native-memory -- --duration-seconds 600 --backend=both` to
-launch visible, separate WebGL and WebGPU RSS runs; each result is written to
-`logs/native-memory-isolation/<backend>.log` for comparison.
+Run `pnpm isolate-native-memory -- --duration-seconds 600 --backend=all --parallel`
+to launch visible PixiJS 8 WebGL/WebGPU and PixiJS 7 WebGL RSS runs together;
+each result is written to `logs/native-memory-isolation/<backend>.log` for
+comparison. Omit `--parallel` to run the selected backends sequentially.
 Pass `--scenes=graphics,video` to cycle only named scenes; isolated scene runs
 are kept in their own `logs/native-memory-isolation/<scene-pair>/` directory.
 RTP remains manual-only in this automatic mode to avoid reconnect attempts when

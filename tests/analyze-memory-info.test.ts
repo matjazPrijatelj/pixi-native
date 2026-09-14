@@ -5,7 +5,10 @@ import { writeFileSync, unlinkSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { resolveMemoryInfoInput } from "../scripts/analyze-memory-info.mjs";
+import {
+  analyzeRows,
+  resolveMemoryInfoInput,
+} from "../scripts/analyze-memory-info.mjs";
 
 test("memory analyzer reports trends and sequence gaps", () => {
   const fixture = resolve(".tmp-memory-info-fixture.log");
@@ -42,4 +45,30 @@ test("memory analyzer selects the newest unique instance log", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("memory analyzer reports an incomplete video exit and pending cleanup", () => {
+  const result = analyzeRows([
+    {
+      timestamp: "2026-01-01T00:00:00.000Z",
+      timestampMs: 0,
+      sequence: 1,
+      reason: "scene-entry:rendered",
+      memory: {},
+      extra: { nativeVideoPendingDecoderShutdowns: 0 },
+      scene: { index: 4, name: "video" },
+    },
+    {
+      timestamp: "2026-01-01T00:00:15.000Z",
+      timestampMs: 15_000,
+      sequence: 2,
+      reason: "scene-exit:before",
+      memory: {},
+      extra: { nativeVideoPendingDecoderShutdowns: 1 },
+      scene: { index: 4, name: "video" },
+    },
+  ]);
+
+  assert.match(result.lines.join("\n"), /WARNING incomplete scene exits: 4:video/u);
+  assert.match(result.lines.join("\n"), /WARNING pending native video shutdowns/u);
 });

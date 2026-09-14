@@ -39,6 +39,7 @@ const TARGETS = {
 
 const IMPORT_REPLACEMENTS = [
     ["@pixi-native/core", "@matjash/pixi-native/core"],
+    ["@pixi-native/pixi7", "@matjash/pixi-native/pixi7"],
     ["@pixi-native/pixi8", "@matjash/pixi-native/pixi8"],
 ];
 
@@ -58,6 +59,7 @@ export function shouldIncludePortableInput(relativePath) {
         normalized === "src/demo" ||
         normalized.startsWith("src/demo/") ||
         normalized === "scripts/analyze-memory-info.mjs" ||
+        normalized === "scripts/native-memory-isolation-options.mjs" ||
         normalized === "scripts/run-native-memory-isolation.mjs"
     );
 }
@@ -69,6 +71,7 @@ export function createPortablePackageManifest(options) {
         facadeArchiveName,
         nativeArchiveName,
         pixiVersion,
+        pixi7Version,
         gsapVersion,
     } = options;
     const target = TARGETS[platform];
@@ -85,6 +88,7 @@ export function createPortablePackageManifest(options) {
             [target.nativePackage]: `file:vendor/${nativeArchiveName}`,
             gsap: gsapVersion,
             "pixi.js": pixiVersion,
+            "pixi.js-v7": pixi7Version,
         },
     };
 }
@@ -161,6 +165,7 @@ async function main() {
         facadeArchiveName: basename(facadeArchive),
         nativeArchiveName: basename(nativeArchive),
         pixiVersion: rootManifest.devDependencies["pixi.js"],
+        pixi7Version: rootManifest.devDependencies["pixi.js-v7"],
         gsapVersion: installedGsapManifest.version,
     });
     await writeFile(
@@ -221,6 +226,7 @@ async function copyDemoInputs(appRoot) {
         "src/dev-runner.ts",
         "src/demo",
         "scripts/analyze-memory-info.mjs",
+        "scripts/native-memory-isolation-options.mjs",
         "scripts/run-native-memory-isolation.mjs",
     ];
     for (const input of inputs) {
@@ -232,8 +238,6 @@ async function copyDemoInputs(appRoot) {
         await mkdir(dirname(destination), { recursive: true });
         await cp(source, destination, { recursive: true, force: true });
     }
-    // The portable distribution exposes the selected PixiJS 8 WebGPU/WebGL demo only.
-    await rm(resolve(appRoot, "src/demo/v7"), { recursive: true, force: true });
     await rewriteTypescriptTree(resolve(appRoot, "src"));
 }
 
@@ -254,6 +258,9 @@ async function writeLaunchers(appRoot, platform) {
         "start-webgl.cmd": launcherCmd(
             "src\\dev-runner.ts webgl --unique-memory-log",
         ),
+        "start-webgl7.cmd": launcherCmd(
+            "src\\dev-runner.ts webgl7 --unique-memory-log",
+        ),
         "run-memory-test.cmd": launcherCmd(
             "scripts\\run-native-memory-isolation.mjs --unique-output %*",
         ),
@@ -272,6 +279,9 @@ async function writeLaunchers(appRoot, platform) {
         ),
         "start-webgl.sh": launcherSh(
             "src/dev-runner.ts webgl --unique-memory-log",
+        ),
+        "start-webgl7.sh": launcherSh(
+            "src/dev-runner.ts webgl7 --unique-memory-log",
         ),
         "run-memory-test.sh": launcherSh(
             'scripts/run-native-memory-isolation.mjs --unique-output "$@"',
@@ -304,12 +314,12 @@ function launcherSh(argumentsText) {
 function createReadme(platform) {
     const start =
         platform === "win32"
-            ? "start-webgpu.cmd or start-webgl.cmd"
-            : "./start-webgpu.sh or ./start-webgl.sh";
+            ? "start-webgpu.cmd (PixiJS 8), start-webgl.cmd (PixiJS 8), or start-webgl7.cmd (PixiJS 7)"
+            : "./start-webgpu.sh (PixiJS 8), ./start-webgl.sh (PixiJS 8), or ./start-webgl7.sh (PixiJS 7)";
     const soak =
         platform === "win32"
-            ? "run-memory-test.cmd --duration-seconds 7200 --backend=both"
-            : "./run-memory-test.sh --duration-seconds 7200 --backend=both";
+            ? "run-memory-test.cmd --duration-seconds 7200 --backend=all --parallel"
+            : "./run-memory-test.sh --duration-seconds 7200 --backend=all --parallel";
     return (
         `PIXI NATIVE PORTABLE DEMO\n\n` +
         `1. If needed, copy .env.example to .env and modify the settings.\n` +
@@ -446,13 +456,17 @@ async function validatePortableDemo(appRoot, platform, target) {
     const required = [
         ".env.example",
         "src/dev-runner.ts",
+        "src/demo/v7/main.ts",
         "src/demo/v8/main.ts",
         "scripts/analyze-memory-info.mjs",
+        "scripts/native-memory-isolation-options.mjs",
         "scripts/run-native-memory-isolation.mjs",
         platform === "win32" ? "runtime/node.exe" : "runtime/node",
+        platform === "win32" ? "start-webgl7.cmd" : "start-webgl7.sh",
         `node_modules/${target.nativePackage}/package.json`,
         "node_modules/@matjash/pixi-native/package.json",
         "node_modules/pixi.js/package.json",
+        "node_modules/pixi.js-v7/package.json",
         "node_modules/gsap/package.json",
     ];
     for (const path of required) await requireFile(resolve(appRoot, path));

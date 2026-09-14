@@ -41,7 +41,7 @@ type Pixi7Scene = Container & {
   removeRandomSprites?: (count?: number) => number;
 };
 type Pixi7SceneFactory = () => Pixi7Scene;
-const { app, native, addDestroyListener } = await createApp({
+const { app, native, addDestroyListener, destroy } = await createApp({
   ...DEMO_WINDOW_OPTIONS,
   title: "PixiJS 7 Native Node WebGL",
 });
@@ -165,6 +165,30 @@ const sceneNames = [
   "rain",
   "particles",
 ];
+
+const requestedMemoryScenes = process.env.MEMORY_TEST_SCENES
+  ?.split(/[,\s]+/u)
+  .map((name) => name.trim())
+  .filter(Boolean);
+if (requestedMemoryScenes?.length) {
+  const requested = new Set(requestedMemoryScenes);
+  const selected = sceneNames
+    .map((name, index) => ({ name, factory: sceneFactories[index] }))
+    .filter(({ name }) => requested.has(name) && name !== "rtp-video");
+  if (selected.length === 0) {
+    throw new Error(
+      `MEMORY_TEST_SCENES did not match a testable scene: ${requestedMemoryScenes.join(", ")}`,
+    );
+  }
+  sceneFactories.length = 0;
+  sceneNames.length = 0;
+  for (const selectedScene of selected) {
+    sceneFactories.push(selectedScene.factory);
+    sceneNames.push(selectedScene.name);
+  }
+  console.warn(`MEMORY_TEST_SCENES: ${sceneNames.join(" -> ")}`);
+}
+
 let sceneIndex = 0;
 let activeScene = sceneFactories[sceneIndex]();
 let shuttingDown = false;
@@ -201,7 +225,7 @@ const memoryDiagnostics = startMemoryDiagnostics(() => [
   runtime: () => {
     const modules = resolveNativePlatformModules();
     return {
-      backend: "webgl",
+      backend: "webgl7",
       target: modules.target,
       gpuModule: modules.gpuModule,
       windowModule: modules.windowModule,
@@ -211,25 +235,58 @@ const memoryDiagnostics = startMemoryDiagnostics(() => [
   },
 });
 activeScene.resize?.(native.canvas.width, native.canvas.height);
-const selectScene = (nextIndex: number): void => {
+const waitForGpuSceneResources = async (): Promise<void> => {
+  // WebGL has no queue completion promise; keep the transition phases aligned
+  // with the asynchronous PixiJS 8 lifecycle without forcing a blocking finish.
+  await Promise.resolve();
+};
+
+const waitForNativeVideoShutdown = async (): Promise<void> => {
+  const deadline = performance.now() + 2_000;
+  while (
+    getNativeVideoMemoryStats().nativeVideoPendingDecoderShutdowns > 0 &&
+    performance.now() < deadline
+  ) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+  }
+};
+
+let sceneTransitioning = false;
+const selectScene = async (nextIndex: number): Promise<void> => {
   const normalized =
     (nextIndex + sceneFactories.length) % sceneFactories.length;
-  if (normalized === sceneIndex) return;
-  disposeDemoScene(activeScene);
-  if (sceneIndex === 8) particleEmitter.setEnabled(false);
-  sceneIndex = normalized;
-  activeScene = sceneFactories[sceneIndex]();
-  app.stage.addChild(activeScene);
-  if (sceneIndex === 8) particleEmitter.setEnabled(true);
-  activeScene.resize?.(native.canvas.width, native.canvas.height);
-  void memoryDiagnostics.sceneEntry("scene-entry");
+  if (normalized === sceneIndex || sceneTransitioning) return;
+  sceneTransitioning = true;
+  try {
+    await memoryDiagnostics.sample("scene-exit:before");
+    await waitForGpuSceneResources();
+    disposeDemoScene(activeScene);
+    await memoryDiagnostics.sample("scene-exit:after");
+    if (sceneNames[sceneIndex] === "particles") {
+      particleEmitter.setEnabled(false);
+    }
+    sceneIndex = normalized;
+    activeScene = sceneFactories[sceneIndex]();
+    app.stage.addChild(activeScene);
+    if (sceneNames[sceneIndex] === "particles") {
+      particleEmitter.setEnabled(true);
+    }
+    activeScene.resize?.(native.canvas.width, native.canvas.height);
+    requestAnimationFrame(() => {
+      void waitForGpuSceneResources().then(() =>
+        memoryDiagnostics.sceneEntry("scene-entry:rendered"),
+      );
+    });
+  } finally {
+    sceneTransitioning = false;
+  }
 };
 const demoLoop = createDemoLoop(() => {
   let nextIndex = (sceneIndex + 1) % sceneFactories.length;
   while (shouldSkipAutoScene(sceneNames[nextIndex])) {
     nextIndex = (nextIndex + 1) % sceneFactories.length;
   }
-  selectScene(nextIndex);
+  void selectScene(nextIndex);
 }, (enabled) => {
   autoToggleOverlay.setEnabled(enabled);
   autoToggleOverlay.alignBottomLeft(native.canvas.height);
@@ -262,10 +319,13 @@ globalThis.addEventListener("keydown", (rawEvent) => {
     console.warn(`AUTO_SCENES toggled by Space: ${demoLoop.enabled}`);
     return;
   }
-  if (key === "left" || key === "arrowleft") return selectScene(sceneIndex - 1);
+  if (key === "left" || key === "arrowleft") {
+    void selectScene(sceneIndex - 1);
+    return;
+  }
   if (key === "right" || key === "arrowright")
-    return selectScene(sceneIndex + 1);
-  if (/^[1-9]$/.test(key)) return selectScene(Number(key) - 1);
+    return void selectScene(sceneIndex + 1);
+  if (/^[1-9]$/.test(key)) return void selectScene(Number(key) - 1);
   if (key === "tab") {
     particleEmitter.setEnabled(!particleEmitter.enabled);
     return;
@@ -286,20 +346,33 @@ globalThis.addEventListener("resize", () => {
   autoToggleOverlay.alignBottomLeft(native.canvas.height);
 });
 app.ticker.add((delta) => {
-  activeScene.update?.(delta * (1000 / 60), performance.now());
+  if (!sceneTransitioning) {
+    activeScene.update?.(delta * (1000 / 60), performance.now());
+  }
   particleEmitter.update(app.ticker.deltaMS);
   fpsOverlay.tick(app.ticker.deltaMS);
 });
 addDestroyListener(async () => {
-  memoryDiagnostics.stop();
   if (shuttingDown) return;
   shuttingDown = true;
   demoLoop.destroy();
   disposeDemoScene(activeScene);
+  await waitForNativeVideoShutdown();
+  await memoryDiagnostics.sample("shutdown:after-video");
+  memoryDiagnostics.stop();
   particleEmitter.destroy();
   fpsOverlay.destroy({ children: true });
+  app.stage.removeChild(autoToggleOverlay);
+  autoToggleOverlay.destroy({ children: true });
   destroyBitmapFonts();
   app.stage.removeChild(background);
   background.destroy();
   await Assets.unload(asset("pixi-hero.png"));
 });
+
+const isolationDurationMs = Number(process.env.MEMORY_ISOLATION_DURATION_MS);
+if (Number.isFinite(isolationDurationMs) && isolationDurationMs > 0) {
+  setTimeout(() => {
+    void destroy().then(() => process.exit(0));
+  }, isolationDurationMs).unref?.();
+}

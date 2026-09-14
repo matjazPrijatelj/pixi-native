@@ -217,7 +217,7 @@ scenes.push(() => createParticleTest());
 sceneNames.push("particles");
 
 const requestedMemoryScenes = process.env.MEMORY_TEST_SCENES
-  ?.split(",")
+  ?.split(/[,\s]+/u)
   .map((name) => name.trim())
   .filter(Boolean);
 if (requestedMemoryScenes?.length) {
@@ -306,6 +306,16 @@ const memoryDiagnostics = startMemoryDiagnostics(() => [
 
 const waitForGpuSceneResources = async (): Promise<void> => {
   await native.device?.queue.onSubmittedWorkDone?.();
+};
+
+const waitForNativeVideoShutdown = async (): Promise<void> => {
+  const deadline = performance.now() + 2_000;
+  while (
+    getNativeVideoMemoryStats().nativeVideoPendingDecoderShutdowns > 0 &&
+    performance.now() < deadline
+  ) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+  }
 };
 
 let sceneTransitioning = false;
@@ -476,8 +486,10 @@ const stopActiveScene = (): void => {
 };
 
 addDestroyListener(async () => {
-  memoryDiagnostics.stop();
   stopActiveScene();
+  await waitForNativeVideoShutdown();
+  await memoryDiagnostics.sample("shutdown:after-video");
+  memoryDiagnostics.stop();
   particleEmitter.destroy();
   Howler.unload();
   app.stage.removeChild(background);

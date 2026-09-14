@@ -4,6 +4,7 @@ export interface PortablePackageOptions {
     readonly facadeArchiveName: string;
     readonly nativeArchiveName: string;
     readonly pixiVersion: string;
+    readonly pixi7Version: string;
     readonly gsapVersion: string;
 }
 

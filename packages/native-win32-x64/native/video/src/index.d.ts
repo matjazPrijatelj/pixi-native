@@ -25,6 +25,13 @@ export interface VideoFrameInfo {
   timestampUs: number;
 }
 
+export interface VideoShutdownDiagnostics {
+  activeDecoderWorkers: number;
+  pendingDecoderShutdowns: number;
+  completedDecoderShutdowns: number;
+  maxDecoderShutdownMs: number;
+}
+
 export class NativeVideoDecoder {
   public constructor(options: DecoderOptions);
   public open(source: string): void;
@@ -46,3 +53,5 @@ export class NativeVideoDecoder {
   public isFinished(): boolean;
   public close(): void;
 }
+
+export function videoShutdownDiagnostics(): VideoShutdownDiagnostics;

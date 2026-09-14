@@ -3,6 +3,10 @@ import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createMemoryRunId } from "../src/demo/memoryLogPaths.ts";
+import {
+  resolveIsolationBackends,
+  resolveIsolationEntrypoint,
+} from "./native-memory-isolation-options.mjs";
 
 const durationSeconds = readPositiveNumber("--duration-seconds", 600);
 const startupGraceMs = 15_000;
@@ -15,28 +19,24 @@ const requestedScenes = process.argv
   ?.slice("--scenes=".length)
   .trim();
 const uniqueOutput = process.argv.includes("--unique-output");
-const backends =
-  requestedBackend === "both" ? ["webgl", "webgpu"] : [requestedBackend];
+const parallel = process.argv.includes("--parallel");
+const backends = resolveIsolationBackends(requestedBackend);
 const outputDir = uniqueOutput
   ? resolve("logs", "native-memory-isolation", createMemoryRunId())
   : resolve("logs", "native-memory-isolation");
 const sceneRunName = requestedScenes
-  ?.split(",")
+  ?.split(/[,\s]+/u)
   .map((name) => name.trim().replaceAll(/[^a-z0-9-]/gi, "-"))
   .filter(Boolean)
   .join("-");
 const runOutputDir = sceneRunName ? resolve(outputDir, sceneRunName) : outputDir;
-
-if (backends.some((backend) => backend !== "webgl" && backend !== "webgpu")) {
-  throw new Error("Use --backend=webgl, --backend=webgpu, or --backend=both");
-}
 
 await rm(runOutputDir, { recursive: true, force: true });
 await mkdir(runOutputDir, { recursive: true });
 console.log(`Memory isolation output: ${runOutputDir}`);
 if (existsSync(".env")) process.loadEnvFile(".env");
 
-for (const backend of backends) {
+const runBackend = async (backend) => {
   const logPath = resolve(runOutputDir, `${backend}.log`);
   console.log(
     `Starting visible ${backend} isolation run for ${durationSeconds} seconds.`,
@@ -46,7 +46,12 @@ for (const backend of backends) {
   // application and can be terminated reliably after the soak.
   const child = spawn(
     process.execPath,
-    ["--expose-gc", "--enable-source-maps", "src/demo/v8/main.ts", backend],
+    [
+      "--expose-gc",
+      "--enable-source-maps",
+      resolveIsolationEntrypoint(backend),
+      backend === "webgl7" ? "webgl" : backend,
+    ],
     {
       cwd: process.cwd(),
       stdio: "inherit",
@@ -56,9 +61,7 @@ for (const backend of backends) {
         MEMORYINFO_LOG_PATH: logPath,
         AUTOTOGGLE_INTERVAL: process.env.AUTOTOGGLE_INTERVAL ?? "15",
         ...(requestedScenes ? { MEMORY_TEST_SCENES: requestedScenes } : {}),
-        MEMORY_ISOLATION_DURATION_MS: String(
-          durationSeconds * 1000 + startupGraceMs,
-        ),
+        MEMORY_ISOLATION_DURATION_MS: String(durationSeconds * 1000),
       },
     },
   );
@@ -89,6 +92,23 @@ for (const backend of backends) {
   console.log(
     `Completed ${backend}; analyze with: node scripts/analyze-memory-info.mjs ${logPath}`,
   );
+};
+
+if (parallel) {
+  console.log(`Running visible isolation backends in parallel: ${backends.join(", ")}`);
+  const results = await Promise.allSettled(
+    backends.map((backend) => runBackend(backend)),
+  );
+  const failures = results.flatMap((result, index) =>
+    result.status === "rejected"
+      ? [`${backends[index]}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`]
+      : [],
+  );
+  if (failures.length) {
+    throw new Error(`Isolation runs failed:\n${failures.join("\n")}`);
+  }
+} else {
+  for (const backend of backends) await runBackend(backend);
 }
 
 const reportPath = resolve(runOutputDir, "report.md");

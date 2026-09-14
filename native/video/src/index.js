@@ -101,4 +101,13 @@ class NativeVideoDecoder {
   }
 }
 
-module.exports = { NativeVideoDecoder };
+function videoShutdownDiagnostics() {
+  return native.videoShutdownDiagnostics?.() ?? {
+    activeDecoderWorkers: 0,
+    pendingDecoderShutdowns: 0,
+    completedDecoderShutdowns: 0,
+    maxDecoderShutdownMs: 0,
+  };
+}
+
+module.exports = { NativeVideoDecoder, videoShutdownDiagnostics };
