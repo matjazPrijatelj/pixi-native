@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { writeFileSync, unlinkSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { resolveMemoryInfoInput } from "../scripts/analyze-memory-info.mjs";
 
 test("memory analyzer reports trends and sequence gaps", () => {
   const fixture = resolve(".tmp-memory-info-fixture.log");
@@ -21,5 +24,22 @@ test("memory analyzer reports trends and sequence gaps", () => {
     assert.match(output, /Rendered-scene RSS: 1:sprite-gsap=/);
   } finally {
     unlinkSync(fixture);
+  }
+});
+
+test("memory analyzer selects the newest unique instance log", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "pixi-memory-logs-"));
+  const fixed = resolve(directory, "memoryInfo.log");
+  const older = resolve(directory, "memoryInfo-webgl-old-p1-r0.log");
+  const newer = resolve(directory, "memoryInfo-webgpu-new-p2-r0.log");
+  try {
+    await writeFile(fixed, "{}\n");
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+    await writeFile(older, "{}\n");
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+    await writeFile(newer, "{}\n");
+    assert.equal(await resolveMemoryInfoInput(undefined, directory), newer);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });

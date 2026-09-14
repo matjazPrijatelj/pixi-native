@@ -11,6 +11,9 @@
   values, logs, credentials, and workspace links are excluded.
 - Added `AUTOTOGGLE_INCLUDE_RTP=1` as an explicit `.env` opt-in for including
   the indefinitely reconnecting RTP scene in automatic scene rotation.
+- Portable demo instances now write backend-, timestamp-, PID-, and
+  restart-specific memory logs. Concurrent soak tests use separate run
+  directories, and the analyzer selects the newest instance log by default.
 - Prepared the `0.2.2` public npm release with reusable native video frame
   buffers and deterministic FFmpeg worker/process teardown for Windows and
   Linux x64 packages.

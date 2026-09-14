@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getHeapStatistics } from "node:v8";
 import { nativeAudioEngine } from "@pixi-native/core/audio";
+import { resolveMemoryLogPath } from "./memoryLogPaths.ts";
 
 const SAMPLE_INTERVAL_MS = 150_000;
 const DEFAULT_LOG_PATH = resolve(
@@ -34,6 +35,7 @@ interface MemorySnapshot {
   readonly timestampMs: number;
   readonly elapsedMs: number;
   readonly sequence: number;
+  readonly processId: number;
   readonly reason: string;
   readonly gcAvailable: boolean;
   readonly gcExecuted: boolean;
@@ -54,7 +56,16 @@ export function startMemoryDiagnostics(
   roots: () => readonly DiagnosticRoot[],
   options: MemoryDiagnosticsOptions = {},
 ): MemoryDiagnostics {
-  const logPath = resolve(process.env.MEMORYINFO_LOG_PATH ?? DEFAULT_LOG_PATH);
+  const uniqueLog = process.env.PIXI_NATIVE_UNIQUE_MEMORY_LOG === "1";
+  const logPath = resolveMemoryLogPath({
+    backend: process.env.PIXI_NATIVE_MEMORY_LOG_BACKEND ?? "unknown",
+    configuredPath: process.env.MEMORYINFO_LOG_PATH,
+    defaultPath: DEFAULT_LOG_PATH,
+    pid: process.pid,
+    restart: Number(process.env.PIXI_NATIVE_MEMORY_LOG_RESTART) || 0,
+    unique: uniqueLog,
+  });
+  if (uniqueLog) console.log(`Memory diagnostics instance log: ${logPath}`);
   const rotation = rotateLogOnStartup(logPath);
   let stopped = false;
   let lastSceneKey: string | undefined;
@@ -152,6 +163,7 @@ function createSnapshot(
     timestampMs: 0,
     elapsedMs: 0,
     sequence: 0,
+    processId: process.pid,
     reason,
     gcAvailable: typeof globalObject.gc === "function",
     gcExecuted,

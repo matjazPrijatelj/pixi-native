@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { createMemoryRunId } from "../src/demo/memoryLogPaths.ts";
 
 const durationSeconds = readPositiveNumber("--duration-seconds", 600);
 const startupGraceMs = 15_000;
@@ -13,9 +14,12 @@ const requestedScenes = process.argv
   .find((value) => value.startsWith("--scenes="))
   ?.slice("--scenes=".length)
   .trim();
+const uniqueOutput = process.argv.includes("--unique-output");
 const backends =
   requestedBackend === "both" ? ["webgl", "webgpu"] : [requestedBackend];
-const outputDir = resolve("logs", "native-memory-isolation");
+const outputDir = uniqueOutput
+  ? resolve("logs", "native-memory-isolation", createMemoryRunId())
+  : resolve("logs", "native-memory-isolation");
 const sceneRunName = requestedScenes
   ?.split(",")
   .map((name) => name.trim().replaceAll(/[^a-z0-9-]/gi, "-"))
@@ -29,6 +33,7 @@ if (backends.some((backend) => backend !== "webgl" && backend !== "webgpu")) {
 
 await rm(runOutputDir, { recursive: true, force: true });
 await mkdir(runOutputDir, { recursive: true });
+console.log(`Memory isolation output: ${runOutputDir}`);
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 for (const backend of backends) {

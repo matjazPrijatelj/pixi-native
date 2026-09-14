@@ -52,12 +52,14 @@ export function rewritePortableDemoImports(source) {
 
 export function shouldIncludePortableInput(relativePath) {
     const normalized = relativePath.replaceAll("\\", "/");
-    return normalized === ".env.example" ||
+    return (
+        normalized === ".env.example" ||
         normalized === "src/dev-runner.ts" ||
         normalized === "src/demo" ||
         normalized.startsWith("src/demo/") ||
         normalized === "scripts/analyze-memory-info.mjs" ||
-        normalized === "scripts/run-native-memory-isolation.mjs";
+        normalized === "scripts/run-native-memory-isolation.mjs"
+    );
 }
 
 export function createPortablePackageManifest(options) {
@@ -70,7 +72,8 @@ export function createPortablePackageManifest(options) {
         gsapVersion,
     } = options;
     const target = TARGETS[platform];
-    if (!target) throw new Error(`Unsupported portable demo platform: ${platform}`);
+    if (!target)
+        throw new Error(`Unsupported portable demo platform: ${platform}`);
     return {
         name: "pixi-native-portable-demo",
         version: runtimeVersion,
@@ -95,14 +98,18 @@ async function main() {
     if (process.platform !== platform) {
         throw new Error(
             `${platform} portable dependencies must be installed on ${platform}; ` +
-            "use the Linux WSL packaging command from Windows.",
+                "use the Linux WSL packaging command from Windows.",
         );
     }
     if (process.arch !== target.arch) {
-        throw new Error(`Portable demo packaging requires ${platform}-${target.arch}`);
+        throw new Error(
+            `Portable demo packaging requires ${platform}-${target.arch}`,
+        );
     }
     if (process.versions.node !== NODE_VERSION) {
-        throw new Error(`Package the portable demo with Node.js ${NODE_VERSION}`);
+        throw new Error(
+            `Package the portable demo with Node.js ${NODE_VERSION}`,
+        );
     }
 
     const rootManifest = JSON.parse(
@@ -162,7 +169,11 @@ async function main() {
         "utf8",
     );
     await writeLaunchers(appRoot, platform);
-    await writeFile(resolve(appRoot, "README.txt"), createReadme(platform), "utf8");
+    await writeFile(
+        resolve(appRoot, "README.txt"),
+        createReadme(platform),
+        "utf8",
+    );
 
     const suppliedNodeRoot = readArgument("--node-root");
     const nodeRoot = suppliedNodeRoot
@@ -183,19 +194,25 @@ async function main() {
     await rm(archivePath, { force: true });
     await writeStoredZip(appRoot, archivePath, "pixi-native-demo");
     const archiveHash = await sha256File(archivePath);
-    await writeFile(`${archivePath}.sha256`, `${archiveHash}  ${basename(archivePath)}\n`);
+    await writeFile(
+        `${archivePath}.sha256`,
+        `${archiveHash}  ${basename(archivePath)}\n`,
+    );
     console.log(`Portable demo: ${archivePath}`);
     console.log(`SHA-256: ${archiveHash}`);
 }
 
 function readArgument(name) {
     const prefix = `${name}=`;
-    return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length);
+    return process.argv
+        .find((value) => value.startsWith(prefix))
+        ?.slice(prefix.length);
 }
 
 async function requireFile(path) {
     const fileStat = await stat(path).catch(() => null);
-    if (!fileStat?.isFile()) throw new Error(`Missing portable demo input: ${path}`);
+    if (!fileStat?.isFile())
+        throw new Error(`Missing portable demo input: ${path}`);
 }
 
 async function copyDemoInputs(appRoot) {
@@ -231,27 +248,42 @@ async function rewriteTypescriptTree(root) {
 
 async function writeLaunchers(appRoot, platform) {
     const windows = {
-        "start-webgpu.cmd": launcherCmd("src\\dev-runner.ts webgpu"),
-        "start-webgl.cmd": launcherCmd("src\\dev-runner.ts webgl"),
-        "run-memory-test.cmd": launcherCmd(
-            "scripts\\run-native-memory-isolation.mjs %*",
+        "start-webgpu.cmd": launcherCmd(
+            "src\\dev-runner.ts webgpu --unique-memory-log",
         ),
-        "analyze-memory.cmd": "@echo off\r\n" +
-            "cd /d \"%~dp0\"\r\n" +
-            "set \"MEMORY_LOG=%~1\"\r\n" +
-            "if not defined MEMORY_LOG set \"MEMORY_LOG=logs\\memoryInfo.log\"\r\n" +
-            "\"%~dp0runtime\\node.exe\" scripts\\analyze-memory-info.mjs \"%MEMORY_LOG%\"\r\n",
+        "start-webgl.cmd": launcherCmd(
+            "src\\dev-runner.ts webgl --unique-memory-log",
+        ),
+        "run-memory-test.cmd": launcherCmd(
+            "scripts\\run-native-memory-isolation.mjs --unique-output %*",
+        ),
+        "analyze-memory.cmd":
+            "@echo off\r\n" +
+            'cd /d "%~dp0"\r\n' +
+            'if "%~1"=="" (\r\n' +
+            '  "%~dp0runtime\\node.exe" scripts\\analyze-memory-info.mjs\r\n' +
+            ") else (\r\n" +
+            '  "%~dp0runtime\\node.exe" scripts\\analyze-memory-info.mjs "%~1"\r\n' +
+            ")\r\n",
     };
     const linux = {
-        "start-webgpu.sh": launcherSh("src/dev-runner.ts webgpu"),
-        "start-webgl.sh": launcherSh("src/dev-runner.ts webgl"),
-        "run-memory-test.sh": launcherSh(
-            "scripts/run-native-memory-isolation.mjs \"$@\"",
+        "start-webgpu.sh": launcherSh(
+            "src/dev-runner.ts webgpu --unique-memory-log",
         ),
-        "analyze-memory.sh": "#!/usr/bin/env sh\n" +
+        "start-webgl.sh": launcherSh(
+            "src/dev-runner.ts webgl --unique-memory-log",
+        ),
+        "run-memory-test.sh": launcherSh(
+            'scripts/run-native-memory-isolation.mjs --unique-output "$@"',
+        ),
+        "analyze-memory.sh":
+            "#!/usr/bin/env sh\n" +
             "set -eu\n" +
-            "cd \"$(dirname \"$0\")\"\n" +
-            "exec \"./runtime/node\" scripts/analyze-memory-info.mjs \"${1:-logs/memoryInfo.log}\"\n",
+            'cd "$(dirname "$0")"\n' +
+            'if [ "$#" -eq 0 ]; then\n' +
+            '  exec "./runtime/node" scripts/analyze-memory-info.mjs\n' +
+            "fi\n" +
+            'exec "./runtime/node" scripts/analyze-memory-info.mjs "$1"\n',
     };
     const launchers = platform === "win32" ? windows : linux;
     for (const [name, contents] of Object.entries(launchers)) {
@@ -270,19 +302,24 @@ function launcherSh(argumentsText) {
 }
 
 function createReadme(platform) {
-    const start = platform === "win32"
-        ? "start-webgpu.cmd ali start-webgl.cmd"
-        : "./start-webgpu.sh ali ./start-webgl.sh";
-    const soak = platform === "win32"
-        ? "run-memory-test.cmd --duration-seconds 7200 --backend=both"
-        : "./run-memory-test.sh --duration-seconds 7200 --backend=both";
-    return `PIXI NATIVE PORTABLE DEMO\n\n` +
-        `1. Po potrebi kopiraj .env.example v .env in spremeni nastavitve.\n` +
-        `2. Za interaktivni demo zazeni: ${start}\n` +
-        `3. Za dvourni primerjalni test zazeni:\n   ${soak}\n` +
-        `4. Memory logi in porocilo se zapisujejo v mapo logs.\n\n` +
-        `.env iz razvojnega racunalnika ni vkljucen v distribucijo.\n` +
-        `Portable Node.js ${NODE_VERSION} je v mapi runtime.\n`;
+    const start =
+        platform === "win32"
+            ? "start-webgpu.cmd or start-webgl.cmd"
+            : "./start-webgpu.sh or ./start-webgl.sh";
+    const soak =
+        platform === "win32"
+            ? "run-memory-test.cmd --duration-seconds 7200 --backend=both"
+            : "./run-memory-test.sh --duration-seconds 7200 --backend=both";
+    return (
+        `PIXI NATIVE PORTABLE DEMO\n\n` +
+        `1. If needed, copy .env.example to .env and modify the settings.\n` +
+        `2. To run the interactive demo, execute: ${start}\n` +
+        `3. To run a two-hour comparison test, execute:\n   ${soak}\n` +
+        `4. Each instance gets its own memory log in the logs directory.\n` +
+        `5. If no path is specified, the analyzer selects the latest memory log.\n\n` +
+        `The .env file from the development machine is not included in the distribution.\n` +
+        `Portable Node.js ${NODE_VERSION} is located in the runtime directory.\n`
+    );
 }
 
 async function ensureNodeDistribution(target) {
@@ -310,7 +347,9 @@ async function ensureNodeDistribution(target) {
     }
     const actualHash = await sha256File(archivePath);
     if (actualHash !== expectedHash) {
-        throw new Error(`Node archive checksum mismatch for ${target.nodeArchive}`);
+        throw new Error(
+            `Node archive checksum mismatch for ${target.nodeArchive}`,
+        );
     }
     await rm(extractedRoot, { recursive: true, force: true });
     if (process.platform === "win32") {
@@ -324,13 +363,15 @@ async function ensureNodeDistribution(target) {
 
 async function downloadText(url) {
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Download failed (${response.status}): ${url}`);
+    if (!response.ok)
+        throw new Error(`Download failed (${response.status}): ${url}`);
     return response.text();
 }
 
 async function downloadFile(url, destination) {
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Download failed (${response.status}): ${url}`);
+    if (!response.ok)
+        throw new Error(`Download failed (${response.status}): ${url}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     await writeFile(destination, bytes);
 }
@@ -346,27 +387,43 @@ async function stagePortableNode(appRoot, nodeRoot, target, platform) {
     await requireFile(sourceExecutable);
     await copyFile(sourceExecutable, destinationExecutable);
     if (platform === "linux") await chmod(destinationExecutable, 0o755);
-    await copyFile(resolve(nodeRoot, "LICENSE"), resolve(runtimeRoot, "NODE-LICENSE"));
+    await copyFile(
+        resolve(nodeRoot, "LICENSE"),
+        resolve(runtimeRoot, "NODE-LICENSE"),
+    );
 }
 
-async function installProductionDependencies(appRoot, nodeRoot, target, platform) {
+async function installProductionDependencies(
+    appRoot,
+    nodeRoot,
+    target,
+    platform,
+) {
     const node = resolve(nodeRoot, target.nodeExecutable);
     const npmCli = resolve(nodeRoot, target.npmCli);
     await requireFile(node);
     await requireFile(npmCli);
-    const cache = resolve(REPOSITORY_ROOT, ".tmp", `portable-demo-npm-${platform}`);
+    const cache = resolve(
+        REPOSITORY_ROOT,
+        ".tmp",
+        `portable-demo-npm-${platform}`,
+    );
     await mkdir(cache, { recursive: true });
-    run(node, [
-        npmCli,
-        "install",
-        "--omit=dev",
-        "--include=optional",
-        "--no-audit",
-        "--no-fund",
-        "--no-package-lock",
-        "--cache",
-        cache,
-    ], { cwd: appRoot });
+    run(
+        node,
+        [
+            npmCli,
+            "install",
+            "--omit=dev",
+            "--include=optional",
+            "--no-audit",
+            "--no-fund",
+            "--no-package-lock",
+            "--cache",
+            cache,
+        ],
+        { cwd: appRoot },
+    );
 }
 
 function run(command, args, options = {}) {
@@ -407,11 +464,14 @@ async function validatePortableDemo(appRoot, platform, target) {
             throw new Error(`Unresolved workspace import in ${path}`);
         }
     }
-    const wrongPackage = platform === "win32"
-        ? "@matjash/pixi-native-linux-x64"
-        : "@matjash/pixi-native-win32-x64";
+    const wrongPackage =
+        platform === "win32"
+            ? "@matjash/pixi-native-linux-x64"
+            : "@matjash/pixi-native-win32-x64";
     if (await isDirectory(resolve(appRoot, "node_modules", wrongPackage))) {
-        throw new Error(`Portable demo contains the wrong native package: ${wrongPackage}`);
+        throw new Error(
+            `Portable demo contains the wrong native package: ${wrongPackage}`,
+        );
     }
 }
 
@@ -420,7 +480,7 @@ async function listFiles(root) {
     const entries = await readdir(root, { withFileTypes: true });
     for (const entry of entries) {
         const path = resolve(root, entry.name);
-        if (entry.isDirectory()) files.push(...await listFiles(path));
+        if (entry.isDirectory()) files.push(...(await listFiles(path)));
         else if (entry.isFile() || entry.isSymbolicLink()) files.push(path);
     }
     return files;
@@ -446,7 +506,7 @@ function createCrcTable() {
     for (let index = 0; index < table.length; index++) {
         let value = index;
         for (let bit = 0; bit < 8; bit++) {
-            value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+            value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
         }
         table[index] = value >>> 0;
     }
@@ -475,11 +535,14 @@ async function writeStoredZip(sourceRoot, archivePath, archiveRoot) {
                 throw new Error(`ZIP64 is not supported: ${path}`);
             }
             const pathStat = await stat(path);
-            const relativePath = relative(sourceRoot, path).split(sep).join("/");
+            const relativePath = relative(sourceRoot, path)
+                .split(sep)
+                .join("/");
             const name = Buffer.from(`${archiveRoot}/${relativePath}`, "utf8");
             const checksum = crc32(bytes);
             const deflated = deflateRawSync(bytes, { level: 6 });
-            const compressed = deflated.length < bytes.length ? deflated : bytes;
+            const compressed =
+                deflated.length < bytes.length ? deflated : bytes;
             const method = compressed === deflated ? 8 : 0;
             const { dosDate, dosTime } = toDosDate(pathStat.mtime);
             const localHeader = Buffer.alloc(30);
@@ -550,10 +613,12 @@ async function writeStoredZip(sourceRoot, archivePath, archiveRoot) {
 function toDosDate(date) {
     const year = Math.max(1980, date.getFullYear());
     return {
-        dosTime: (date.getHours() << 11) |
+        dosTime:
+            (date.getHours() << 11) |
             (date.getMinutes() << 5) |
             Math.floor(date.getSeconds() / 2),
-        dosDate: ((year - 1980) << 9) |
+        dosDate:
+            ((year - 1980) << 9) |
             ((date.getMonth() + 1) << 5) |
             date.getDate(),
     };

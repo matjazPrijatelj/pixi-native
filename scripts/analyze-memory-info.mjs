@@ -1,8 +1,33 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const inputPath = resolve(process.argv[2] ?? "logs/memoryInfo.log");
+export async function resolveMemoryInfoInput(
+  requestedPath,
+  logsDirectory = resolve("logs"),
+) {
+  if (requestedPath) return resolve(requestedPath);
+
+  const defaultPath = resolve(logsDirectory, "memoryInfo.log");
+  const entries = await readdir(logsDirectory, { withFileTypes: true }).catch(
+    () => [],
+  );
+  const candidates = await Promise.all(
+    entries
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          (entry.name === "memoryInfo.log" ||
+            /^memoryInfo-.+\.log$/iu.test(entry.name)),
+      )
+      .map(async (entry) => {
+        const path = resolve(logsDirectory, entry.name);
+        return { path, modified: (await stat(path)).mtimeMs };
+      }),
+  );
+  candidates.sort((left, right) => right.modified - left.modified);
+  return candidates[0]?.path ?? defaultPath;
+}
 
 export function analyzeRows(rows) {
   if (rows.length === 0) return { count: 0, lines: ["No valid memoryinfo entries."] };
@@ -94,6 +119,7 @@ function formatSigned(value = 0) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const inputPath = await resolveMemoryInfoInput(process.argv[2]);
   try {
     const content = await readFile(inputPath, "utf8");
     const rows = content.split(/\r?\n/).filter(Boolean).flatMap((line) => {
