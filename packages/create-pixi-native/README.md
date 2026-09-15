@@ -13,7 +13,7 @@ The generator supports PixiJS 8 with WebGPU or WebGL. PixiJS 7 uses WebGL.
 Run the command in a terminal to answer any omitted options interactively.
 
 The generated hero background uses the Pixi ticker by default. Pass
-`--animation gsap` to generate the same 0.5-to-1.0 yoyo animation with GSAP and
+`--animation gsap` to generate the same 0.75-to-1.0 scaling range with GSAP and
 include GSAP as an application dependency:
 
 ```sh
@@ -26,5 +26,5 @@ credentials and does not install dependencies.
 
 PixiJS 8 projects depend on `pixi.js@^8.20.0`. PixiJS 7 projects depend only on
 the `pixi.js-v7` alias for `pixi.js@^7.4.3`. Both target Pixi Native runtime
-`0.2.0`; the generator has its own `0.1.6` release version. Both are public on
+`0.2.0`; the generator has its own `0.1.7` release version. Both are public on
 npm and do not require registry credentials for installation.

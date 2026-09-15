@@ -129,7 +129,7 @@ test("generator has an independent package version", async () => {
       "utf8",
     ),
   );
-  assert.equal(manifest.version, "0.1.6");
+  assert.equal(manifest.version, "0.1.7");
 });
 
 test("WSL release commands use temporary LF scripts", async () => {
@@ -179,13 +179,13 @@ test("publisher isolates npm configuration and compares immutable digests", () =
 });
 
 test("publisher selects package-specific versions, archives, and tags", () => {
-  assert.deepEqual(getReleaseConfiguration(true, "0.2.1", "0.1.6"), {
-    version: "0.1.6",
-    tag: "create-pixi-native-v0.1.6",
+  assert.deepEqual(getReleaseConfiguration(true, "0.2.1", "0.1.7"), {
+    version: "0.1.7",
+    tag: "create-pixi-native-v0.1.7",
     expectedPackages: ["@matjash/create-pixi-native"],
     manifestTargets: [],
   });
-  assert.deepEqual(getReleaseConfiguration(false, "0.2.1", "0.1.6"), {
+  assert.deepEqual(getReleaseConfiguration(false, "0.2.1", "0.1.7"), {
     version: "0.2.1",
     tag: "v0.2.1",
     expectedPackages: [
@@ -195,7 +195,7 @@ test("publisher selects package-specific versions, archives, and tags", () => {
     ],
     manifestTargets: ["win32-x64", "linux-x64"],
   });
-  assert.deepEqual(getReleaseConfiguration(false, "0.2.1", "0.1.6", true), {
+  assert.deepEqual(getReleaseConfiguration(false, "0.2.1", "0.1.7", true), {
     version: "0.2.1",
     tag: "v0.2.1",
     expectedPackages: [

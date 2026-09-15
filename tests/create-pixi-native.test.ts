@@ -54,7 +54,7 @@ test("quickboot parses explicit Pixi and backend options", () => {
 });
 
 test("quickboot keeps generator and runtime versions independent", () => {
-  assert.equal(GENERATOR_VERSION, "0.1.6");
+  assert.equal(GENERATOR_VERSION, "0.1.7");
   assert.equal(PIXI_NATIVE_VERSION, "0.2.0");
   assert.equal(PIXI_NATIVE_VERSION_RANGE, "~0.2.0");
   assert.equal(PNPM_VERSION, "12.4.1");
@@ -221,12 +221,13 @@ test("quickboot generates version-specific projects without credentials", async 
       );
       assert.match(source, /assets\/pixi-hero\.png/);
       assert.ok(animationSource.includes(`from "${importPath}"`));
+      assert.match(animationSource, /MINIMUM_SCALE = 0\.75/);
       if (animation === "gsap") {
         assert.match(animationSource, /import\("gsap"\)/);
         assert.match(animationSource, /addModalFrameListener/);
       } else {
         assert.doesNotMatch(animationSource, /gsap/i);
-        assert.match(animationSource, /ANIMATION_PERIOD_MS = 12_000/);
+        assert.match(animationSource, /ANIMATION_PERIOD_MS = 6_000/);
         assert.match(
           animationSource,
           /addDestroyListener\(\(\) => \{\s*runtime\.app\.ticker\.remove/,

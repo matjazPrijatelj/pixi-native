@@ -1,5 +1,12 @@
 # Development history
 
+## 2026-09-15
+
+- Prepared `@matjash/create-pixi-native` 0.1.7 so the npm package documents the
+  standard `pnpm create @matjash/pixi-native` invocation.
+- Updated generated ticker and GSAP hero animations to scale between 0.75 and
+  1.0, with the ticker completing its cycle in six seconds.
+
 ## 2026-09-14
 
 - Changed native video teardown to signal FFmpeg immediately and reap its
