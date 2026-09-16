@@ -4,6 +4,7 @@ import { Image as CanvasImage } from "@napi-rs/canvas";
 import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { createNodeSdlWebGLSurface } from "@pixi-native/core/renderers/webgl/NodeSdlWebGLSurface.js";
 import { installWebGlImageUploadAdapter } from "@pixi-native/core/renderers/webgl/webglImageUpload.js";
+import { attachWebGlResourceStats } from "@pixi-native/core/renderers/webgl/webGlResourceTracker.js";
 import type { NodeRendererContext } from "../../createPixiRenderer.ts";
 import type { NodeRendererOptions } from "@pixi-native/core/runtime/nativeTypes.js";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
@@ -40,6 +41,7 @@ export async function createWebGlRenderer(
       renderer,
       webgl,
       antialiasSamples,
+      getWebGlResourceStats,
       webglRenderingContextConstructor,
     } = surface;
     installWebGlImageUploadAdapter(webgl);
@@ -80,6 +82,8 @@ export async function createWebGlRenderer(
 
       throw new Error(`WebGL is required; Pixi selected ${app.renderer.name}`);
     }
+
+    attachWebGlResourceStats(app.renderer, getWebGlResourceStats);
 
     const resizeToWindow = (dispatchResize: boolean): boolean =>
       syncNativeWindowSize(

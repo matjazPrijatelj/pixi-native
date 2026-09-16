@@ -32,14 +32,22 @@ function createTrendRows(
     },
     scene: { index: minute % 3, name: `scene-${minute % 3}` },
     runtime: { backend: "webgl", target: "win32-x64" },
+    extra: {
+      webglBuffersCreated: 4 + minute,
+      webglBuffersDeleted: minute,
+      webglBuffersLive: 4,
+      webglBuffersPeak: 5,
+      webglBufferBytesLive: (8 + minute / 60) * MIB,
+      webglBufferBytesPeak: 12 * MIB,
+    },
   }));
 }
 
 test("memory analyzer reports trends and sequence gaps", () => {
   const fixture = resolve(".tmp-memory-info-fixture.log");
   writeFileSync(fixture, [
-    JSON.stringify({ timestamp: "2026-01-01T00:00:00.000Z", timestampMs: 0, sequence: 1, reason: "scene-entry:rendered", memory: { rss: 100, heapUsed: 40, external: 10, arrayBuffers: 2 }, extra: { gpuBindGroups: 2, gpuBindGroupCacheResets: 0, activeNativeVideos: 1, nativeVideoFrameBufferAllocations: 5, nativeVideoFrameBufferReuses: 10, nativeVideoRecycledFrameBuffers: 1 }, scene: { index: 1, name: "sprite-gsap" }, runtime: { backend: "webgl", target: "win32-x64" } }),
-    JSON.stringify({ timestamp: "2026-01-01T00:05:00.000Z", timestampMs: 300_000, sequence: 3, reason: "scene-entry:rendered", memory: { rss: 130, heapUsed: 41, external: 20, arrayBuffers: 4 }, extra: { gpuBindGroups: 5, gpuBindGroupCacheResets: 1, activeNativeVideos: 0, nativeVideoFrameBufferAllocations: 0, nativeVideoFrameBufferReuses: 0, nativeVideoRecycledFrameBuffers: 0 }, scene: { index: 1, name: "sprite-gsap" }, runtime: { backend: "webgl", target: "win32-x64" } }),
+    JSON.stringify({ timestamp: "2026-01-01T00:00:00.000Z", timestampMs: 0, sequence: 1, reason: "scene-entry:rendered", memory: { rss: 100, heapUsed: 40, external: 10, arrayBuffers: 2 }, extra: { gpuBindGroups: 2, gpuBindGroupCacheResets: 0, webglBuffersCreated: 2, webglBuffersDeleted: 0, webglBuffersLive: 2, webglBuffersPeak: 2, webglBufferBytesLive: MIB, webglBufferBytesPeak: MIB, activeNativeVideos: 1, nativeVideoFrameBufferAllocations: 5, nativeVideoFrameBufferReuses: 10, nativeVideoRecycledFrameBuffers: 1 }, scene: { index: 1, name: "sprite-gsap" }, runtime: { backend: "webgl", target: "win32-x64" } }),
+    JSON.stringify({ timestamp: "2026-01-01T00:05:00.000Z", timestampMs: 300_000, sequence: 3, reason: "scene-entry:rendered", memory: { rss: 130, heapUsed: 41, external: 20, arrayBuffers: 4 }, extra: { gpuBindGroups: 5, gpuBindGroupCacheResets: 1, webglBuffersCreated: 4, webglBuffersDeleted: 1, webglBuffersLive: 3, webglBuffersPeak: 3, webglBufferBytesLive: 2 * MIB, webglBufferBytesPeak: 2 * MIB, activeNativeVideos: 0, nativeVideoFrameBufferAllocations: 0, nativeVideoFrameBufferReuses: 0, nativeVideoRecycledFrameBuffers: 0 }, scene: { index: 1, name: "sprite-gsap" }, runtime: { backend: "webgl", target: "win32-x64" } }),
   ].join("\n"));
   try {
     const output = execFileSync(process.execPath, ["scripts/analyze-memory-info.mjs", fixture], { encoding: "utf8" });
@@ -48,6 +56,8 @@ test("memory analyzer reports trends and sequence gaps", () => {
     assert.match(output, /Sequence gaps: 1->3/u);
     assert.match(output, /webgl\/win32-x64=2/u);
     assert.match(output, /gpuBindGroups/u);
+    assert.match(output, /webglBuffersLive/u);
+    assert.match(output, /webglBufferBytesLive\s+│ 1\.0 MiB\s+│ 2\.0 MiB/u);
     assert.match(output, /nativeVideoFrameBufferAllocations/u);
     assert.match(output, /Native and GPU resources/u);
   } finally {
@@ -131,6 +141,8 @@ test("memory analyzer writes a detailed HTML report beside an external log", asy
     assert.match(html, /chart\.js@4\.5\.1\/dist\/chart\.umd\.min\.js/u);
     assert.match(html, /RSS plateau analysis/u);
     assert.match(html, /rss-chart/u);
+    assert.match(html, /webgl-buffer-chart/u);
+    assert.match(html, /webglBufferBytesLive/u);
     assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/u);
     assert.match(html, /\\u003c\/script\\u003e/u);
   } finally {
@@ -142,6 +154,7 @@ test("HTML report keeps its textual analysis when charts cannot load", () => {
   const html = createHtmlReport(createTrendRows(() => 200), "memoryInfo.log");
   assert.match(html, /Charts require an internet connection/u);
   assert.match(html, /Scene baselines/u);
+  assert.match(html, /Live WebGL buffer storage/u);
   assert.match(html, /PLATEAU/u);
 });
 

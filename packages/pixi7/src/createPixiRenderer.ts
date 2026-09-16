@@ -4,6 +4,7 @@ import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
 import { createNodeSdlWebGLSurface } from "@pixi-native/core/renderers/webgl/NodeSdlWebGLSurface.js";
 import { installWebGlImageUploadAdapter } from "@pixi-native/core/renderers/webgl/webglImageUpload.js";
+import { attachWebGlResourceStats } from "@pixi-native/core/renderers/webgl/webGlResourceTracker.js";
 import type {
   NodeNativeInput,
   NodeRendererOptions,
@@ -79,6 +80,7 @@ export async function createRenderer(
     renderer,
     webgl,
     antialiasSamples,
+    getWebGlResourceStats,
     webglRenderingContextConstructor,
   } = surface;
   const adapter = new NodeDOMAdapter(
@@ -131,6 +133,7 @@ export async function createRenderer(
     backgroundColor: NATIVE_BACKGROUND_COLOR,
     backgroundAlpha: windowOptions.backgroundAlpha,
   });
+  attachWebGlResourceStats(app.renderer, getWebGlResourceStats);
   const modalFrameListeners = new Set<() => void>();
   const resizeToWindow = (dispatchResize: boolean): boolean =>
     syncNativeWindowSize(

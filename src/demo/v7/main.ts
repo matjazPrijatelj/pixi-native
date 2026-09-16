@@ -220,6 +220,11 @@ const memoryDiagnostics = startMemoryDiagnostics(() => [
     gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
     pixiAssetCache: countCacheEntries(Assets.cache),
     ...getNativeVideoMemoryStats(),
+    ...(
+      app.renderer as typeof app.renderer & {
+        __pixiNativeResourceStats?: () => Record<string, number>;
+      }
+    ).__pixiNativeResourceStats?.(),
   }),
   scene: () => ({ index: sceneIndex, name: sceneNames[sceneIndex] ?? "unknown" }),
   runtime: () => {

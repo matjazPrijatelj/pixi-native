@@ -7,8 +7,12 @@
   before repeating the external WebGL memory soak. The public PixiJS peer
   range remains `^8.20.0` because the facade is still compatible with 8.20.0.
 - Prepared the Windows x64 portable demo for the external PixiJS 8 WebGL soak;
-  the archive pins PixiJS 8.20.1 and has SHA-256
-  `93a20672bc5169587bac6b3b50b0cbada5c1ab41b7ee27ed2240970b9fa4a49a`.
+  the archive pins PixiJS 8.20.1 and includes the external-log analyzer.
+- Added shared PixiJS 8/7 WebGL resource diagnostics for created, deleted,
+  live, and peak GL objects plus live and peak `bufferData` storage. Memory
+  logs, terminal tables, and HTML reports now expose these counters and graph
+  live WebGL buffer bytes so Graphics, Particle, and control scene pairs can
+  distinguish retained GL objects from allocator high-water behavior.
 - Added an optional `--path` argument to `pnpm analyze-memory-info` for
   analyzing memory logs outside the repository while retaining positional-path
   compatibility.

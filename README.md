@@ -200,6 +200,12 @@ cycling is enabled by default and advances every 15 seconds through non-media
 scenes; press `Space` to toggle it on or off. Set `AUTOTOGGLE_INTERVAL` in
 `.env` to change the interval (in seconds). The state is printed to the
 console and written to the log.
+WebGL samples also include created, deleted, live, and peak counts for buffers,
+textures, framebuffers, renderbuffers, programs, shaders, and vertex arrays.
+`webglBufferBytesLive` and `webglBufferBytesPeak` track storage assigned with
+`bufferData`, allowing RSS growth to be compared with JavaScript-visible GL
+object lifetimes and buffer reallocations. The same counters are emitted by
+the PixiJS 8 and PixiJS 7 WebGL demos.
 Run `pnpm analyze-memory-info` for a compact summary of the log, including
 memory deltas, scene counts, timestamp/sequence gaps, and a late RSS trend
 classification. The analyzer distinguishes a stable plateau from slow growth,
@@ -233,6 +239,18 @@ the stream is unavailable. Local video and transparent-video variants are part
 of automatic cycling; their manual controls are unchanged.
 RTP streams are explicitly destroyed when leaving their scene so reconnect
 workers cannot outlive the scene.
+
+For focused WebGL resource diagnostics, run these sequentially:
+
+```powershell
+pnpm isolate-native-memory -- --duration-seconds 1800 --backend=webgl --scenes=graphics,text --unique-output
+pnpm isolate-native-memory -- --duration-seconds 1800 --backend=webgl --scenes=particles,text --unique-output
+pnpm isolate-native-memory -- --duration-seconds 1800 --backend=webgl --scenes=sprite-gsap,text --unique-output
+```
+
+At least two scenes are required because selecting the already-active scene is
+intentionally a no-op. Repeat the pair that grows with `--backend=webgl7` to
+compare PixiJS 7 against the same native WebGL implementation.
 
 Create the platform-specific release archives from the full development
 installation:

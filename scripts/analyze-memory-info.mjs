@@ -18,6 +18,27 @@ const GPU_METRICS = [
   "gpuManagedBuffers",
   "gpuBindGroupCacheResets",
 ];
+const WEBGL_RESOURCE_TYPES = [
+  "Buffers",
+  "Textures",
+  "Framebuffers",
+  "Renderbuffers",
+  "Programs",
+  "Shaders",
+  "VertexArrays",
+];
+const WEBGL_RESOURCE_METRICS = WEBGL_RESOURCE_TYPES.flatMap((type) =>
+  ["Created", "Deleted", "Live", "Peak"].map(
+    (measure) => `webgl${type}${measure}`,
+  ),
+);
+const WEBGL_LIVE_METRICS = WEBGL_RESOURCE_TYPES.map(
+  (type) => `webgl${type}Live`,
+);
+const WEBGL_BYTE_METRICS = [
+  "webglBufferBytesLive",
+  "webglBufferBytesPeak",
+];
 const VIDEO_METRICS = [
   "activeNativeVideos",
   "nativeVideoFrameBufferAllocations",
@@ -214,6 +235,7 @@ export function createHtmlReport(rows, inputPath) {
     <section class="panel"><h2>Late RSS by scene</h2><div class="chart"><canvas id="scene-chart"></canvas></div></section>
     <section class="panel"><h2>Native and GPU counters</h2><div class="chart"><canvas id="resource-chart"></canvas></div></section>
   </div>
+  <section class="panel"><h2>Live WebGL buffer storage</h2><div class="chart"><canvas id="webgl-buffer-chart"></canvas></div></section>
   <section class="panel"><h2>Scene baselines</h2>${htmlTable(["Scene", "Samples", "First", "Late median", "Delta", "Late P10-P90"], analysis.sceneRows)}</section>
   <section class="panel"><h2>Resource summary</h2>${htmlTable(["Category", "Metric", "Start", "End", "Max"], analysis.resourceRows)}</section>
   <section class="panel"><h2>Warnings</h2>${htmlTable(["Result"], warningRows, "warning")}</section>
@@ -238,7 +260,10 @@ if (!window.Chart) {
   new Chart(document.getElementById("js-chart"), { type:"line", data:{ datasets:[line("Heap used",report.memory.heap,"#50d890"),line("External",report.memory.external,"#f4c95d"),line("ArrayBuffers",report.memory.arrayBuffers,"#a98bff")] }, options:common });
   new Chart(document.getElementById("scene-chart"), { type:"bar", data:{ labels:report.scenes.map(x=>x.name), datasets:[{label:"Late median RSS",data:report.scenes.map(x=>x.median),backgroundColor:"#39c6e8"}] }, options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{x:{ticks:{color:"#91a3bc"},grid:{display:false}},y:{title:{display:true,text:"MiB",color:"#91a3bc"},ticks:{color:"#91a3bc"},grid:{color:"#263650"}}},plugins:{legend:{labels:{color:"#cbd8e8"}}}} });
   const resourceSets = Object.entries(report.resources).map(([name,data],index)=>line(name,data,colors[index%colors.length]));
-  new Chart(document.getElementById("resource-chart"), { type:"line", data:{datasets:resourceSets}, options:common });
+  const resourceOptions = structuredClone(common);
+  resourceOptions.scales.y.title.text = "Count";
+  new Chart(document.getElementById("resource-chart"), { type:"line", data:{datasets:resourceSets}, options:resourceOptions });
+  new Chart(document.getElementById("webgl-buffer-chart"), { type:"line", data:{datasets:[line("Live WebGL buffer storage",report.webglBufferBytes,"#ff9f55")]}, options:common });
 }
 </script>
 </body>
@@ -275,6 +300,8 @@ function collectAnalysis(rows) {
   ];
   const resourceRows = [
     ...resourceSummaryRows(rows, "GPU", GPU_METRICS),
+    ...resourceSummaryRows(rows, "WebGL", WEBGL_RESOURCE_METRICS),
+    ...resourceSummaryRows(rows, "WebGL memory", WEBGL_BYTE_METRICS, formatBytes),
     ...resourceSummaryRows(rows, "Video", VIDEO_METRICS),
     ...resourceSummaryRows(rows, "Shutdown", SHUTDOWN_METRICS),
   ];
@@ -454,10 +481,10 @@ function collectWarnings(rows) {
   return warnings;
 }
 
-function resourceSummaryRows(rows, category, names) {
+function resourceSummaryRows(rows, category, names, format = String) {
   return names.flatMap((name) => {
     const values = rows.map((row) => row.extra?.[name]).filter(Number.isFinite);
-    return values.length ? [[category, name, String(values[0]), String(values.at(-1)), String(Math.max(...values))]] : [];
+    return values.length ? [[category, name, format(values[0]), format(values.at(-1)), format(Math.max(...values))]] : [];
   });
 }
 
@@ -469,7 +496,7 @@ function createHtmlPayload(rows, analysis) {
   });
   const pointSeries = (name) => memoryPoints.filter((point) => Number.isFinite(point[name])).map((point) => ({ x: point.x, y: point[name] }));
   const resources = {};
-  for (const name of [...GPU_METRICS, ...VIDEO_METRICS, ...SHUTDOWN_METRICS]) {
+  for (const name of [...GPU_METRICS, ...WEBGL_LIVE_METRICS, ...VIDEO_METRICS, ...SHUTDOWN_METRICS]) {
     const values = rows.flatMap((row) => {
       const value = row.extra?.[name];
       const timestampMs = getTimestampMs(row);
@@ -477,6 +504,13 @@ function createHtmlPayload(rows, analysis) {
     });
     if (values.length) resources[name] = values;
   }
+  const webglBufferBytes = rows.flatMap((row) => {
+    const value = row.extra?.webglBufferBytesLive;
+    const timestampMs = getTimestampMs(row);
+    return Number.isFinite(value) && Number.isFinite(timestampMs)
+      ? [{ x: (timestampMs - analysis.startMs) / HOUR_MS, y: value / MIB }]
+      : [];
+  });
   const guides = [];
   if (
     Number.isFinite(analysis.trend.analysisStartMs) &&
@@ -493,6 +527,7 @@ function createHtmlPayload(rows, analysis) {
     trend: { buckets: analysis.trend.buckets.map((bucket) => ({ x: (bucket.timestampMs - analysis.startMs) / HOUR_MS, y: bucket.rssMiB })), guides },
     scenes: analysis.sceneStats.map((scene) => ({ name: scene.name, median: scene.lateMedianMiB })),
     resources,
+    webglBufferBytes,
   };
 }
 

@@ -8,6 +8,10 @@ import type { ResolvedNodeRendererOptions } from "../../runtime/windowOptions.ts
 import { warnAntialiasSampleFallback } from "../../runtime/windowOptions.ts";
 import { installWebGlMultisampleScreen } from "./webglMultisampleScreen.ts";
 import {
+    installWebGlResourceTracker,
+    type WebGlResourceStats,
+} from "./webGlResourceTracker.ts";
+import {
     createSdlWebGL2Context,
     loadNativeGl,
 } from "./SdlWebGLContext.ts";
@@ -21,6 +25,7 @@ export interface NodeSdlWebGLSurface {
     readonly renderer: NodeRenderSurface;
     readonly webgl: WebGL2RenderingContext;
     readonly antialiasSamples: 0 | 2 | 4 | 8;
+    readonly getWebGlResourceStats: () => WebGlResourceStats;
     readonly webglRenderingContextConstructor: { readonly prototype: object };
 }
 
@@ -35,6 +40,7 @@ export async function createNodeSdlWebGLSurface(
 
     try {
         const context = await createSdlWebGL2Context(window, nativeGl);
+        const resourceTracker = installWebGlResourceTracker(context.gl);
         const webglNode = await import("webgl-node");
         if (!context.swapBuffers) {
             context.destroy();
@@ -127,6 +133,7 @@ export async function createNodeSdlWebGLSurface(
             renderer,
             webgl: context.gl,
             antialiasSamples: multisampleScreen.sampleCount,
+            getWebGlResourceStats: resourceTracker.getStats,
             webglRenderingContextConstructor: WebGLRenderingContext,
         };
     } catch (error) {
