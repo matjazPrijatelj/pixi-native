@@ -201,7 +201,27 @@ scenes; press `Space` to toggle it on or off. Set `AUTOTOGGLE_INTERVAL` in
 `.env` to change the interval (in seconds). The state is printed to the
 console and written to the log.
 Run `pnpm analyze-memory-info` for a compact summary of the log, including
-memory deltas, scene counts, and timestamp/sequence gaps.
+memory deltas, scene counts, timestamp/sequence gaps, and a late RSS trend
+classification. The analyzer distinguishes a stable plateau from slow growth,
+clear growth, decline, instability, and insufficient data by comparing
+five-minute medians of `scene-exit:after` baselines. To analyze a log outside
+the repository, pass its path explicitly, for example:
+
+```powershell
+pnpm analyze-memory-info --path "D:\temp\logs-pixi-native\logs\memoryInfo-webgl-20260915T080603623Z-p11408-r0.log"
+```
+
+The existing positional form, `pnpm analyze-memory-info "<path>"`, remains
+supported. Add `--html` to also write an interactive
+`<log-name>.report.html` beside the input log:
+
+```powershell
+pnpm analyze-memory-info --path "D:\temp\logs-pixi-native\logs\memoryInfo-webgl-20260915T080603623Z-p11408-r0.log" --html
+```
+
+HTML reports keep their summary and tables offline, but their charts require
+internet access because Chart.js 4.5.1 is loaded from jsDelivr. No charting
+dependency is installed or bundled with the portable demo.
 Run `pnpm isolate-native-memory -- --duration-seconds 600 --backend=all --parallel`
 to launch visible PixiJS 8 WebGL/WebGPU and PixiJS 7 WebGL RSS runs together;
 each result is written to `logs/native-memory-isolation/<backend>.log` for

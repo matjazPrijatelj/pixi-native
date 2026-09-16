@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    createMemoryAnalyzerLauncher,
     createPortablePackageManifest,
     rewritePortableDemoImports,
     shouldIncludePortableInput,
 } from "../scripts/package-portable-demo.mjs";
+
+test("portable memory analyzer launchers forward every argument", () => {
+    assert.match(createMemoryAnalyzerLauncher("win32"), /%\*/u);
+    assert.match(createMemoryAnalyzerLauncher("linux"), /"\$@"/u);
+});
 
 test("portable demo rewrites internal runtime imports", () => {
     const source = [

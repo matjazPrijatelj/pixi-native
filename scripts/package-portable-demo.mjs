@@ -93,6 +93,25 @@ export function createPortablePackageManifest(options) {
     };
 }
 
+export function createMemoryAnalyzerLauncher(platform) {
+    if (platform === "win32") {
+        return (
+            "@echo off\r\n" +
+            'cd /d "%~dp0"\r\n' +
+            '"%~dp0runtime\\node.exe" scripts\\analyze-memory-info.mjs %*\r\n'
+        );
+    }
+    if (platform === "linux") {
+        return (
+            "#!/usr/bin/env sh\n" +
+            "set -eu\n" +
+            'cd "$(dirname "$0")"\n' +
+            'exec "./runtime/node" scripts/analyze-memory-info.mjs "$@"\n'
+        );
+    }
+    throw new Error(`Unsupported analyzer launcher platform: ${platform}`);
+}
+
 async function main() {
     const platform = readArgument("--platform") ?? process.platform;
     const target = TARGETS[platform];
@@ -264,14 +283,7 @@ async function writeLaunchers(appRoot, platform) {
         "run-memory-test.cmd": launcherCmd(
             "scripts\\run-native-memory-isolation.mjs --unique-output %*",
         ),
-        "analyze-memory.cmd":
-            "@echo off\r\n" +
-            'cd /d "%~dp0"\r\n' +
-            'if "%~1"=="" (\r\n' +
-            '  "%~dp0runtime\\node.exe" scripts\\analyze-memory-info.mjs\r\n' +
-            ") else (\r\n" +
-            '  "%~dp0runtime\\node.exe" scripts\\analyze-memory-info.mjs "%~1"\r\n' +
-            ")\r\n",
+        "analyze-memory.cmd": createMemoryAnalyzerLauncher("win32"),
     };
     const linux = {
         "start-webgpu.sh": launcherSh(
@@ -286,14 +298,7 @@ async function writeLaunchers(appRoot, platform) {
         "run-memory-test.sh": launcherSh(
             'scripts/run-native-memory-isolation.mjs --unique-output "$@"',
         ),
-        "analyze-memory.sh":
-            "#!/usr/bin/env sh\n" +
-            "set -eu\n" +
-            'cd "$(dirname "$0")"\n' +
-            'if [ "$#" -eq 0 ]; then\n' +
-            '  exec "./runtime/node" scripts/analyze-memory-info.mjs\n' +
-            "fi\n" +
-            'exec "./runtime/node" scripts/analyze-memory-info.mjs "$1"\n',
+        "analyze-memory.sh": createMemoryAnalyzerLauncher("linux"),
     };
     const launchers = platform === "win32" ? windows : linux;
     for (const [name, contents] of Object.entries(launchers)) {

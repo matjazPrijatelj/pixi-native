@@ -1,5 +1,18 @@
 # Development history
 
+## 2026-09-16
+
+- Added an optional `--path` argument to `pnpm analyze-memory-info` for
+  analyzing memory logs outside the repository while retaining positional-path
+  compatibility.
+- Added comparable scene-baseline RSS plateau detection, slow-growth and leak
+  trend classifications, colored terminal tables, and per-scene late-baseline
+  summaries to the memory analyzer.
+- Added `--html` reports with responsive tables and CDN-hosted Chart.js graphs
+  for RSS, JavaScript memory, scene baselines, and native/GPU counters without
+  adding packaged dependencies. Portable analyzer launchers now forward all
+  arguments.
+
 ## 2026-09-15
 
 - Prepared `@matjash/create-pixi-native` 0.1.7 so the npm package documents the
