@@ -86,7 +86,7 @@ test("private Pixi facades use ranged peers and exact development versions", asy
       "npm:pixi.js@^7.4.3",
       "npm:pixi.js@7.4.3",
     ],
-    ["packages/pixi8/package.json", "pixi.js", "^8.20.0", "8.20.0"],
+    ["packages/pixi8/package.json", "pixi.js", "^8.20.0", "8.20.1"],
   ] as const) {
     const manifest = JSON.parse(
       await readFile(new URL(packagePath, REPOSITORY_ROOT), "utf8"),

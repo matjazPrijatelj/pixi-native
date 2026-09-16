@@ -19,6 +19,9 @@ export interface PortablePackageManifest {
 
 export function rewritePortableDemoImports(source: string): string;
 export function shouldIncludePortableInput(relativePath: string): boolean;
+export function createMemoryAnalyzerLauncher(
+    platform: "win32" | "linux",
+): string;
 export function createPortablePackageManifest(
     options: PortablePackageOptions,
 ): PortablePackageManifest;

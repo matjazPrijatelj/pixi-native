@@ -201,8 +201,8 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       pixi.js:
-        specifier: 8.20.0
-        version: 8.20.0
+        specifier: 8.20.1
+        version: 8.20.1
       pixi.js-v7:
         specifier: npm:pixi.js@7.4.3
         version: pixi.js@7.4.3
@@ -286,8 +286,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       pixi.js:
-        specifier: 8.20.0
-        version: 8.20.0
+        specifier: 8.20.1
+        version: 8.20.1
 
 packages:
 
@@ -809,6 +809,9 @@ packages:
   pixi.js@8.20.0:
     resolution: {integrity: sha512-WL7+yhxgNnI87AbucMR2X7yXmi/XhhYA25w2wV1QaNv6WMByM02kSX2ryreSq38OavHytFD0zY0bX6Nqgj/WAA==}
 
+  pixi.js@8.20.1:
+    resolution: {integrity: sha512-akLVBMLvQbaEViqsmVraK0Njer1q4Q4lm4iNKuzvBiFrV8q+6/+HluJN3sWIwO663IBeQtUUS/CaXFJZs6ffXQ==}
+
   prettier@3.2.5:
     resolution: {integrity: sha512-3/GWa9aOC0YeD7LUfvOG2NiDyhOWRvt1k+rcKhOuYnMY24iiCphgneUfJDyFXd6rZCAnuLBv6UeAULtrhT/F4A==}
     engines: {node: '>=14'}
@@ -1301,6 +1304,19 @@ snapshots:
       '@pixi/text-html': 7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3))(@pixi/sprite@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@pixi/text@7.4.3(@pixi/core@7.4.3)(@pixi/sprite@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3))))
 
   pixi.js@8.20.0:
+    dependencies:
+      '@pixi/colord': 2.9.6
+      '@types/earcut': 3.0.0
+      '@webgpu/types': 0.1.72
+      '@xmldom/xmldom': 0.8.15
+      earcut: 3.2.3
+      eventemitter3: 5.0.4
+      gifuct-js: 2.1.2
+      ismobilejs: 1.1.1
+      parse-svg-path: 0.2.0
+      tiny-lru: 11.4.7
+
+  pixi.js@8.20.1:
     dependencies:
       '@pixi/colord': 2.9.6
       '@types/earcut': 3.0.0

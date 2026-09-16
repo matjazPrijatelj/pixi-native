@@ -105,7 +105,7 @@ try {
     packageManager: repositoryManifest.packageManager,
     dependencies: {
       "@matjash/pixi-native": toFileSpecifier(localFacadeArchive),
-      "pixi.js": "8.20.0",
+      "pixi.js": "8.20.1",
       "pixi.js-v7": "npm:pixi.js@7.4.3",
       [nativePackageName]: toFileSpecifier(localNativeArchive),
     },
