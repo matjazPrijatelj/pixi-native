@@ -74,9 +74,14 @@ test("NativeVideoSprite destroys its owned planes and geometry buffers", () => {
   const owned = sprite as unknown as {
     ySource: { destroyed: boolean };
     uvSource: { destroyed: boolean };
-    ownedGeometry: { buffers: Array<{ destroyed: boolean }> };
+    ownedGeometry: {
+      buffers: Array<{ destroyed: boolean }>;
+      once(event: "unload", listener: () => void): void;
+    };
   };
   const buffers = [...owned.ownedGeometry.buffers];
+  let geometryUnloadCalls = 0;
+  owned.ownedGeometry.once("unload", () => geometryUnloadCalls++);
 
   sprite.destroy();
   video.destroy();
@@ -87,6 +92,77 @@ test("NativeVideoSprite destroys its owned planes and geometry buffers", () => {
     buffers.every((buffer) => buffer.destroyed),
     true,
   );
+  assert.equal(geometryUnloadCalls, 1);
+});
+
+test("NativeVideoSprite reuses WebGL programs across scene recreation", () => {
+  const previousDocument = globalThis.document;
+  const testDocument = {
+    createElement: () => ({ getContext: () => null }),
+  };
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: testDocument,
+    writable: true,
+  });
+
+  const videos: NativeVideo[] = [];
+  const sprites: NativeVideoSprite[] = [];
+  try {
+    const createSprite = (
+      width: number,
+      height: number,
+      alphaMaskScale?: number,
+    ): NativeVideoSprite => {
+      const video = new NativeVideo("unused.mp4", {
+        width,
+        height,
+        fps: 24,
+        audio: false,
+      });
+      const sprite = new NativeVideoSprite(video, { alphaMaskScale });
+      videos.push(video);
+      sprites.push(sprite);
+      return sprite;
+    };
+    const getGlProgram = (sprite: NativeVideoSprite): unknown =>
+      (
+        sprite as unknown as {
+          ownedShader: { glProgram: unknown };
+        }
+      ).ownedShader.glProgram;
+
+    const nv12First = createSprite(2, 2);
+    const nv12Second = createSprite(2, 2);
+    const alphaFirst = createSprite(6, 4, 0.5);
+    const alphaSecond = createSprite(6, 4, 0.5);
+    const alphaDifferentLayout = createSprite(8, 4, 1);
+
+    assert.equal(getGlProgram(nv12First), getGlProgram(nv12Second));
+    assert.equal(getGlProgram(alphaFirst), getGlProgram(alphaSecond));
+    assert.notEqual(
+      getGlProgram(alphaFirst),
+      getGlProgram(alphaDifferentLayout),
+    );
+
+    const sharedNv12Program = getGlProgram(nv12Second) as {
+      fragment: string | null;
+    };
+    nv12First.destroy();
+    assert.notEqual(sharedNv12Program.fragment, null);
+  } finally {
+    for (const sprite of sprites) sprite.destroy();
+    for (const video of videos) video.destroy();
+    if (previousDocument === undefined) {
+      Reflect.deleteProperty(globalThis, "document");
+    } else {
+      Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: previousDocument,
+        writable: true,
+      });
+    }
+  }
 });
 
 test("NativeVideoSprite observes source resets without being recreated", () => {

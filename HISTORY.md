@@ -2,6 +2,10 @@
 
 ## 2026-09-16
 
+- Fixed PixiJS 8 WebGL video-scene resource growth by reusing the NV12 and
+  layout-specific packed-alpha GL programs and unloading sprite geometry
+  before destruction so Pixi deletes its VAO. Added regression coverage for
+  shared program lifetimes and geometry unload ordering.
 - Updated the PixiJS 8 demo and facade development baseline from 8.20.0 to
   8.20.1, incorporating the upstream shared `TextStyle` listener cleanup
   before repeating the external WebGL memory soak. The public PixiJS peer

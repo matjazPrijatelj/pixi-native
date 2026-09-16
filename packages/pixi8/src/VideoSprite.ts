@@ -23,6 +23,7 @@ import {
 type HighShaderBit = Parameters<
   typeof compileHighShaderGpuProgram
 >[0]["bits"][number];
+type GlVideoProgram = ReturnType<typeof compileHighShaderGlProgram>;
 
 interface WebGpuVideoRenderer {
   readonly name: string;
@@ -160,16 +161,24 @@ const NV12_GL_TEXTURE_BIT: HighShaderBit = {
   },
 };
 
-function createNv12GlProgram(): ReturnType<typeof compileHighShaderGlProgram> {
-  return compileHighShaderGlProgram({
+let nv12GlProgram: GlVideoProgram | undefined;
+const packedAlphaGlPrograms = new Map<string, GlVideoProgram>();
+
+function getNv12GlProgram(): GlVideoProgram {
+  nv12GlProgram ??= compileHighShaderGlProgram({
     name: "native-video-nv12-gl",
     bits: [localUniformBitGl, NV12_GL_TEXTURE_BIT, roundPixelsBitGl],
   });
+  return nv12GlProgram;
 }
 
-function createPackedAlphaGlProgram(
+function getPackedAlphaGlProgram(
   layout: PackedAlphaVideoLayout,
-): ReturnType<typeof compileHighShaderGlProgram> {
+): GlVideoProgram {
+  const cacheKey = `${layout.frameWidth}:${layout.frameHeight}:${layout.colorWidth}`;
+  const cachedProgram = packedAlphaGlPrograms.get(cacheKey);
+  if (cachedProgram) return cachedProgram;
+
   const textureBit: HighShaderBit = {
     name: "native-video-packed-alpha-textures-gl",
     fragment: {
@@ -213,10 +222,12 @@ function createPackedAlphaGlProgram(
             `,
     },
   };
-  return compileHighShaderGlProgram({
+  const program = compileHighShaderGlProgram({
     name: `native-video-packed-alpha-gl-${layout.colorWidth}-${layout.alphaWidth}`,
     bits: [localUniformBitGl, textureBit, roundPixelsBitGl],
   });
+  packedAlphaGlPrograms.set(cacheKey, program);
+  return program;
 }
 
 /** PixiJS 8 mesh that uploads and presents frames from a {@link NativeVideo}. */
@@ -295,8 +306,8 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     const shader = new Shader({
       glProgram: globalThis.document
         ? packedAlphaLayout
-          ? createPackedAlphaGlProgram(packedAlphaLayout)
-          : createNv12GlProgram()
+          ? getPackedAlphaGlProgram(packedAlphaLayout)
+          : getNv12GlProgram()
         : undefined,
       gpuProgram: packedAlphaLayout
         ? createPackedAlphaGpuProgram(packedAlphaLayout)
@@ -336,6 +347,9 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     this.onRender = null;
     super.destroy();
     this.ownedShader.destroy(false);
+    // Pixi Geometry.destroy() removes its listeners before it emits `unload`.
+    // Unload first so the active renderer can delete the geometry's VAO.
+    this.ownedGeometry.unload();
     this.ownedGeometry.destroy(true);
     this.ownedTexture.destroy(true);
     this.uvSource.destroy();
