@@ -6,7 +6,7 @@ use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -14,6 +14,11 @@ use napi_derive::napi;
 const FRAME_QUEUE_CAPACITY: usize = 4;
 const HARDWARE_DECODE_ATTEMPTS: usize = 5;
 const HARDWARE_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+static ACTIVE_DECODER_WORKERS: AtomicU64 = AtomicU64::new(0);
+static PENDING_DECODER_SHUTDOWNS: AtomicU64 = AtomicU64::new(0);
+static COMPLETED_DECODER_SHUTDOWNS: AtomicU64 = AtomicU64::new(0);
+static MAX_DECODER_SHUTDOWN_MS: AtomicU64 = AtomicU64::new(0);
 
 #[napi(object)]
 pub struct DecoderOptions {
@@ -43,6 +48,24 @@ pub struct VideoFrameInfo {
     pub width: i64,
     pub height: i64,
     pub timestamp_us: i64,
+}
+
+#[napi(object)]
+pub struct VideoShutdownDiagnostics {
+    pub active_decoder_workers: i64,
+    pub pending_decoder_shutdowns: i64,
+    pub completed_decoder_shutdowns: i64,
+    pub max_decoder_shutdown_ms: i64,
+}
+
+#[napi]
+pub fn video_shutdown_diagnostics() -> VideoShutdownDiagnostics {
+    VideoShutdownDiagnostics {
+        active_decoder_workers: atomic_i64(&ACTIVE_DECODER_WORKERS),
+        pending_decoder_shutdowns: atomic_i64(&PENDING_DECODER_SHUTDOWNS),
+        completed_decoder_shutdowns: atomic_i64(&COMPLETED_DECODER_SHUTDOWNS),
+        max_decoder_shutdown_ms: atomic_i64(&MAX_DECODER_SHUTDOWN_MS),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -190,6 +213,7 @@ pub struct NativeVideoDecoder {
     options: DecoderOptions,
     state: DecoderState,
     worker: Option<thread::JoinHandle<()>>,
+    retired: bool,
 }
 
 #[napi]
@@ -207,6 +231,7 @@ impl NativeVideoDecoder {
         Ok(Self {
             options,
             worker: None,
+            retired: false,
             state: DecoderState {
                 closed: Arc::new(AtomicBool::new(true)),
                 finished: Arc::new(AtomicBool::new(false)),
@@ -228,6 +253,11 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn open(&mut self, source: String) -> Result<()> {
+        if self.retired {
+            return Err(Error::from_reason(
+                "Video decoder cannot reopen after shutdown",
+            ));
+        }
         if self.state.closed.load(Ordering::SeqCst) {
             self.join_worker();
         }
@@ -314,7 +344,9 @@ impl NativeVideoDecoder {
         let initial_stdout = install_child(&state, spawned)
             .map_err(|error| Error::from_reason(error.to_string()))?;
 
+        ACTIVE_DECODER_WORKERS.fetch_add(1, Ordering::SeqCst);
         self.worker = Some(thread::spawn(move || {
+            let _active_worker = ActiveDecoderWorker;
             let mut result =
                 consume_decoder_attempt(initial_stdout, width, height, fps, start_time, &state);
 
@@ -538,8 +570,16 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn close(&mut self) {
-        close_state(&self.state);
-        self.join_worker();
+        self.begin_shutdown();
+    }
+
+    fn begin_shutdown(&mut self) {
+        if self.retired {
+            return;
+        }
+        self.retired = true;
+        let child = request_close_state(&self.state);
+        retire_decoder_cleanup(self.worker.take(), child);
     }
 
     fn join_worker(&mut self) {
@@ -577,8 +617,7 @@ impl NativeVideoDecoder {
 
 impl Drop for NativeVideoDecoder {
     fn drop(&mut self) {
-        close_state(&self.state);
-        self.join_worker();
+        self.begin_shutdown();
     }
 }
 
@@ -751,7 +790,25 @@ fn redact_url_credentials(value: &str) -> String {
     result
 }
 
-fn install_child(state: &DecoderState, spawned: SpawnedFfmpeg) -> io::Result<ChildStdout> {
+fn install_child(state: &DecoderState, mut spawned: SpawnedFfmpeg) -> io::Result<ChildStdout> {
+    let mut child = state
+        .child
+        .lock()
+        .map_err(|_| io::Error::other("FFmpeg process lock poisoned"))?;
+    if state.closed.load(Ordering::SeqCst) {
+        drop(child);
+        let _ = spawned.child.kill();
+        let _ = spawned.child.wait();
+        if let Some(worker) = spawned.stderr_worker {
+            let _ = worker.join();
+        }
+        return Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "Video decoder closed before FFmpeg startup completed",
+        ));
+    }
+    *child = Some(spawned.child);
+    drop(child);
     if let Some(worker) = spawned.stderr_worker {
         state
             .stderr_workers
@@ -759,10 +816,6 @@ fn install_child(state: &DecoderState, spawned: SpawnedFfmpeg) -> io::Result<Chi
             .map_err(|_| io::Error::other("FFmpeg stderr worker lock poisoned"))?
             .push(worker);
     }
-    *state
-        .child
-        .lock()
-        .map_err(|_| io::Error::other("FFmpeg process lock poisoned"))? = Some(spawned.child);
     Ok(spawned.stdout)
 }
 
@@ -798,13 +851,7 @@ fn consume_ffmpeg_output(
         }
     };
 
-    let status = state
-        .child
-        .lock()
-        .map_err(|_| io::Error::other("FFmpeg process lock poisoned"))?
-        .take()
-        .map(|mut process| process.wait())
-        .transpose()?;
+    let status = wait_for_child_exit(state)?;
     join_stderr_workers(state);
 
     read_result?;
@@ -950,20 +997,78 @@ fn store_error(state: &DecoderState, message: String) {
     }
 }
 
-fn close_state(state: &DecoderState) {
+/** Polls without holding the child mutex while the FFmpeg process exits. */
+fn wait_for_child_exit(state: &DecoderState) -> io::Result<Option<std::process::ExitStatus>> {
+    loop {
+        let status = {
+            let mut child = state
+                .child
+                .lock()
+                .map_err(|_| io::Error::other("FFmpeg process lock poisoned"))?;
+            match child.as_mut() {
+                Some(process) => process.try_wait()?,
+                None => return Ok(None),
+            }
+        };
+        if let Some(status) = status {
+            if let Ok(mut child) = state.child.lock() {
+                child.take();
+            }
+            return Ok(Some(status));
+        }
+        if state.closed.load(Ordering::SeqCst) {
+            return Ok(None);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/** Signals decoder shutdown without waiting on FFmpeg or worker threads. */
+fn request_close_state(state: &DecoderState) -> Option<Child> {
     state.closed.store(true, Ordering::SeqCst);
     let (frames, available) = &*state.frames;
     available.notify_all();
-    if let Ok(mut child) = state.child.lock() {
-        if let Some(mut process) = child.take() {
-            let _ = process.kill();
-            let _ = process.wait();
-        }
+    let mut child = state.child.lock().ok().and_then(|mut child| child.take());
+    if let Some(process) = child.as_mut() {
+        let _ = process.kill();
     }
     if let Ok(mut frames) = frames.lock() {
         frames.clear();
     }
-    join_stderr_workers(state);
+    child
+}
+
+/** Reaps the killed process and joins workers away from the N-API thread. */
+fn retire_decoder_cleanup(worker: Option<thread::JoinHandle<()>>, child: Option<Child>) {
+    if worker.is_none() && child.is_none() {
+        return;
+    }
+    PENDING_DECODER_SHUTDOWNS.fetch_add(1, Ordering::SeqCst);
+    thread::spawn(move || {
+        let started = Instant::now();
+        if let Some(mut process) = child {
+            let _ = process.wait();
+        }
+        if let Some(worker) = worker {
+            let _ = worker.join();
+        }
+        let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        MAX_DECODER_SHUTDOWN_MS.fetch_max(elapsed_ms, Ordering::SeqCst);
+        COMPLETED_DECODER_SHUTDOWNS.fetch_add(1, Ordering::SeqCst);
+        PENDING_DECODER_SHUTDOWNS.fetch_sub(1, Ordering::SeqCst);
+    });
+}
+
+fn atomic_i64(value: &AtomicU64) -> i64 {
+    i64::try_from(value.load(Ordering::SeqCst)).unwrap_or(i64::MAX)
+}
+
+struct ActiveDecoderWorker;
+
+impl Drop for ActiveDecoderWorker {
+    fn drop(&mut self) {
+        ACTIVE_DECODER_WORKERS.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 #[cfg(test)]
@@ -1181,6 +1286,40 @@ mod tests {
     }
 
     #[test]
+    fn close_retires_a_blocked_worker_without_waiting_for_it() {
+        let mut decoder = test_decoder();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        decoder.worker = Some(thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+        }));
+        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let completed_before = COMPLETED_DECODER_SHUTDOWNS.load(Ordering::SeqCst);
+
+        let started = Instant::now();
+        decoder.close();
+        assert!(started.elapsed() < Duration::from_millis(100));
+        assert!(PENDING_DECODER_SHUTDOWNS.load(Ordering::SeqCst) >= 1);
+
+        release_tx.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while COMPLETED_DECODER_SHUTDOWNS.load(Ordering::SeqCst) == completed_before {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn explicit_close_makes_the_decoder_terminal_without_blocking_reopen() {
+        let mut decoder = test_decoder();
+        decoder.close();
+
+        let error = decoder.open("unused.mp4".to_string()).unwrap_err();
+        assert!(error.to_string().contains("cannot reopen after shutdown"));
+    }
+
+    #[test]
     fn hardware_retry_stops_after_five_attempts_or_first_frame() {
         let state = decoder_state(false);
         for completed_attempts in 1..HARDWARE_DECODE_ATTEMPTS {
@@ -1201,6 +1340,23 @@ mod tests {
             timestamp_us,
             data: vec![timestamp_us as u8],
         }
+    }
+
+    fn test_decoder() -> NativeVideoDecoder {
+        NativeVideoDecoder::new(DecoderOptions {
+            width: 2,
+            height: 2,
+            fps: Some(30.0),
+            start_time: None,
+            ffmpeg_path: None,
+            vaapi_device: None,
+            playback_rate: None,
+            end_time: None,
+            source_paced: None,
+            input_args: None,
+            output_args: None,
+        })
+        .unwrap()
     }
 
     fn decoder_state(source_paced: bool) -> DecoderState {
