@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeSourceFingerprint } from "./release-source-fingerprint.mjs";
+import { writePnpmWorkspaceSettings } from "./pnpm-workspace-settings.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = resolve(repositoryRoot, "packages/create-pixi-native");
@@ -20,15 +21,15 @@ const artifactsDirectory = resolve(repositoryRoot, "artifacts");
 const localNpmCache = resolve(artifactsDirectory, ".npm-cache");
 const NPM_CONFIG_ENV_PATTERN = /^npm_config_/i;
 
-async function writePnpmWorkspaceSettings(directory, overrides) {
-  await writeFile(
-    resolve(directory, "pnpm-workspace.yaml"),
-    `${JSON.stringify({ allowBuilds: { "native-gles": true }, overrides }, null, 2)}\n`,
-  );
-}
 const manifest = JSON.parse(
   await readFile(resolve(packageRoot, "package.json"), "utf8"),
 );
+const repositoryManifest = JSON.parse(
+  await readFile(resolve(repositoryRoot, "package.json"), "utf8"),
+);
+const minimumReleaseAgeExclude = [
+  `pixi.js@${repositoryManifest.devDependencies["pixi.js"]}`,
+];
 const expectedFiles = new Set([
   "dist/cli.js",
   "dist/cli.d.ts",
@@ -231,10 +232,14 @@ try {
       resolve(projectRoot, "package.json"),
       `${JSON.stringify(generatedManifest, null, 2)}\n`,
     );
-    await writePnpmWorkspaceSettings(projectRoot, {
-      "@matjash/pixi-native": `file:${facadeArchive.replaceAll("\\", "/")}`,
-      ...nativeOverrides,
-    });
+    await writePnpmWorkspaceSettings(
+      projectRoot,
+      {
+        "@matjash/pixi-native": `file:${facadeArchive.replaceAll("\\", "/")}`,
+        ...nativeOverrides,
+      },
+      minimumReleaseAgeExclude,
+    );
     const offline = process.env.PIXI_NATIVE_OFFLINE === "1" ? "--offline " : "";
     execSync(`pnpm install ${offline}--no-frozen-lockfile`, {
       cwd: projectRoot,

@@ -86,7 +86,7 @@ export async function createWebGpuRenderer(
 
   queue.copyExternalImageToTexture = ((
     sourceInfo: { source?: unknown },
-    destination: GPUImageCopyTexture & { premultipliedAlpha?: boolean },
+    destination: GPUTexelCopyTextureInfo & { premultipliedAlpha?: boolean },
     copySize: GPUExtent3D,
   ) => {
     type PixelResource = {

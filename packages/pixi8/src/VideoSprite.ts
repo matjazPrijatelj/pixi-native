@@ -390,13 +390,13 @@ export function uploadNv12FrameWebGpu(
 
   device.queue.writeTexture(
     { texture: yTexture },
-    frame.y as unknown as GPUAllowSharedBufferSource,
+    frame.y as unknown as AllowSharedBufferSource,
     { bytesPerRow: frame.yStride, rowsPerImage: frame.height },
     { width: frame.width, height: frame.height, depthOrArrayLayers: 1 },
   );
   device.queue.writeTexture(
     { texture: uvTexture },
-    frame.uv as unknown as GPUAllowSharedBufferSource,
+    frame.uv as unknown as AllowSharedBufferSource,
     { bytesPerRow: frame.uvStride, rowsPerImage: frame.height / 2 },
     {
       width: frame.width / 2,

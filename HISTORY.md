@@ -1,5 +1,17 @@
 # Development history
 
+## 2026-09-17
+
+- Updated the PixiJS 8 demo, facade development baseline, distribution smoke
+  consumer, and portable-demo manifest coverage from 8.20.1 to 8.21.0. The
+  public PixiJS peer range remains `^8.20.0` because the facade remains
+  compatible with the earlier release. Updated native WebGPU boundary types
+  to the current standard WebGPU names exposed with PixiJS 8.21.0.
+- Changed temporary distribution and generator consumer workspaces to emit
+  block-style pnpm settings and carry the exact fresh PixiJS development
+  release exclusion, allowing pnpm 12.4.1 to install newly published PixiJS
+  versions during package validation.
+
 ## 2026-09-16
 
 - Fixed PixiJS 8 WebGL video-scene resource growth by reusing the NV12 and

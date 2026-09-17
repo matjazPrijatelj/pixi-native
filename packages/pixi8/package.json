@@ -30,6 +30,6 @@
   },
   "devDependencies": {
     "@pixi-native/core": "workspace:*",
-    "pixi.js": "8.20.1"
+    "pixi.js": "8.21.0"
   }
 }

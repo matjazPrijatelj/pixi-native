@@ -16,3 +16,6 @@ supportedArchitectures:
     - linux
   cpu:
     - x64
+
+minimumReleaseAgeExclude:
+  - pixi.js@8.21.0

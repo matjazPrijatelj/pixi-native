@@ -17,6 +17,7 @@ import {
   validateFfmpegIdentity,
   getFfmpegDistribution,
 } from "./ffmpeg-distribution.mjs";
+import { writePnpmWorkspaceSettings } from "./pnpm-workspace-settings.mjs";
 
 const archiveArguments = process.argv.slice(2);
 const pnpmEntrypoint = process.env.npm_execpath;
@@ -52,6 +53,9 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryManifest = JSON.parse(
   await readFile(resolve(repositoryRoot, "package.json"), "utf8"),
 );
+const minimumReleaseAgeExclude = [
+  `pixi.js@${repositoryManifest.devDependencies["pixi.js"]}`,
+];
 const nativeArchiveName = basename(archives.get("native"));
 const nativePackageName = nativeArchiveName.includes("native-linux-x64")
   ? "@matjash/pixi-native-linux-x64"
@@ -74,13 +78,6 @@ await cp(archives.get("facade"), localFacadeArchive);
 await cp(archives.get("native"), localNativeArchive);
 const toFileSpecifier = (path) =>
   `file:${relative(testDirectory, path).replaceAll("\\", "/")}`;
-
-async function writePnpmWorkspaceSettings(directory, overrides) {
-  await writeFile(
-    join(directory, "pnpm-workspace.yaml"),
-    `${JSON.stringify({ allowBuilds: { "native-gles": true }, overrides }, null, 2)}\n`,
-  );
-}
 
 try {
   const oppositeNativeStub = join(testDirectory, "opposite-native-stub");
@@ -105,7 +102,7 @@ try {
     packageManager: repositoryManifest.packageManager,
     dependencies: {
       "@matjash/pixi-native": toFileSpecifier(localFacadeArchive),
-      "pixi.js": "8.20.1",
+      "pixi.js": "8.21.0",
       "pixi.js-v7": "npm:pixi.js@7.4.3",
       [nativePackageName]: toFileSpecifier(localNativeArchive),
     },
@@ -114,10 +111,14 @@ try {
     join(testDirectory, "package.json"),
     `${JSON.stringify(packageJson, null, 2)}\n`,
   );
-  await writePnpmWorkspaceSettings(testDirectory, {
-    [nativePackageName]: toFileSpecifier(localNativeArchive),
-    [oppositeNativePackageName]: "file:./opposite-native-stub",
-  });
+  await writePnpmWorkspaceSettings(
+    testDirectory,
+    {
+      [nativePackageName]: toFileSpecifier(localNativeArchive),
+      [oppositeNativePackageName]: "file:./opposite-native-stub",
+    },
+    minimumReleaseAgeExclude,
+  );
 
   await writeFile(
     join(testDirectory, "smoke-root.mjs"),
@@ -265,11 +266,15 @@ try {
       throw new Error(`${project.directory} has invalid runtime dependencies`);
     }
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    await writePnpmWorkspaceSettings(projectDirectory, {
-      "@matjash/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
-      [nativePackageName]: `file:${localNativeArchive.replaceAll("\\", "/")}`,
-      [oppositeNativePackageName]: `file:${oppositeNativeStub.replaceAll("\\", "/")}`,
-    });
+    await writePnpmWorkspaceSettings(
+      projectDirectory,
+      {
+        "@matjash/pixi-native": `file:${localFacadeArchive.replaceAll("\\", "/")}`,
+        [nativePackageName]: `file:${localNativeArchive.replaceAll("\\", "/")}`,
+        [oppositeNativePackageName]: `file:${oppositeNativeStub.replaceAll("\\", "/")}`,
+      },
+      minimumReleaseAgeExclude,
+    );
     runPnpm(installArguments, { cwd: projectDirectory, stdio: "inherit" });
     runPnpm(["typecheck"], { cwd: projectDirectory, stdio: "inherit" });
     runPnpm(["build"], { cwd: projectDirectory, stdio: "inherit" });

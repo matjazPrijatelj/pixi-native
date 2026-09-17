@@ -45,7 +45,7 @@ test("portable manifest pins the selected local native archive", () => {
         runtimeVersion: "0.2.2",
         facadeArchiveName: "matjash-pixi-native-0.2.2.tgz",
         nativeArchiveName: "matjash-pixi-native-linux-x64-0.2.2.tgz",
-        pixiVersion: "8.20.1",
+        pixiVersion: "8.21.0",
         pixi7Version: "npm:pixi.js@7.4.3",
         gsapVersion: "^3.15.0",
     });
@@ -55,6 +55,6 @@ test("portable manifest pins the selected local native archive", () => {
         manifest.dependencies["@matjash/pixi-native-linux-x64"],
         "file:vendor/matjash-pixi-native-linux-x64-0.2.2.tgz",
     );
-    assert.equal(manifest.dependencies["pixi.js"], "8.20.1");
+    assert.equal(manifest.dependencies["pixi.js"], "8.21.0");
     assert.equal(manifest.dependencies["pixi.js-v7"], "npm:pixi.js@7.4.3");
 });
