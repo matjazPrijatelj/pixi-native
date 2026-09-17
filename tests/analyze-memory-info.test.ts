@@ -5,6 +5,7 @@ import { writeFileSync, unlinkSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import {
     analyzeRows,
     analyzeRssTrend,
@@ -156,6 +157,66 @@ test("HTML report keeps its textual analysis when charts cannot load", () => {
   assert.match(html, /Scene baselines/u);
   assert.match(html, /Live WebGL buffer storage/u);
   assert.match(html, /PLATEAU/u);
+});
+
+test("HTML report initializes each available chart with independent options", () => {
+  const html = createHtmlReport(createTrendRows(() => 200), "memoryInfo.log");
+  const script = html.match(/<script>\s*(const report = .*?)\s*<\/script>/su)?.[1];
+  assert.ok(script);
+
+  const chartIds: string[] = [];
+  class ChartMock {
+    public constructor(
+      element: { id: string },
+      configuration: { options: Record<string, unknown> },
+    ) {
+      chartIds.push(element.id);
+      configuration.options.nonCloneable = (): void => undefined;
+    }
+  }
+  const elements = new Set([
+    "rss-chart",
+    "js-chart",
+    "scene-chart",
+    "resource-chart",
+    "webgl-buffer-chart",
+  ]);
+  runInNewContext(script, {
+    Chart: ChartMock,
+    window: { Chart: ChartMock },
+    document: {
+      documentElement: { dataset: {} },
+      getElementById: (id: string): { id: string } | null =>
+        elements.has(id) ? { id } : null,
+    },
+  });
+
+  assert.deepEqual(chartIds, [...elements]);
+  assert.doesNotMatch(html, /structuredClone/u);
+});
+
+test("HTML report replaces backend-specific empty charts with explanations", () => {
+  const webGpuRows = createTrendRows(() => 200).map((row, index) => ({
+    ...row,
+    runtime: { backend: "webgpu", target: "win32-x64" },
+    extra: {
+      gpuBindGroups: 2 + index,
+      gpuTextureBindGroups: 1,
+      gpuManagedTextures: 9,
+      gpuManagedBuffers: 4,
+      gpuBindGroupCacheResets: 0,
+    },
+  }));
+  const webGpuHtml = createHtmlReport(webGpuRows, "memoryInfo-webgpu.log");
+  assert.match(webGpuHtml, /<canvas id="resource-chart"><\/canvas>/u);
+  assert.doesNotMatch(webGpuHtml, /<canvas id="webgl-buffer-chart"><\/canvas>/u);
+  assert.match(webGpuHtml, /Not applicable for WebGPU/u);
+
+  const webGlHtml = createHtmlReport(
+    createTrendRows(() => 200),
+    "memoryInfo-webgl.log",
+  );
+  assert.match(webGlHtml, /<canvas id="webgl-buffer-chart"><\/canvas>/u);
 });
 
 test("memory analyzer selects the newest unique instance log", async () => {

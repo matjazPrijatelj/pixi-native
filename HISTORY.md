@@ -2,6 +2,9 @@
 
 ## 2026-09-17
 
+- Fixed the HTML memory report's final resource charts by giving every Chart.js
+  instance independent options. Backend-specific empty charts now explain when
+  counters are unavailable instead of showing a blank canvas.
 - Updated the PixiJS 8 demo, facade development baseline, distribution smoke
   consumer, and portable-demo manifest coverage from 8.20.1 to 8.21.0. The
   public PixiJS peer range remains `^8.20.0` because the facade remains

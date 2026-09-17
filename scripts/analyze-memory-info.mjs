@@ -188,11 +188,18 @@ export function analyzeRows(rows, options = {}) {
 
 export function createHtmlReport(rows, inputPath) {
   const analysis = collectAnalysis(rows);
-  const reportJson = serializeForInlineScript(createHtmlPayload(rows, analysis));
+  const reportPayload = createHtmlPayload(rows, analysis);
+  const reportJson = serializeForInlineScript(reportPayload);
   const statusClass = analysis.trend.status.toLowerCase().replaceAll(" ", "-");
   const warningRows = analysis.warnings.length
     ? analysis.warnings.map((warning) => [warning])
     : [["No ordering or lifecycle warnings."]];
+  const resourceChart = Object.keys(reportPayload.resources).length
+    ? '<div class="chart"><canvas id="resource-chart"></canvas></div>'
+    : '<div class="empty-state">No native or GPU counter data is available in this log.</div>';
+  const webGlBufferChart = reportPayload.webglBufferBytes.length
+    ? '<div class="chart"><canvas id="webgl-buffer-chart"></canvas></div>'
+    : `<div class="empty-state">${analysis.first.runtime?.backend === "webgpu" ? "Not applicable for WebGPU: this log has no WebGL buffer storage counters." : "No WebGL buffer storage counters are available in this log."}</div>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -209,7 +216,7 @@ export function createHtmlReport(rows, inputPath) {
     .plateau { color:var(--green); } .slow-growth,.insufficient-data,.unstable { color:var(--yellow); } .growing { color:var(--red); } .declining { color:var(--cyan); }
     .panel { margin-top:14px; padding:18px; overflow:hidden; } .chart { height:390px; position:relative; } .chart canvas { max-height:390px; }
     .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(440px,1fr)); gap:14px; } table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; } th,td { border-bottom:1px solid var(--line); padding:8px 10px; text-align:right; white-space:nowrap; } th { color:var(--cyan); } th:first-child,td:first-child { text-align:left; } tr:last-child td { border-bottom:0; }
-    #chart-warning { display:none; background:#4b3512; color:#ffe4a3; border:1px solid #8a6221; border-radius:8px; padding:12px; margin:16px 0; } html[data-charts="failed"] #chart-warning { display:block; } .warning { color:var(--yellow); white-space:normal; text-align:left; }
+    #chart-warning { display:none; background:#4b3512; color:#ffe4a3; border:1px solid #8a6221; border-radius:8px; padding:12px; margin:16px 0; } html[data-charts="failed"] #chart-warning { display:block; } .warning { color:var(--yellow); white-space:normal; text-align:left; } .empty-state { min-height:120px; display:grid; place-items:center; color:var(--muted); text-align:center; padding:24px; border:1px dashed var(--line); border-radius:8px; }
     @media (max-width:650px) { .grid { grid-template-columns:1fr; } .panel { overflow-x:auto; } main { width:94vw; } }
     @media print { body { background:#fff; color:#111; } .card,.panel { background:#fff; box-shadow:none; break-inside:avoid; } }
   </style>
@@ -233,9 +240,9 @@ export function createHtmlReport(rows, inputPath) {
   <section class="panel"><h2>JavaScript memory</h2><div class="chart"><canvas id="js-chart"></canvas></div></section>
   <div class="grid">
     <section class="panel"><h2>Late RSS by scene</h2><div class="chart"><canvas id="scene-chart"></canvas></div></section>
-    <section class="panel"><h2>Native and GPU counters</h2><div class="chart"><canvas id="resource-chart"></canvas></div></section>
+    <section class="panel"><h2>Native and GPU counters</h2>${resourceChart}</section>
   </div>
-  <section class="panel"><h2>Live WebGL buffer storage</h2><div class="chart"><canvas id="webgl-buffer-chart"></canvas></div></section>
+  <section class="panel"><h2>Live WebGL buffer storage</h2>${webGlBufferChart}</section>
   <section class="panel"><h2>Scene baselines</h2>${htmlTable(["Scene", "Samples", "First", "Late median", "Delta", "Late P10-P90"], analysis.sceneRows)}</section>
   <section class="panel"><h2>Resource summary</h2>${htmlTable(["Category", "Metric", "Start", "End", "Max"], analysis.resourceRows)}</section>
   <section class="panel"><h2>Warnings</h2>${htmlTable(["Result"], warningRows, "warning")}</section>
@@ -247,23 +254,23 @@ if (!window.Chart) {
   document.documentElement.dataset.charts = "failed";
 } else {
   const colors = ["#39c6e8","#50d890","#f4c95d","#ff6b75","#a98bff","#ff9f55","#70a7ff","#d56ee8"];
-  const common = {
+  const chartOptions = (yTitle="MiB") => ({
     responsive:true, maintainAspectRatio:false, animation:false, parsing:false, normalized:true,
     interaction:{ mode:"nearest", axis:"x", intersect:false },
     plugins:{ decimation:{ enabled:true, algorithm:"min-max", threshold:1200 }, legend:{ labels:{ color:"#cbd8e8" } } },
-    scales:{ x:{ type:"linear", title:{ display:true, text:"Hours from start", color:"#91a3bc" }, ticks:{ color:"#91a3bc" }, grid:{ color:"#263650" } }, y:{ title:{ display:true, text:"MiB", color:"#91a3bc" }, ticks:{ color:"#91a3bc" }, grid:{ color:"#263650" } } }
-  };
+    scales:{ x:{ type:"linear", title:{ display:true, text:"Hours from start", color:"#91a3bc" }, ticks:{ color:"#91a3bc" }, grid:{ color:"#263650" } }, y:{ title:{ display:true, text:yTitle, color:"#91a3bc" }, ticks:{ color:"#91a3bc" }, grid:{ color:"#263650" } } }
+  });
   const line = (label, data, color, extra={}) => ({ label, data, borderColor:color, backgroundColor:color, borderWidth:1.5, pointRadius:0, ...extra });
   const rssSets = [line("RSS", report.memory.rss, "#91a3bc"), line("5-minute median", report.trend.buckets, "#39c6e8", {borderWidth:2.5})];
   for (const guide of report.trend.guides) rssSets.push(line(guide.label, guide.data, guide.color, {borderDash:guide.dash, borderWidth:2}));
-  new Chart(document.getElementById("rss-chart"), { type:"line", data:{ datasets:rssSets }, options:common });
-  new Chart(document.getElementById("js-chart"), { type:"line", data:{ datasets:[line("Heap used",report.memory.heap,"#50d890"),line("External",report.memory.external,"#f4c95d"),line("ArrayBuffers",report.memory.arrayBuffers,"#a98bff")] }, options:common });
+  new Chart(document.getElementById("rss-chart"), { type:"line", data:{ datasets:rssSets }, options:chartOptions() });
+  new Chart(document.getElementById("js-chart"), { type:"line", data:{ datasets:[line("Heap used",report.memory.heap,"#50d890"),line("External",report.memory.external,"#f4c95d"),line("ArrayBuffers",report.memory.arrayBuffers,"#a98bff")] }, options:chartOptions() });
   new Chart(document.getElementById("scene-chart"), { type:"bar", data:{ labels:report.scenes.map(x=>x.name), datasets:[{label:"Late median RSS",data:report.scenes.map(x=>x.median),backgroundColor:"#39c6e8"}] }, options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{x:{ticks:{color:"#91a3bc"},grid:{display:false}},y:{title:{display:true,text:"MiB",color:"#91a3bc"},ticks:{color:"#91a3bc"},grid:{color:"#263650"}}},plugins:{legend:{labels:{color:"#cbd8e8"}}}} });
   const resourceSets = Object.entries(report.resources).map(([name,data],index)=>line(name,data,colors[index%colors.length]));
-  const resourceOptions = structuredClone(common);
-  resourceOptions.scales.y.title.text = "Count";
-  new Chart(document.getElementById("resource-chart"), { type:"line", data:{datasets:resourceSets}, options:resourceOptions });
-  new Chart(document.getElementById("webgl-buffer-chart"), { type:"line", data:{datasets:[line("Live WebGL buffer storage",report.webglBufferBytes,"#ff9f55")]}, options:common });
+  const resourceCanvas = document.getElementById("resource-chart");
+  if (resourceCanvas && resourceSets.length) new Chart(resourceCanvas, { type:"line", data:{datasets:resourceSets}, options:chartOptions("Count") });
+  const webGlBufferCanvas = document.getElementById("webgl-buffer-chart");
+  if (webGlBufferCanvas && report.webglBufferBytes.length) new Chart(webGlBufferCanvas, { type:"line", data:{datasets:[line("Live WebGL buffer storage",report.webglBufferBytes,"#ff9f55")]}, options:chartOptions() });
 }
 </script>
 </body>
