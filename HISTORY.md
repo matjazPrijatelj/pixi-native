@@ -2,6 +2,9 @@
 
 ## 2026-09-17
 
+- Prepared the `0.2.3` public npm release with the native video teardown and
+  PixiJS 8 WebGL resource-lifetime fixes, detailed WebGL diagnostics, and
+  PixiJS 8.21 compatibility for Windows and Linux x64 packages.
 - Fixed the HTML memory report's final resource charts by giving every Chart.js
   instance independent options. Backend-specific empty charts now explain when
   counters are unavailable instead of showing a blank canvas.

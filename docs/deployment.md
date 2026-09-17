@@ -101,16 +101,16 @@ release tag must point to the final clean release commit:
 ```powershell
 git diff --cached --check
 git diff --cached --stat
-git commit -m "release(npm): publish pixi-native 0.2.2"
-git tag -a v0.2.2 -m "pixi-native 0.2.2"
+git commit -m "release(npm): publish pixi-native 0.2.3"
+git tag -a v0.2.3 -m "pixi-native 0.2.3"
 git push origin main
-git push origin v0.2.2
+git push origin v0.2.3
 ```
 
 ## Publishing
 
 Sign in as the `matjash` npm user with 2FA enabled. The runtime publisher
-requires a clean `v0.2.2` release commit, both platform manifests, all three
+requires a clean `v0.2.3` release commit, both platform manifests, all three
 runtime archives, and matching checksums. It uses an isolated cache, the
 standard npm user credentials, and an explicit public npm registry:
 
