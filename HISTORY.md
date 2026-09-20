@@ -1,5 +1,11 @@
 # Development history
 
+## 2026-09-20
+
+- Replaced PixiJS 7 and 8 `FontFace` loading for OTF and TTF assets with
+  native Canvas `GlobalFonts` registration, including family aliases and
+  matching unload cleanup while retaining Pixi's WOFF/WOFF2 fallback.
+
 ## 2026-09-17
 
 - Prepared the `0.2.3` public npm release with the native video teardown and

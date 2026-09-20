@@ -24,6 +24,7 @@ import {
   manageNativeApplication,
   type ManagedNativeApplication,
 } from "@pixi-native/core/application/ManagedNativeApplication.js";
+import { installNativeFontAssets } from "./nativeFontAssets.ts";
 
 export type RendererOptions = NodeRendererOptions;
 
@@ -52,6 +53,7 @@ let nativeAssetsInitialization: Promise<void> | undefined;
 /** Prepares Pixi's browser-facing Assets API for the installed native DOM. */
 function initializeNativeAssets(): Promise<void> {
   nativeAssetsInitialization ??= (() => {
+    installNativeFontAssets();
     Assets.detections.length = 0;
     return Assets.init({
       skipDetections: true,

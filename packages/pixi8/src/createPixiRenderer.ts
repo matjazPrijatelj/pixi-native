@@ -14,6 +14,7 @@ import type {
   NodeWindowHandle,
   NodeGPUInstance,
 } from "@pixi-native/core/runtime/nativeTypes.js";
+import { installNativeFontAssets } from "./nativeFontAssets.ts";
 
 export interface NodeRendererContext {
   readonly gpu: NodeGPUInstance | null;
@@ -50,14 +51,17 @@ let nativeAssetsInitialization: Promise<void> | undefined;
 
 /** Prepares Pixi's browser-facing Assets API for the installed native DOM. */
 function initializeNativeAssets(): Promise<void> {
-  nativeAssetsInitialization ??= Assets.init({
-    skipDetections: true,
-    texturePreference: { format: ["png"] },
-    preferences: {
-      preferWorkers: false,
-      preferCreateImageBitmap: false,
-    },
-  });
+  nativeAssetsInitialization ??= (() => {
+    installNativeFontAssets();
+    return Assets.init({
+      skipDetections: true,
+      texturePreference: { format: ["png"] },
+      preferences: {
+        preferWorkers: false,
+        preferCreateImageBitmap: false,
+      },
+    });
+  })();
   return nativeAssetsInitialization;
 }
 
