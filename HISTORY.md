@@ -2,6 +2,9 @@
 
 ## 2026-09-20
 
+- Added continuously resizing PixiJS 7 `NineSlicePlane` and PixiJS 8
+  `NineSliceSprite` frames to the Sprite demo, with a dedicated diagnostic
+  texture and lifecycle/resize regression coverage.
 - Replaced PixiJS 7 and 8 `FontFace` loading for OTF and TTF assets with
   native Canvas `GlobalFonts` registration, including family aliases and
   matching unload cleanup while retaining Pixi's WOFF/WOFF2 fallback.

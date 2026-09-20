@@ -1,10 +1,15 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Container, NineSliceSprite, Sprite, Texture } from "pixi.js";
 import { gsap } from "gsap";
 import { createMetricBitmapText } from "../bitmapFonts.ts";
 import type { DisposableDemoScene } from "../sceneLifecycle.ts";
 
 const DEFAULT_BATCH_SIZE = 10;
 const TITLE_MARGIN = 90;
+const NINE_SLICE_BORDER = 16;
+const NINE_SLICE_MIN_WIDTH = 320;
+const NINE_SLICE_MIN_HEIGHT = 180;
+const NINE_SLICE_MAX_WIDTH = 480;
+const NINE_SLICE_MAX_HEIGHT = 270;
 
 export interface SpriteTestBounds {
   width: number;
@@ -78,6 +83,7 @@ function positionFromProgress(
 
 export function createSpriteTest(
   textures: readonly [Texture, Texture, Texture],
+  nineSliceTexture: Texture,
   initialBounds: SpriteTestBounds,
   options: SpriteTestOptions = {},
 ): SpriteTestScene {
@@ -89,10 +95,21 @@ export function createSpriteTest(
   const staticTimelines: gsap.core.Timeline[] = [];
 
   const title = createMetricBitmapText(
-    "SPRITE + GSAP TEST  [2]  |  dynamic: 0  |  UP +10 / DOWN -10",
+    "SPRITE + NINE-SLICE + GSAP TEST  [2]  |  dynamic: 0  |  UP +10 / DOWN -10",
     24,
   );
-  scene.addChild(title);
+  const nineSliceFrame = new NineSliceSprite({
+    texture: nineSliceTexture,
+    leftWidth: NINE_SLICE_BORDER,
+    topHeight: NINE_SLICE_BORDER,
+    rightWidth: NINE_SLICE_BORDER,
+    bottomHeight: NINE_SLICE_BORDER,
+  });
+  const nineSliceSize = {
+    width: NINE_SLICE_MIN_WIDTH,
+    height: NINE_SLICE_MIN_HEIGHT,
+  };
+  scene.addChild(nineSliceFrame, title);
 
   const textureSprite = new Sprite(textures[0]);
   textureSprite.width = 230;
@@ -126,8 +143,32 @@ export function createSpriteTest(
 
   const updateTitle = (): void => {
     title.text =
-      `SPRITE + GSAP TEST  [2]  |  dynamic: ${dynamicSprites.length}` +
+      `SPRITE + NINE-SLICE + GSAP TEST  [2]  |  dynamic: ${dynamicSprites.length}` +
       "  |  UP +10 / DOWN -10";
+  };
+
+  const applyNineSliceAnimation = (): void => {
+    nineSliceFrame.width = nineSliceSize.width;
+    nineSliceFrame.height = nineSliceSize.height;
+    nineSliceFrame.position.set(
+      (bounds.width - nineSliceSize.width) * 0.5,
+      (bounds.height - nineSliceSize.height) * 0.5,
+    );
+  };
+
+  const createNineSliceAnimation = (): gsap.core.Timeline => {
+    return gsap
+      .timeline({
+        repeat: -1,
+        yoyo: true,
+        defaults: { ease: "sine.inOut" },
+        onUpdate: applyNineSliceAnimation,
+      })
+      .to(nineSliceSize, {
+        width: NINE_SLICE_MAX_WIDTH,
+        height: NINE_SLICE_MAX_HEIGHT,
+        duration: 2,
+      });
   };
 
   const applyStaticAnimations = (): void => {
@@ -169,6 +210,8 @@ export function createSpriteTest(
   };
 
   const startStaticAnimations = (): void => {
+    applyNineSliceAnimation();
+    staticTimelines.push(createNineSliceAnimation());
     applyStaticAnimations();
     for (const layout of staticLayouts) {
       staticTimelines.push(createStaticAnimation(layout));
@@ -281,6 +324,7 @@ export function createSpriteTest(
 
   scene.resize = (width: number, height: number): void => {
     bounds = normalizeBounds({ width, height });
+    applyNineSliceAnimation();
     applyStaticAnimations();
     for (const record of dynamicSprites) applyDynamicAnimation(record);
   };

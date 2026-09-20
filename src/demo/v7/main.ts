@@ -97,17 +97,25 @@ const videos: Pixi7VideoSource[] = filterVideoAssets(
   ],
   (file) => asset(file),
 );
-const [texture, batman, mario, rain, drumTexture, backgroundTexture] =
-  (await Promise.all(
-    [
-      "test-texture.png",
-      "batman.png",
-      "mario.png",
-      "rain-drop-30.png",
-      "drum-kit.png",
-      "pixi-hero.png",
-    ].map((name) => Assets.load(asset(name))),
-  )) as [Texture, Texture, Texture, Texture, Texture, Texture];
+const [
+  texture,
+  batman,
+  mario,
+  nineSliceFrame,
+  rain,
+  drumTexture,
+  backgroundTexture,
+] = (await Promise.all(
+  [
+    "test-texture.png",
+    "batman.png",
+    "mario.png",
+    "nine-slice-frame.png",
+    "rain-drop-30.png",
+    "drum-kit.png",
+    "pixi-hero.png",
+  ].map((name) => Assets.load(asset(name))),
+)) as [Texture, Texture, Texture, Texture, Texture, Texture, Texture];
 const background = new Sprite(backgroundTexture);
 background.anchor.set(0.5);
 background.alpha = 0.28;
@@ -125,7 +133,7 @@ app.stage.addChild(background);
 const sceneFactories: Pixi7SceneFactory[] = [
   () => createGraphicsTest() as Pixi7Scene,
   () =>
-    createSpriteTest([texture, batman, mario], {
+    createSpriteTest([texture, batman, mario], nineSliceFrame, {
       width: native.canvas.width,
       height: native.canvas.height,
     }) as Pixi7Scene,
@@ -166,8 +174,7 @@ const sceneNames = [
   "particles",
 ];
 
-const requestedMemoryScenes = process.env.MEMORY_TEST_SCENES
-  ?.split(/[,\s]+/u)
+const requestedMemoryScenes = process.env.MEMORY_TEST_SCENES?.split(/[,\s]+/u)
   .map((name) => name.trim())
   .filter(Boolean);
 if (requestedMemoryScenes?.length) {
@@ -209,36 +216,37 @@ autoToggleOverlay.zIndex = 200;
 app.stage.addChild(autoToggleOverlay);
 autoToggleOverlay.alignBottomLeft(native.canvas.height);
 
-const memoryDiagnostics = startMemoryDiagnostics(() => [
-  activeScene,
-  particleEmitter.container,
-  fpsOverlay,
-  background,
-], {
-  extra: () => ({
-    gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
-    gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
-    pixiAssetCache: countCacheEntries(Assets.cache),
-    ...getNativeVideoMemoryStats(),
-    ...(
-      app.renderer as typeof app.renderer & {
-        __pixiNativeResourceStats?: () => Record<string, number>;
-      }
-    ).__pixiNativeResourceStats?.(),
-  }),
-  scene: () => ({ index: sceneIndex, name: sceneNames[sceneIndex] ?? "unknown" }),
-  runtime: () => {
-    const modules = resolveNativePlatformModules();
-    return {
-      backend: "webgl7",
-      target: modules.target,
-      gpuModule: modules.gpuModule,
-      windowModule: modules.windowModule,
-      videoModule: modules.videoModule,
-      audioBinding: modules.audioBinding ?? "",
-    };
+const memoryDiagnostics = startMemoryDiagnostics(
+  () => [activeScene, particleEmitter.container, fpsOverlay, background],
+  {
+    extra: () => ({
+      gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
+      gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
+      pixiAssetCache: countCacheEntries(Assets.cache),
+      ...getNativeVideoMemoryStats(),
+      ...(
+        app.renderer as typeof app.renderer & {
+          __pixiNativeResourceStats?: () => Record<string, number>;
+        }
+      ).__pixiNativeResourceStats?.(),
+    }),
+    scene: () => ({
+      index: sceneIndex,
+      name: sceneNames[sceneIndex] ?? "unknown",
+    }),
+    runtime: () => {
+      const modules = resolveNativePlatformModules();
+      return {
+        backend: "webgl7",
+        target: modules.target,
+        gpuModule: modules.gpuModule,
+        windowModule: modules.windowModule,
+        videoModule: modules.videoModule,
+        audioBinding: modules.audioBinding ?? "",
+      };
+    },
   },
-});
+);
 activeScene.resize?.(native.canvas.width, native.canvas.height);
 const waitForGpuSceneResources = async (): Promise<void> => {
   // WebGL has no queue completion promise; keep the transition phases aligned
@@ -286,17 +294,22 @@ const selectScene = async (nextIndex: number): Promise<void> => {
     sceneTransitioning = false;
   }
 };
-const demoLoop = createDemoLoop(() => {
-  let nextIndex = (sceneIndex + 1) % sceneFactories.length;
-  while (shouldSkipAutoScene(sceneNames[nextIndex])) {
-    nextIndex = (nextIndex + 1) % sceneFactories.length;
-  }
-  void selectScene(nextIndex);
-}, (enabled) => {
-  autoToggleOverlay.setEnabled(enabled);
-  autoToggleOverlay.alignBottomLeft(native.canvas.height);
-  void memoryDiagnostics.sample(`auto-scenes:${enabled ? "enabled" : "disabled"}`);
-});
+const demoLoop = createDemoLoop(
+  () => {
+    let nextIndex = (sceneIndex + 1) % sceneFactories.length;
+    while (shouldSkipAutoScene(sceneNames[nextIndex])) {
+      nextIndex = (nextIndex + 1) % sceneFactories.length;
+    }
+    void selectScene(nextIndex);
+  },
+  (enabled) => {
+    autoToggleOverlay.setEnabled(enabled);
+    autoToggleOverlay.alignBottomLeft(native.canvas.height);
+    void memoryDiagnostics.sample(
+      `auto-scenes:${enabled ? "enabled" : "disabled"}`,
+    );
+  },
+);
 const normalizeKey = (key: string): string => {
   switch (key) {
     case "arrowup":

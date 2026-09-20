@@ -78,6 +78,9 @@ const supportsVideo =
 const texturePaths = ["test-texture.png", "batman.png", "mario.png"].map(
   (file) => fileURLToPath(new URL(`../assets/${file}`, import.meta.url)),
 );
+const nineSliceFramePath = fileURLToPath(
+  new URL("../assets/nine-slice-frame.png", import.meta.url),
+);
 const bitmapFontPath = fileURLToPath(
   new URL("../assets/bitmap-font/native-pixel.fnt", import.meta.url),
 );
@@ -101,6 +104,7 @@ await Assets.load(bitmapFontPath);
 const spriteTextures = (await Promise.all(
   texturePaths.map((path) => Assets.load(path)),
 )) as [Texture, Texture, Texture];
+const nineSliceFrameTexture = await Assets.load(nineSliceFramePath);
 const drumTexture = await Assets.load(drumTexturePath);
 const rainDropTexture = await Assets.load(rainDropTexturePath);
 const background = new Sprite(await Assets.load(backgroundTexturePath));
@@ -161,7 +165,7 @@ let videoIndex = 0;
 const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createGraphicsTest(),
   () =>
-    createSpriteTest(spriteTextures, {
+    createSpriteTest(spriteTextures, nineSliceFrameTexture, {
       width: native.canvas.width,
       height: native.canvas.height,
     }),
@@ -216,8 +220,7 @@ sceneNames.push("rain");
 scenes.push(() => createParticleTest());
 sceneNames.push("particles");
 
-const requestedMemoryScenes = process.env.MEMORY_TEST_SCENES
-  ?.split(/[,\s]+/u)
+const requestedMemoryScenes = process.env.MEMORY_TEST_SCENES?.split(/[,\s]+/u)
   .map((name) => name.trim())
   .filter(Boolean);
 if (requestedMemoryScenes?.length) {
@@ -273,36 +276,34 @@ autoToggleOverlay.zIndex = 200;
 app.stage.addChild(autoToggleOverlay);
 autoToggleOverlay.alignBottomLeft(native.canvas.height);
 
-const memoryDiagnostics = startMemoryDiagnostics(() => [
-  scene,
-  particleEmitter.container,
-  fpsOverlay,
-  background,
-], {
-  extra: () => ({
-    gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
-    gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
-    pixiAssetCache: countCacheEntries(Assets.cache),
-    ...getNativeVideoMemoryStats(),
-    ...(
-      app.renderer as typeof app.renderer & {
-        __pixiNativeResourceStats?: () => Record<string, number>;
-      }
-    ).__pixiNativeResourceStats?.(),
-  }),
-  scene: () => ({ index, name: sceneNames[index] ?? "unknown" }),
-  runtime: () => {
-    const modules = resolveNativePlatformModules();
-    return {
-      backend,
-      target: modules.target,
-      gpuModule: modules.gpuModule,
-      windowModule: modules.windowModule,
-      videoModule: modules.videoModule,
-      audioBinding: modules.audioBinding ?? "",
-    };
+const memoryDiagnostics = startMemoryDiagnostics(
+  () => [scene, particleEmitter.container, fpsOverlay, background],
+  {
+    extra: () => ({
+      gsapTweens: gsap.globalTimeline.getChildren(true, true, false).length,
+      gsapTimelines: gsap.globalTimeline.getChildren(false, false, true).length,
+      pixiAssetCache: countCacheEntries(Assets.cache),
+      ...getNativeVideoMemoryStats(),
+      ...(
+        app.renderer as typeof app.renderer & {
+          __pixiNativeResourceStats?: () => Record<string, number>;
+        }
+      ).__pixiNativeResourceStats?.(),
+    }),
+    scene: () => ({ index, name: sceneNames[index] ?? "unknown" }),
+    runtime: () => {
+      const modules = resolveNativePlatformModules();
+      return {
+        backend,
+        target: modules.target,
+        gpuModule: modules.gpuModule,
+        windowModule: modules.windowModule,
+        videoModule: modules.videoModule,
+        audioBinding: modules.audioBinding ?? "",
+      };
+    },
   },
-});
+);
 
 const waitForGpuSceneResources = async (): Promise<void> => {
   await native.device?.queue.onSubmittedWorkDone?.();
@@ -347,7 +348,8 @@ const selectVideo = async (nextVideoIndex: number): Promise<void> => {
     index !== videoSceneIndex ||
     nextVideoIndex === videoIndex ||
     sceneTransitioning
-  ) return;
+  )
+    return;
   sceneTransitioning = true;
   try {
     await waitForGpuSceneResources();
@@ -360,17 +362,22 @@ const selectVideo = async (nextVideoIndex: number): Promise<void> => {
   }
 };
 
-const demoLoop = createDemoLoop(() => {
-  let nextIndex = (index + 1) % scenes.length;
-  while (shouldSkipAutoScene(sceneNames[nextIndex])) {
-    nextIndex = (nextIndex + 1) % scenes.length;
-  }
-  void selectScene(nextIndex);
-}, (enabled) => {
-  autoToggleOverlay.setEnabled(enabled);
-  autoToggleOverlay.alignBottomLeft(native.canvas.height);
-  void memoryDiagnostics.sample(`auto-scenes:${enabled ? "enabled" : "disabled"}`);
-});
+const demoLoop = createDemoLoop(
+  () => {
+    let nextIndex = (index + 1) % scenes.length;
+    while (shouldSkipAutoScene(sceneNames[nextIndex])) {
+      nextIndex = (nextIndex + 1) % scenes.length;
+    }
+    void selectScene(nextIndex);
+  },
+  (enabled) => {
+    autoToggleOverlay.setEnabled(enabled);
+    autoToggleOverlay.alignBottomLeft(native.canvas.height);
+    void memoryDiagnostics.sample(
+      `auto-scenes:${enabled ? "enabled" : "disabled"}`,
+    );
+  },
+);
 addDestroyListener(() => demoLoop.destroy());
 
 const resizeActiveScene = (): void => {

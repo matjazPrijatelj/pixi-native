@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BitmapFont, DOMAdapter, Sprite, Texture } from "pixi.js";
+import {
+  BitmapFont,
+  DOMAdapter,
+  NineSliceSprite,
+  Sprite,
+  Texture,
+} from "pixi.js";
 import { gsap } from "gsap";
 import {
   DYNAMIC_BITMAP_FONT_NAME,
@@ -21,6 +27,7 @@ test("Sprite scene adds and removes animated batches without leaking tweens", ()
   try {
     const scene = createSpriteTest(
       [Texture.WHITE, Texture.EMPTY, Texture.WHITE],
+      Texture.WHITE,
       { width: 1280, height: 720 },
       { random: () => 0.5 },
     );
@@ -33,7 +40,21 @@ test("Sprite scene adds and removes animated batches without leaking tweens", ()
 
     assert.equal(scene.addRandomSprites(), 10);
     assert.equal(scene.addRandomSprites(), 20);
-    const dynamicSprites = scene.children.slice(4) as Sprite[];
+    const nineSliceFrame = scene.children.find(
+      (child) => child instanceof NineSliceSprite,
+    ) as NineSliceSprite;
+    const sprites = scene.children.filter(
+      (child): child is Sprite => child instanceof Sprite,
+    );
+    const dynamicSprites = sprites.slice(-20);
+
+    assert.ok(nineSliceFrame);
+    assert.equal(nineSliceFrame.leftWidth, 16);
+    assert.equal(nineSliceFrame.topHeight, 16);
+    assert.equal(nineSliceFrame.rightWidth, 16);
+    assert.equal(nineSliceFrame.bottomHeight, 16);
+    assert.equal(nineSliceFrame.width, 320);
+    assert.equal(nineSliceFrame.height, 180);
     assert.equal(dynamicSprites.length, 20);
     assert.ok(
       dynamicSprites.every((sprite) => sprite.texture === Texture.EMPTY),
@@ -57,9 +78,22 @@ test("Sprite scene adds and removes animated batches without leaking tweens", ()
       false,
       true,
     );
-    const staticSprite = scene.children[1] as Sprite;
-    timelinesBeforeResize[0].totalTime(0);
+    const nineSliceTimeline = timelinesBeforeResize.find(
+      (timeline) => timeline.duration() === 2,
+    );
+    const staticTimeline = timelinesBeforeResize.find(
+      (timeline) => timeline.duration() === 1.5,
+    );
+    const staticSprite = sprites[0];
+    assert.ok(nineSliceTimeline);
+    assert.ok(staticTimeline);
+    nineSliceTimeline.totalTime(1);
+    assert.ok(nineSliceFrame.width > 320 && nineSliceFrame.width < 480);
+    assert.ok(nineSliceFrame.height > 180 && nineSliceFrame.height < 270);
+    staticTimeline.totalTime(0);
     scene.resize(800, 600);
+    assert.equal(nineSliceFrame.x, (800 - nineSliceFrame.width) * 0.5);
+    assert.equal(nineSliceFrame.y, (600 - nineSliceFrame.height) * 0.5);
     assert.equal(scene.getDynamicSpriteCount(), 20);
     const timelinesAfterResize = gsap.globalTimeline.getChildren(
       false,
@@ -73,7 +107,7 @@ test("Sprite scene adds and removes animated batches without leaking tweens", ()
       ),
     );
     const resizedY = staticSprite.y;
-    timelinesBeforeResize[0].totalTime(0.75);
+    staticTimeline.totalTime(0.75);
     assert.notEqual(staticSprite.y, resizedY);
     assert.ok(
       dynamicSprites.every(
