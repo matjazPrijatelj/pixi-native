@@ -219,7 +219,7 @@ try {
       (name) => name.startsWith("pixi.js"),
     );
     if (
-      generatedManifest.dependencies["@matjash/pixi-native"] !== "~0.2.0" ||
+      generatedManifest.dependencies["@matjash/pixi-native"] !== "~0.2.4" ||
       pixiDependencies.length !== 1 ||
       pixiDependencies[0] !== expectedDependency ||
       generatedManifest.dependencies.gsap !==

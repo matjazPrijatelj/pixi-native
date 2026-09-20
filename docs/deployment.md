@@ -68,8 +68,8 @@ pnpm pack:generator
 This produces an archive matching the generator's independent package version
 and its package-specific release manifest. It checks the packed CLI version and
 verifies representative PixiJS 7 and 8 projects in fresh temporary consumers.
-The current generator release is `0.1.7`; both generated Pixi majors target
-runtime `0.2.0`.
+The current generator release is `0.1.8`; both generated Pixi majors target
+runtime `0.2.4`.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
 checkout after the Windows archive exists:
@@ -94,23 +94,24 @@ DLLs, and FFmpeg programs are physical files under the launcher root.
 
 ## Release commit and tags
 
-Review and stage the source, documentation, tests, both runtime release
-manifests, three runtime npm archives, and their checksum files. The runtime
+Review and stage the source, documentation, and tests. Runtime release
+manifests, npm archives, and checksum files under `artifacts/` are ignored
+local publication inputs and must not be force-added to Git. The runtime
 release tag must point to the final clean release commit:
 
 ```powershell
 git diff --cached --check
 git diff --cached --stat
-git commit -m "release(npm): publish pixi-native 0.2.3"
-git tag -a v0.2.3 -m "pixi-native 0.2.3"
+git commit -m "release(npm): publish pixi-native 0.2.4"
+git tag -a v0.2.4 -m "pixi-native 0.2.4"
 git push origin main
-git push origin v0.2.3
+git push origin v0.2.4
 ```
 
 ## Publishing
 
 Sign in as the `matjash` npm user with 2FA enabled. The runtime publisher
-requires a clean `v0.2.3` release commit, both platform manifests, all three
+requires a clean `v0.2.4` release commit, both platform manifests, all three
 runtime archives, and matching checksums. It uses an isolated cache, the
 standard npm user credentials, and an explicit public npm registry:
 
@@ -139,9 +140,9 @@ pnpm publish:generator:npm:check
 ### Generator release runbook
 
 The generator has its own version, archive, release manifest, and
-`create-pixi-native-v<version>` tag. It can be released without rebuilding or
-publishing the runtime/native packages. Never run `native:build` as part of this
-workflow.
+`create-pixi-native-v<version>` tag. The generator publication command submits
+the matching runtime, native, facade, and generator archives together. Never
+run `native:build` as part of this workflow.
 
 Use Node.js 24 LTS and pnpm 12.4.1. Start from the repository root with all
 intended generator changes present. Update these version references before
@@ -153,8 +154,8 @@ packing:
 - the generator version in `packages/create-pixi-native/README.md`
 - `HISTORY.md`
 
-For the current release, every generator version reference is `0.1.7`; the
-separate `PIXI_NATIVE_VERSION` is `0.2.0`.
+For the current release, every generator version reference is `0.1.8`; the
+separate `PIXI_NATIVE_VERSION` is `0.2.4`.
 
 Pack and validate the generator first:
 
@@ -170,19 +171,18 @@ git status --short
 
 `pack:generator` must finish successfully and create the archive, its
 `.sha256` file, and `artifacts/release-manifest-create-pixi-native.json`. Review
-the changes, then stage only the generator release sources, documentation,
-tests, and generated release outputs:
+the changes, then stage only the generator release sources, documentation, and
+tests. Generated outputs under `artifacts/` remain ignored local publication
+inputs:
 
 ```powershell
 git add -- HISTORY.md `
     docs/deployment.md `
     packages/create-pixi-native `
     scripts/pack-generator.mjs `
+    scripts/publish-npm-packages.mjs `
     tests/create-pixi-native.test.ts `
-    tests/release-packages.test.ts `
-    artifacts/release-manifest-create-pixi-native.json `
-    $generatorArchive `
-    "$generatorArchive.sha256"
+    tests/release-packages.test.ts
 
 git diff --cached --check
 git diff --cached --stat
@@ -190,16 +190,17 @@ git commit -m "release(create-pixi-native): $generatorVersion"
 git tag -a $generatorTag -m "create-pixi-native $generatorVersion"
 ```
 
-The publisher requires a clean working tree and the generator tag on `HEAD`.
-Push the release commit and tag before publishing:
+The publisher requires a clean working tree with both the runtime and generator
+tags on `HEAD`. Push the release commit and both tags before publishing:
 
 ```powershell
 git push origin main
+git push origin v0.2.4
 git push origin $generatorTag
 ```
 
 Run the non-publishing registry preflight, then publish only when it reports
-that the exact generator archive is ready:
+that all four exact archives are ready:
 
 ```powershell
 pnpm publish:generator:npm:check
@@ -207,8 +208,10 @@ pnpm publish:generator:npm
 pnpm publish:generator:npm:check
 ```
 
-The final check must report that
-`@matjash/create-pixi-native@<version>` already matches.
+Publication submits all missing archives without waiting for registry
+propagation between packages. Wait for npm propagation, then rerun the final
+check until all three runtime packages and
+`@matjash/create-pixi-native@<version>` report `already matches`.
 
 Verify the published package from a new directory with an explicit version.
 Existing generated projects are not updated when a new generator is released:

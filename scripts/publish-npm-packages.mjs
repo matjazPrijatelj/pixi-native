@@ -33,7 +33,7 @@ const releaseConfiguration = getReleaseConfiguration(
   win32Only,
 );
 const VERSION = releaseConfiguration.version;
-const TAG = releaseConfiguration.tag;
+const TAGS = releaseConfiguration.tags;
 const EXPECTED_PACKAGES = releaseConfiguration.expectedPackages;
 const MANIFEST_TARGETS = releaseConfiguration.manifestTargets;
 const NPM_INVOCATION = getNpmInvocation();
@@ -47,13 +47,21 @@ export function getReleaseConfiguration(
   return useGenerator
     ? {
         version: generatorPackageVersion,
-        tag: `create-pixi-native-v${generatorPackageVersion}`,
-        expectedPackages: ["@matjash/create-pixi-native"],
-        manifestTargets: [],
+        tags: [
+          `v${runtimePackageVersion}`,
+          `create-pixi-native-v${generatorPackageVersion}`,
+        ],
+        expectedPackages: [
+          "@matjash/pixi-native-win32-x64",
+          "@matjash/pixi-native-linux-x64",
+          "@matjash/pixi-native",
+          "@matjash/create-pixi-native",
+        ],
+        manifestTargets: ["win32-x64", "linux-x64"],
       }
     : {
         version: runtimePackageVersion,
-        tag: `v${runtimePackageVersion}`,
+        tags: [`v${runtimePackageVersion}`],
         expectedPackages: useWin32Only
           ? ["@matjash/pixi-native-win32-x64", "@matjash/pixi-native"]
           : [
@@ -170,20 +178,8 @@ async function main() {
         npmEnvironment,
         true,
       );
-      // wait some time to publish
-      await new Promise((resolve) => setTimeout(resolve, 10000));
-      const published = queryRegistryDistribution(
-        archive.packageName,
-        archive.version,
-        npmEnvironment,
-      );
-      if (!registryCopyMatches(archive.digests, published)) {
-        throw new Error(
-          `Registry verification failed for ${archive.packageName}.`,
-        );
-      }
       console.log(
-        `Published and verified ${archive.packageName}@${archive.version}.`,
+        `Submitted ${archive.packageName}@${archive.version} for publication.`,
       );
     }
   } finally {
@@ -195,11 +191,14 @@ function assertGitReleaseState() {
   const status = runGit(["status", "--porcelain"]);
   if (status.trim()) throw new Error("The release working tree must be clean.");
   const head = runGit(["rev-parse", "HEAD"]).trim();
-  const tagged = runGit(["rev-list", "-n", "1", TAG]).trim();
-  if (head !== tagged) throw new Error(`${TAG} must point to HEAD.`);
+  for (const tag of TAGS) {
+    const tagged = runGit(["rev-list", "-n", "1", tag]).trim();
+    if (head !== tagged) throw new Error(`${tag} must point to HEAD.`);
+  }
 }
 
 async function loadReleaseArchives() {
+  const archiveEntries = await loadRuntimeArchiveEntries();
   if (generatorMode) {
     const releaseManifest = JSON.parse(
       await readFile(
@@ -217,8 +216,12 @@ async function loadReleaseArchives() {
     ) {
       throw new Error("Invalid generator release manifest.");
     }
-    return loadArchiveEntries([releaseManifest.archive]);
+    archiveEntries.push(releaseManifest.archive);
   }
+  return loadArchiveEntries(archiveEntries);
+}
+
+async function loadRuntimeArchiveEntries() {
   const manifests = await Promise.all(
     MANIFEST_TARGETS.map(async (target) => {
       const path = resolve(
@@ -226,7 +229,7 @@ async function loadReleaseArchives() {
         `release-manifest-${target}.json`,
       );
       const manifest = JSON.parse(await readFile(path, "utf8"));
-      if (manifest.version !== VERSION || manifest.target !== target) {
+      if (manifest.version !== runtimeVersion || manifest.target !== target) {
         throw new Error(`Invalid release manifest for ${target}.`);
       }
       return manifest;
@@ -258,7 +261,7 @@ async function loadReleaseArchives() {
       entries.set(archive.packageName, archive);
     }
   }
-  return loadArchiveEntries([...entries.values()]);
+  return [...entries.values()];
 }
 
 async function loadArchiveEntries(archiveEntries) {

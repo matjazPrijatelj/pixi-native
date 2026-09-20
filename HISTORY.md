@@ -2,6 +2,12 @@
 
 ## 2026-09-20
 
+- Prepared the lockstep `0.2.4` public npm runtime release for the native font
+  registration and NineSlice demo updates, reusing the existing Windows and
+  Linux x64 native artifacts without a native rebuild.
+- Updated `@matjash/create-pixi-native` to `0.1.8` so generated projects use
+  runtime `~0.2.4`, and made its publisher submit the complete runtime and
+  generator release without waiting for npm propagation between packages.
 - Added continuously resizing PixiJS 7 `NineSlicePlane` and PixiJS 8
   `NineSliceSprite` frames to the Sprite demo, with a dedicated diagnostic
   texture and lifecycle/resize regression coverage.
