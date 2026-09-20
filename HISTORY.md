@@ -2,6 +2,9 @@
 
 ## 2026-09-20
 
+- Prepared the lockstep `0.2.5` runtime and `0.1.9` generator releases for
+  the public Pixi-neutral `core/audio` and `core/files` root exports, reusing
+  existing native artifacts without a native rebuild.
 - Prepared the lockstep `0.2.4` public npm runtime release for the native font
   registration and NineSlice demo updates, reusing the existing Windows and
   Linux x64 native artifacts without a native rebuild.

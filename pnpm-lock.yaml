@@ -298,10 +298,10 @@ importers:
         version: 1.5.1
     optionalDependencies:
       "@matjash/pixi-native-linux-x64":
-        specifier: ~0.2.4
+        specifier: ~0.2.5
         version: link:../native-linux-x64
       "@matjash/pixi-native-win32-x64":
-        specifier: ~0.2.4
+        specifier: ~0.2.5
         version: link:../native-win32-x64
 
   packages/pixi7:

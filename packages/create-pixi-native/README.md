@@ -26,5 +26,5 @@ credentials and does not install dependencies.
 
 PixiJS 8 projects depend on `pixi.js@^8.20.0`. PixiJS 7 projects depend only on
 the `pixi.js-v7` alias for `pixi.js@^7.4.3`. Both target Pixi Native runtime
-`0.2.4`; the generator has its own `0.1.8` release version. Both are public on
+`0.2.5`; the generator has its own `0.1.9` release version. Both are public on
 npm and do not require registry credentials for installation.

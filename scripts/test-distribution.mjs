@@ -259,7 +259,7 @@ try {
       name.startsWith("pixi.js"),
     );
     if (
-      manifest.dependencies["@matjash/pixi-native"] !== "~0.2.4" ||
+      manifest.dependencies["@matjash/pixi-native"] !== "~0.2.5" ||
       pixiDependencies.length !== 1 ||
       pixiDependencies[0] !== project.pixiPackage
     ) {
