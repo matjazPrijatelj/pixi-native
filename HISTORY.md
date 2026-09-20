@@ -8,6 +8,9 @@
 - Replaced PixiJS 7 and 8 `FontFace` loading for OTF and TTF assets with
   native Canvas `GlobalFonts` registration, including family aliases and
   matching unload cleanup while retaining Pixi's WOFF/WOFF2 fallback.
+- Added an OFL-licensed Source Sans 3 OTF to the PixiJS 7 Text scene so the
+  WebGL7 demo visibly exercises native font registration, Slovenian glyphs,
+  rendering, and unload cleanup.
 
 ## 2026-09-17
 

@@ -22,6 +22,14 @@ Pixi Native uses these projects through direct packages or native integration:
 The installed packages and their upstream repositories contain their copyright
 and license terms. Those terms continue to apply to each dependency.
 
+## Source Sans 3 demo font
+
+The PixiJS 7 WebGL text demo includes Source Sans 3 Regular from
+[Adobe Fonts](https://github.com/adobe-fonts/source-sans). Copyright 2010-2024
+Adobe, with Reserved Font Name "Source". The font is distributed under the SIL
+Open Font License 1.1; the complete license is stored beside the font at
+`src/demo/assets/fonts/SourceSans3-LICENSE.md`.
+
 ## Dawn and Tint
 
 The packaged `pixi_native_gpu.node` binaries contain Dawn and Tint code.

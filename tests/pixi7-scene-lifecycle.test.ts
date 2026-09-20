@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { Container, settings, Sprite, Text, Texture, utils } from "pixi.js-v7";
 import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { disposeDemoScene } from "../src/demo/v7/sceneLifecycle.ts";
+import {
+  createTextTest,
+  OTF_DEMO_FONT_FAMILY,
+} from "../src/demo/v7/scenes/TextTest.ts";
 
 test("PixiJS 7 scene disposal releases Text textures but preserves shared Sprite textures", () => {
   new NodeDOMAdapter({} as never).installPixi7(settings);
@@ -37,4 +41,18 @@ test("PixiJS 7 scene disposal releases Text textures but preserves shared Sprite
     baseTextureCacheKeys,
   );
   assert.equal(sharedTexture.destroyed, false);
+});
+
+test("PixiJS 7 Text scene visibly uses the loaded OTF family", () => {
+  new NodeDOMAdapter({} as never).installPixi7(settings);
+  const scene = createTextTest();
+  const labels = scene.children.filter((child): child is Text => child instanceof Text);
+  const otfLabel = labels.find(
+    (label) => label.style.fontFamily === OTF_DEMO_FONT_FAMILY,
+  );
+
+  assert.ok(otfLabel);
+  assert.match(otfLabel.text, /OTF Source Sans 3/);
+  assert.match(otfLabel.text, /ČŠŽ/);
+  disposeDemoScene(scene);
 });

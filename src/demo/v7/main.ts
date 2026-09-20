@@ -2,7 +2,10 @@ import { fileURLToPath } from "node:url";
 import { Assets, Container, Sprite, Texture } from "pixi.js-v7";
 import { createApp } from "@pixi-native/pixi7";
 import { createGraphicsTest } from "./scenes/GraphicsTest.ts";
-import { createTextTest } from "./scenes/TextTest.ts";
+import {
+  createTextTest,
+  OTF_DEMO_FONT_FAMILY,
+} from "./scenes/TextTest.ts";
 import { createBitmapTextTest } from "./scenes/BitmapTextTest.ts";
 import { createVideoTest, type Pixi7VideoSource } from "./scenes/VideoTest.ts";
 import { createAudioTest } from "./scenes/AudioTest.ts";
@@ -55,6 +58,11 @@ const [{ createSpriteTest }, { gsap }, { installGsapModalBridge }] =
 installGsapModalBridge(native, gsap.ticker, addDestroyListener);
 const asset = (name: string): string =>
   fileURLToPath(new URL(`../assets/${name}`, import.meta.url));
+const otfFontPath = asset("fonts/SourceSans3-Regular.otf");
+await Assets.load({
+  src: otfFontPath,
+  data: { family: OTF_DEMO_FONT_FAMILY },
+});
 installDynamicBitmapTextFont();
 await loadExternalBitmapFont(asset("bitmap-font/native-pixel.fnt"));
 const videos: Pixi7VideoSource[] = filterVideoAssets(
@@ -385,6 +393,7 @@ addDestroyListener(async () => {
   destroyBitmapFonts();
   app.stage.removeChild(background);
   background.destroy();
+  await Assets.unload(otfFontPath);
   await Assets.unload(asset("pixi-hero.png"));
 });
 
