@@ -1,5 +1,15 @@
 # Development history
 
+## 2026-09-21
+
+- Prepared and validated the lockstep `0.2.6` runtime packages for Windows and
+  Linux plus the `0.1.10` generator package, without publication.
+- Advanced PixiJS 7 shared-ticker animations before each native modal
+  move/resize render, using one timestamp to prevent duplicate ticker updates.
+- Confirmed the modal move/resize animation fix on a target display.
+- Fixed PixiJS 7 native video sprites to apply inherited world alpha to both
+  normal NV12 and packed-alpha video using premultiplied shader output.
+
 ## 2026-09-20
 
 - Prepared the lockstep `0.2.5` runtime and `0.1.9` generator releases for

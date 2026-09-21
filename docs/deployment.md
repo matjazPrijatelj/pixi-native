@@ -68,8 +68,8 @@ pnpm pack:generator
 This produces an archive matching the generator's independent package version
 and its package-specific release manifest. It checks the packed CLI version and
 verifies representative PixiJS 7 and 8 projects in fresh temporary consumers.
-The current generator release is `0.1.9`; both generated Pixi majors target
-runtime `0.2.5`.
+The next prepared generator version is `0.1.10`; both generated Pixi majors
+target runtime `0.2.6`.
 
 From Windows, the complete Linux pass can be repeated in an isolated WSL
 checkout after the Windows archive exists:
@@ -102,16 +102,16 @@ release tag must point to the final clean release commit:
 ```powershell
 git diff --cached --check
 git diff --cached --stat
-git commit -m "release(npm): publish pixi-native 0.2.5"
-git tag -a v0.2.5 -m "pixi-native 0.2.5"
+git commit -m "release(npm): publish pixi-native 0.2.6"
+git tag -a v0.2.6 -m "pixi-native 0.2.6"
 git push origin main
-git push origin v0.2.5
+git push origin v0.2.6
 ```
 
 ## Publishing
 
 Sign in as the `matjash` npm user with 2FA enabled. The runtime publisher
-requires a clean `v0.2.5` release commit, both platform manifests, all three
+requires a clean `v0.2.6` release commit, both platform manifests, all three
 runtime archives, and matching checksums. It uses an isolated cache, the
 standard npm user credentials, and an explicit public npm registry:
 
@@ -154,8 +154,8 @@ packing:
 - the generator version in `packages/create-pixi-native/README.md`
 - `HISTORY.md`
 
-For the current release, every generator version reference is `0.1.9`; the
-separate `PIXI_NATIVE_VERSION` is `0.2.5`.
+For the prepared release, every generator version reference is `0.1.10`; the
+separate `PIXI_NATIVE_VERSION` is `0.2.6`.
 
 Pack and validate the generator first:
 
@@ -195,7 +195,7 @@ tags on `HEAD`. Push the release commit and both tags before publishing:
 
 ```powershell
 git push origin main
-git push origin v0.2.5
+git push origin v0.2.6
 git push origin $generatorTag
 ```
 

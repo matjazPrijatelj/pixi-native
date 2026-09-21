@@ -22,8 +22,8 @@ export interface CreateProjectOptions {
   readonly cwd?: string;
 }
 
-export const GENERATOR_VERSION = "0.1.9";
-export const PIXI_NATIVE_VERSION = "0.2.5";
+export const GENERATOR_VERSION = "0.1.10";
+export const PIXI_NATIVE_VERSION = "0.2.6";
 export const PIXI_NATIVE_VERSION_RANGE = `~${PIXI_NATIVE_VERSION}`;
 export const PNPM_VERSION = "12.4.1";
 const TEMPLATE_ROOT = fileURLToPath(new URL("../templates/", import.meta.url));

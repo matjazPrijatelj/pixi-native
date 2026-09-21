@@ -42,9 +42,9 @@ test("portable demo includes its env template but never the local env", () => {
 test("portable manifest pins the selected local native archive", () => {
     const manifest = createPortablePackageManifest({
         platform: "linux",
-        runtimeVersion: "0.2.5",
-        facadeArchiveName: "matjash-pixi-native-0.2.5.tgz",
-        nativeArchiveName: "matjash-pixi-native-linux-x64-0.2.5.tgz",
+        runtimeVersion: "0.2.6",
+        facadeArchiveName: "matjash-pixi-native-0.2.6.tgz",
+        nativeArchiveName: "matjash-pixi-native-linux-x64-0.2.6.tgz",
         pixiVersion: "8.21.0",
         pixi7Version: "npm:pixi.js@7.4.3",
         gsapVersion: "^3.15.0",
@@ -53,7 +53,7 @@ test("portable manifest pins the selected local native archive", () => {
     assert.equal(manifest.private, true);
     assert.equal(
         manifest.dependencies["@matjash/pixi-native-linux-x64"],
-        "file:vendor/matjash-pixi-native-linux-x64-0.2.5.tgz",
+        "file:vendor/matjash-pixi-native-linux-x64-0.2.6.tgz",
     );
     assert.equal(manifest.dependencies["pixi.js"], "8.21.0");
     assert.equal(manifest.dependencies["pixi.js-v7"], "npm:pixi.js@7.4.3");

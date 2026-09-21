@@ -1,4 +1,4 @@
-import { Assets, type Application } from "pixi.js-v7";
+import { Assets, Ticker, type Application } from "pixi.js-v7";
 import { Image as CanvasImage } from "@napi-rs/canvas";
 import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { NodeGLCanvas } from "@pixi-native/core/canvas/NodeGLCanvas.js";
@@ -49,6 +49,23 @@ export type App = ManagedNativeApplication<
 >;
 
 let nativeAssetsInitialization: Promise<void> | undefined;
+
+interface ModalFrameTicker {
+  readonly started: boolean;
+  update(timestamp: number): void;
+}
+
+/** Advances shared animations before rendering the same native modal frame. */
+export function dispatchPixi7ModalFrame(
+  timestamp: number,
+  sharedTicker: ModalFrameTicker,
+  listeners: ReadonlySet<() => void>,
+  dispatchAnimationFrame: (timestamp: number) => unknown,
+): void {
+  if (sharedTicker.started) sharedTicker.update(timestamp);
+  for (const listener of [...listeners]) listener();
+  dispatchAnimationFrame(timestamp);
+}
 
 /** Prepares Pixi's browser-facing Assets API for the installed native DOM. */
 function initializeNativeAssets(): Promise<void> {
@@ -151,8 +168,13 @@ export async function createRenderer(
     nativeWindowData,
     () => {
       resizeToWindow(true);
-      for (const listener of [...modalFrameListeners]) listener();
-      adapter.dispatchModalFrame(performance.now());
+      const timestamp = performance.now();
+      dispatchPixi7ModalFrame(
+        timestamp,
+        Ticker.shared,
+        modalFrameListeners,
+        (frameTimestamp) => adapter.dispatchModalFrame(frameTimestamp),
+      );
     },
     () => undefined,
   );

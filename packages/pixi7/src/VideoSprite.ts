@@ -34,6 +34,7 @@ const FRAGMENT_SHADER = `
     varying vec2 vTextureCoord;
     uniform sampler2D yTexture;
     uniform sampler2D uvTexture;
+    uniform float uAlpha;
 
     void main(void) {
         float rawY = texture2D(yTexture, vTextureCoord).r;
@@ -46,7 +47,7 @@ const FRAGMENT_SHADER = `
             y - 0.1873 * u - 0.4681 * v,
             y + 1.8556 * u
         ), vec3(0.0), vec3(1.0));
-        gl_FragColor = vec4(rgb, 1.0);
+        gl_FragColor = vec4(rgb * uAlpha, uAlpha);
     }
 `;
 
@@ -189,7 +190,7 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
   }
 
   public override render(renderer: Renderer): void {
-    if (this.usesPackedAlpha) this.shader.uniforms.uAlpha = this.worldAlpha;
+    this.shader.uniforms.uAlpha = this.worldAlpha;
     this.updateFrame();
     super.render(renderer);
   }

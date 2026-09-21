@@ -78,3 +78,46 @@ test("NativeVideoSprite7 renders packed alpha at the color-region width", () => 
   sprite.destroy();
   assert.equal(destroyed, 1);
 });
+
+test("NativeVideoSprite7 applies world alpha to normal and packed-alpha video", () => {
+  new NodeDOMAdapter({} as never).installPixi7(settings);
+  const events = new EventTarget();
+  const createVideo = () =>
+    ({
+      width: 1920,
+      height: 768,
+      takeLatestFrame: () => null,
+      markFramePresented: () => undefined,
+      destroy: () => undefined,
+      addEventListener: events.addEventListener.bind(events),
+      removeEventListener: events.removeEventListener.bind(events),
+    }) as never;
+  const normalSprite = new NativeVideoSprite7(createVideo());
+  const packedAlphaSprite = new NativeVideoSprite7(createVideo(), {
+    alphaMaskScale: 0.5,
+  });
+  const skipDraw = (sprite: NativeVideoSprite7): void => {
+    (sprite as unknown as { _render: () => void })._render = () => undefined;
+  };
+
+  skipDraw(normalSprite);
+  skipDraw(packedAlphaSprite);
+  normalSprite.worldAlpha = 0.4;
+  packedAlphaSprite.worldAlpha = 0.25;
+  normalSprite.render({} as never);
+  packedAlphaSprite.render({} as never);
+
+  assert.equal(normalSprite.shader.uniforms.uAlpha, 0.4);
+  assert.equal(packedAlphaSprite.shader.uniforms.uAlpha, 0.25);
+  assert.match(
+    normalSprite.shader.program.fragmentSrc,
+    /gl_FragColor = vec4\(rgb \* uAlpha, uAlpha\);/,
+  );
+  assert.match(
+    packedAlphaSprite.shader.program.fragmentSrc,
+    /gl_FragColor = vec4\(rgb \* alpha, alpha\);/,
+  );
+
+  normalSprite.destroy();
+  packedAlphaSprite.destroy();
+});
