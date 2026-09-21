@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import {
   NativeVideo,
+  NativeVideoDecoder,
   VideoFpsMeter,
   convertBt709LimitedNv12SampleToRgb,
   getNv12FrameLayout,
@@ -80,6 +82,33 @@ test("FFmpeg path resolution prefers explicit, environment, bundled, then system
     }),
     "ffmpeg",
   );
+});
+
+test("NativeVideoDecoder forwards continuous loop playback to the native binding", async () => {
+  const decoder = new NativeVideoDecoder({
+    width: 32,
+    height: 32,
+    fps: 1,
+    loop: true,
+  });
+  const source = fileURLToPath(
+    new URL("./fixtures/hevc-one-frame.mp4", import.meta.url),
+  );
+
+  try {
+    decoder.open(source);
+    const timestamps: number[] = [];
+    const deadline = performance.now() + 5_000;
+    while (timestamps.length < 2 && performance.now() < deadline) {
+      const frame = decoder.pollNext();
+      if (frame) timestamps.push(frame.timestampUs);
+      else await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    }
+    assert.deepEqual(timestamps, [0, 1_000_000]);
+    assert.equal(decoder.isFinished(), false);
+  } finally {
+    decoder.close();
+  }
 });
 
 test("BT.709 limited conversion maps video black and white", () => {
@@ -268,11 +297,11 @@ test("NativeVideo records end and latest-frame decoder statistics", async () => 
     droppedFrames: 3,
     skippedFrames: 0,
     queuedFrames: 0,
-      syncOffsetMs: 0,
-      bytesPerFrame: 6,
-      frameBufferAllocations: 0,
-      frameBufferReuses: 0,
-      recycledFrameBuffers: 0,
+    syncOffsetMs: 0,
+    bytesPerFrame: 6,
+    frameBufferAllocations: 0,
+    frameBufferReuses: 0,
+    recycledFrameBuffers: 0,
   });
 });
 
@@ -476,11 +505,44 @@ test("NativeVideo dispatches Electron-compatible events and loops without ended"
   assert.equal(video.ended, false);
   assert.equal(propertyEnded, 0);
   assert.equal(factory.options[1].startTime, 0);
+  assert.equal(factory.options[0].loop, false);
+  assert.equal(factory.options[1].loop, false);
   assert.ok(events.includes("loadedmetadata"));
   assert.deepEqual(
     events.slice(events.indexOf("loadeddata"), events.indexOf("playing") + 1),
     ["loadeddata", "canplay", "canplaythrough", "playing"],
   );
+  video.destroy();
+});
+
+test("NativeVideo keeps full-file audio and video decoders alive across loops", async () => {
+  const factory = new FakeMetadataAudioVideoFactory(2);
+  const video = new NativeVideo(
+    "video.mp4",
+    { width: 2, height: 2, loop: true },
+    factory,
+  );
+
+  await video.play();
+  assert.equal(factory.options.length, 1);
+  assert.equal(factory.options[0].loop, true);
+  assert.deepEqual(factory.audioLoops, [true]);
+
+  factory.audios[0].currentTime = 2.05;
+  factory.decoders[0].enqueue(createFrame(2_033_333));
+  assert.equal(video.takeLatestFrame()?.timestampUs, 2_033_333);
+  video.markFramePresented();
+
+  assert.ok(Math.abs(video.currentTime - 0.05) < 0.001);
+  assert.equal(video.ended, false);
+  assert.equal(factory.options.length, 1);
+  assert.equal(factory.audios.length, 1);
+
+  video.loop = false;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(factory.decoders[0].closed, true);
+  assert.equal(factory.options[1].loop, false);
+  assert.equal(factory.audioLoops[1], false);
   video.destroy();
 });
 
@@ -644,6 +706,7 @@ class FakeDecoderFactory implements NativeVideoDependencies {
 class FakeAudioVideoFactory extends FakeDecoderFactory {
   public readonly audios: FakeAudio[] = [];
   public readonly audioPlaybackRates: number[] = [];
+  public readonly audioLoops: boolean[] = [];
 
   public createAudio(
     _source: string,
@@ -651,11 +714,33 @@ class FakeAudioVideoFactory extends FakeDecoderFactory {
     volume: number,
     muted: boolean,
     playbackRate = 1,
+    _inputArgs: readonly string[] = [],
+    _outputArgs: readonly string[] = [],
+    _endTime?: number,
+    loop = false,
   ): FakeAudio {
     const audio = new FakeAudio(startTime, volume, muted);
     this.audios.push(audio);
     this.audioPlaybackRates.push(playbackRate);
+    this.audioLoops.push(loop);
     return audio;
+  }
+}
+
+class FakeMetadataAudioVideoFactory extends FakeAudioVideoFactory {
+  private readonly metadataDuration: number;
+
+  public constructor(metadataDuration: number) {
+    super();
+    this.metadataDuration = metadataDuration;
+  }
+
+  public async probeMetadata(): Promise<{
+    width: number;
+    height: number;
+    duration: number;
+  }> {
+    return { width: 2, height: 2, duration: this.metadataDuration };
   }
 }
 

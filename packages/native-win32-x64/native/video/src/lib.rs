@@ -33,6 +33,7 @@ pub struct DecoderOptions {
     pub source_paced: Option<bool>,
     pub input_args: Option<Vec<String>>,
     pub output_args: Option<Vec<String>>,
+    pub loop_: Option<bool>,
 }
 
 #[napi(object)]
@@ -206,6 +207,7 @@ struct FfmpegRequest {
     end_time: Option<f64>,
     input_args: Vec<String>,
     output_args: Vec<String>,
+    looped: bool,
 }
 
 #[napi]
@@ -313,6 +315,7 @@ impl NativeVideoDecoder {
             end_time: self.options.end_time,
             input_args: self.options.input_args.clone().unwrap_or_default(),
             output_args: self.options.output_args.clone().unwrap_or_default(),
+            looped: self.options.loop_.unwrap_or(false),
         };
         let (spawned, active_backend) = match spawn_ffmpeg(&request, requested_backend) {
             Ok(spawned) => (spawned, requested_backend),
@@ -696,8 +699,11 @@ fn ffmpeg_args(request: &FfmpegRequest, backend: DecoderBackend) -> Vec<String> 
         args.extend(["-ss".to_string(), request.start_time.to_string()]);
     }
     args.extend(request.input_args.iter().cloned());
+    if request.looped {
+        args.extend(["-stream_loop".to_string(), "-1".to_string()]);
+    }
     args.extend(["-i".to_string(), request.source.clone(), "-an".to_string()]);
-    if let Some(end_time) = request.end_time {
+    if let Some(end_time) = request.end_time.filter(|_| !request.looped) {
         args.extend([
             "-t".to_string(),
             (end_time - request.start_time).to_string(),
@@ -1120,6 +1126,19 @@ mod tests {
     }
 
     #[test]
+    fn loops_full_file_input_without_a_duration_limit() {
+        let mut request = request(30.0, 0.0);
+        request.looped = true;
+        request.end_time = Some(2.0);
+        let args = ffmpeg_args(&request, DecoderBackend::Cpu);
+        let loop_index = args.iter().position(|arg| arg == "-stream_loop").unwrap();
+        let input_index = args.iter().position(|arg| arg == "-i").unwrap();
+        assert_eq!(args[loop_index + 1], "-1");
+        assert!(loop_index < input_index);
+        assert!(!args.iter().any(|arg| arg == "-t"));
+    }
+
+    #[test]
     fn builds_serial_software_fallback_filter() {
         let args = ffmpeg_args(&request(30.0, 0.0), DecoderBackend::Cpu);
         assert!(args.windows(2).any(|pair| pair == ["-filter_threads", "1"]));
@@ -1154,6 +1173,7 @@ mod tests {
             source_paced: None,
             input_args: None,
             output_args: None,
+            loop_: None,
         });
         assert!(result.is_err());
     }
@@ -1238,6 +1258,7 @@ mod tests {
             source_paced: None,
             input_args: None,
             output_args: None,
+            loop_: None,
         })
         .unwrap();
         let mut target = vec![0; 6];
@@ -1270,6 +1291,7 @@ mod tests {
             source_paced: None,
             input_args: None,
             output_args: None,
+            loop_: None,
         })
         .unwrap();
         let mut target = vec![0; 5];
@@ -1355,6 +1377,7 @@ mod tests {
             source_paced: None,
             input_args: None,
             output_args: None,
+            loop_: None,
         })
         .unwrap()
     }
@@ -1390,6 +1413,7 @@ mod tests {
             end_time: None,
             input_args: Vec::new(),
             output_args: Vec::new(),
+            looped: false,
         }
     }
 }

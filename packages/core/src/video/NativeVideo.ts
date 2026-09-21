@@ -57,9 +57,7 @@ interface NativeDecoderBinding {
   pollLatest(): NativePackedVideoFrame | null;
   pollNext(): NativePackedVideoFrame | null;
   supportsFrameBufferReuse?(): boolean;
-  pollLatestInto?(
-    target: Buffer,
-  ): NativePackedVideoFrameInfo | null;
+  pollLatestInto?(target: Buffer): NativePackedVideoFrameInfo | null;
   pollNextInto?(target: Buffer): NativePackedVideoFrameInfo | null;
   queuedFrames(): number;
   catchUpTo(timestampUs: number): void;
@@ -95,6 +93,7 @@ interface NativeVideoModule {
     sourcePaced?: boolean;
     inputArgs?: string[];
     outputArgs?: string[];
+    loop?: boolean;
   }) => NativeDecoderBinding;
   videoShutdownDiagnostics?(): NativeVideoShutdownDiagnostics;
 }
@@ -136,6 +135,7 @@ export interface NativeVideoDecoderOptions extends NativeVideoOptions {
   readonly sourcePaced?: boolean;
   readonly inputArgs?: readonly string[];
   readonly outputArgs?: readonly string[];
+  readonly loop?: boolean;
 }
 
 /** Read-only counters for the current video source and presentation lifecycle. */
@@ -182,6 +182,7 @@ export interface NativeVideoDependencies {
     inputArgs: readonly string[],
     outputArgs: readonly string[],
     endTime?: number,
+    loop?: boolean,
   ): NativeVideoAudioLike;
 }
 
@@ -394,6 +395,7 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
       sourcePaced: options.sourcePaced,
       inputArgs: options.inputArgs ? [...options.inputArgs] : undefined,
       outputArgs: options.outputArgs ? [...options.outputArgs] : undefined,
+      loop: options.loop,
       vaapiDevice: options.vaapiDevice,
       ffmpegPath: resolveFfmpegPath({
         explicitPath: options.ffmpegPath,
@@ -501,6 +503,7 @@ const DEFAULT_DEPENDENCIES: NativeVideoInternalDependencies = {
     inputArgs,
     outputArgs,
     endTime,
+    loop,
   ) =>
     new HowlVideoAudio(
       source,
@@ -511,6 +514,7 @@ const DEFAULT_DEPENDENCIES: NativeVideoInternalDependencies = {
       inputArgs,
       outputArgs,
       endTime,
+      loop,
     ),
   probeMetadata: probeMedia,
 };
@@ -532,6 +536,7 @@ class HowlVideoAudio implements NativeVideoAudioLike {
     inputArgs: readonly string[],
     outputArgs: readonly string[],
     endTime?: number,
+    loop = false,
   ) {
     this.startTime = startTime;
     this.currentVolume = volume;
@@ -542,6 +547,7 @@ class HowlVideoAudio implements NativeVideoAudioLike {
         __video: [
           startTime * 1000,
           endTime === undefined ? 86_400_000 : (endTime - startTime) * 1000,
+          loop,
         ],
       },
       volume,
@@ -836,7 +842,11 @@ export class NativeVideo extends EventTarget {
   }
 
   public set loop(value: boolean) {
-    this.loopValue = Boolean(value);
+    const nextLoop = Boolean(value);
+    if (nextLoop === this.loopValue) return;
+    const position = this.currentTime;
+    this.loopValue = nextLoop;
+    if (!this.isPaused) void this.restartPlayback(position);
   }
 
   /** Playback multiplier. Live sources support only `1`. */
@@ -911,9 +921,11 @@ export class NativeVideo extends EventTarget {
   }
 
   public get currentTime(): number {
-    return this.audio && !this.audio.ended
-      ? this.audio.currentTime
-      : this.filePlaybackClockTime() ?? this.positionSeconds;
+    const playbackTime =
+      this.audio && !this.audio.ended
+        ? this.audio.currentTime
+        : this.filePlaybackClockTime() ?? this.positionSeconds;
+    return this.normalizeLoopTime(playbackTime);
   }
 
   public set currentTime(value: number) {
@@ -1128,6 +1140,7 @@ export class NativeVideo extends EventTarget {
         this.options.mediaType === "live",
       inputArgs: this.options.ffmpeg?.inputArgs,
       outputArgs: this.options.ffmpeg?.videoOutputArgs,
+      loop: this.usesContinuousLoop(startTime),
     });
 
     try {
@@ -1231,9 +1244,11 @@ export class NativeVideo extends EventTarget {
       return undefined;
     const elapsedSeconds =
       (performance.now() - this.playbackClockStartedAtMs) / 1000;
-    return this.clampFileTime(
-      this.playbackClockStartSeconds + elapsedSeconds * this.playbackRateValue,
-    );
+    const playbackTime =
+      this.playbackClockStartSeconds + elapsedSeconds * this.playbackRateValue;
+    return this.usesContinuousLoop(this.playbackClockStartSeconds)
+      ? playbackTime
+      : this.clampFileTime(playbackTime);
   }
 
   private async startAudio(
@@ -1251,6 +1266,7 @@ export class NativeVideo extends EventTarget {
       this.options.ffmpeg?.inputArgs ?? [],
       this.options.ffmpeg?.audioOutputArgs ?? [],
       this.segmentEnd,
+      this.usesContinuousLoop(startTime),
     );
     this.audio = audio;
     try {
@@ -1419,6 +1435,29 @@ export class NativeVideo extends EventTarget {
       this.segmentEnd ?? Number.POSITIVE_INFINITY,
       Math.max(this.segmentStart, value),
     );
+  }
+
+  private usesContinuousLoop(startTime: number): boolean {
+    return (
+      this.loopValue &&
+      this.options.mediaType !== "live" &&
+      this.segmentStart === 0 &&
+      this.segmentEnd === undefined &&
+      startTime === this.segmentStart
+    );
+  }
+
+  private normalizeLoopTime(value: number): number {
+    if (
+      !this.loopValue ||
+      !Number.isFinite(this.durationValue) ||
+      this.durationValue <= this.segmentStart ||
+      value < this.durationValue
+    ) {
+      return value;
+    }
+    const duration = this.durationValue - this.segmentStart;
+    return this.segmentStart + ((value - this.segmentStart) % duration);
   }
 
   private resetReadiness(): void {

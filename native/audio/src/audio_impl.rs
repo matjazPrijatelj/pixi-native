@@ -1210,8 +1210,14 @@ fn ffmpeg_command(
         command.args(["-ss", &options.offset_seconds.to_string()]);
     }
     command.args(&options.input_args);
+    if streaming && options.loop_ {
+        command.args(["-stream_loop", "-1"]);
+    }
     command.args(["-i", &options.source, "-vn"]);
-    if let Some(duration) = options.duration_seconds {
+    if let Some(duration) = options
+        .duration_seconds
+        .filter(|_| !(streaming && options.loop_))
+    {
         command.args(["-t", &duration.to_string()]);
     }
     if streaming && (options.playback_rate - 1.0).abs() > f64::EPSILON {
@@ -1342,6 +1348,24 @@ fn redact_credentials(message: &str) -> String {
 mod tests {
     use super::*;
 
+    fn voice_options(looped: bool) -> NativeVoiceOptions {
+        NativeVoiceOptions {
+            owner_id: 1,
+            id: 1,
+            source: "video.mp4".to_string(),
+            ffmpeg_path: "ffmpeg".to_string(),
+            offset_seconds: 0.0,
+            duration_seconds: Some(2.0),
+            volume: 1.0,
+            muted: false,
+            loop_: looped,
+            streaming: true,
+            playback_rate: 1.0,
+            input_args: Vec::new(),
+            output_args: Vec::new(),
+        }
+    }
+
     #[test]
     fn static_voices_share_pcm_with_independent_cursors() {
         let samples = Arc::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
@@ -1369,6 +1393,20 @@ mod tests {
     fn atempo_decomposes_extreme_rates() {
         assert_eq!(build_atempo_filter(4.0).unwrap(), "atempo=2,atempo=2");
         assert_eq!(build_atempo_filter(0.25).unwrap(), "atempo=0.5,atempo=0.5");
+    }
+
+    #[test]
+    fn streaming_loop_repeats_input_without_a_duration_limit() {
+        let command = ffmpeg_command(&voice_options(true), 48_000, true).unwrap();
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let loop_index = args.iter().position(|arg| arg == "-stream_loop").unwrap();
+        let input_index = args.iter().position(|arg| arg == "-i").unwrap();
+        assert_eq!(args[loop_index + 1], "-1");
+        assert!(loop_index < input_index);
+        assert!(!args.iter().any(|arg| arg == "-t"));
     }
 
     #[test]

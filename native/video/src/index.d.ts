@@ -10,6 +10,7 @@ export interface DecoderOptions {
   sourcePaced?: boolean;
   inputArgs?: string[];
   outputArgs?: string[];
+  loop?: boolean;
 }
 
 export interface VideoFrame {

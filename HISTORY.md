@@ -2,6 +2,17 @@
 
 ## 2026-09-21
 
+- Prepared the next `0.2.7` runtime and `0.1.11` generator versions after the
+  immutable `0.2.6` runtime publication.
+- Kept full-file video and audio loops inside their existing FFmpeg processes,
+  with a monotonic internal clock and browser-like wrapped `currentTime`.
+- Rebuilt only the affected Windows audio and video N-API bindings and passed
+  the complete 189-test suite against the updated native artifacts.
+- Added a reusable WSL command for rebuilding only the Linux x64 audio and
+  video N-API bindings.
+- Fixed the TypeScript video-decoder adapter to forward its continuous-loop
+  flag into the native N-API binding, preventing the decoder from falling back
+  to a visible process restart at every loop boundary.
 - Prepared and validated the lockstep `0.2.6` runtime packages for Windows and
   Linux plus the `0.1.10` generator package, without publication.
 - Advanced PixiJS 7 shared-ticker animations before each native modal
