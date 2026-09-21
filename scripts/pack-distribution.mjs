@@ -13,6 +13,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getFfmpegDistribution } from "./ffmpeg-distribution.mjs";
+import { getNativeVideoRuntimeFiles } from "./native-video-runtime.mjs";
 import {
   FFMPEG_SOURCE_ARCHIVE,
   FFMPEG_SOURCE_REVISION,
@@ -216,6 +217,9 @@ function validatePackedFiles(packageName, files) {
         `native/window/dist/${nativeTarget}/${nativeTarget === "win32-x64" ? "SDL3.dll" : "libSDL3.so.0"}`,
         `native/audio/dist/${nativeTarget}/native_audio.node`,
         `native/video/dist/${nativeTarget}/native_video.node`,
+        ...getNativeVideoRuntimeFiles(nativeTarget).map(
+          (filename) => `native/video/dist/${nativeTarget}/${filename}`,
+        ),
         ...ffmpegDistribution.packagedFiles.map(
           (filename) => `${ffmpegDistribution.targetDirectory}/${filename}`,
         ),

@@ -23,13 +23,8 @@ export const FFMPEG_PACKAGED_FILES = [
   FFMPEG_BUILD_INFO_FILE,
 ];
 export const OBSOLETE_SHARED_FFMPEG_FILES = [
-  "avcodec-62.dll",
   "avdevice-62.dll",
   "avfilter-11.dll",
-  "avformat-62.dll",
-  "avutil-60.dll",
-  "swresample-6.dll",
-  "swscale-9.dll",
   "FFMPEG_README.txt",
 ];
 

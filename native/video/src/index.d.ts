@@ -11,6 +11,7 @@ export interface DecoderOptions {
   inputArgs?: string[];
   outputArgs?: string[];
   loop?: boolean;
+  backend?: "cli" | "native" | "auto";
 }
 
 export interface VideoFrame {
@@ -51,6 +52,11 @@ export class NativeVideoDecoder {
   public frameBufferAllocations(): number;
   public frameBufferReuses(): number;
   public recycledFrameBuffers(): number;
+  public implementationBackend(): "cli" | "native";
+  public deliveryPath(): "cpu-nv12" | "d3d11-shared-nv12";
+  public gpuFrameCopies(): number;
+  public cpuFrameBytes(): number;
+  public presentationSurfaceDrops(): number;
   public isFinished(): boolean;
   public close(): void;
 }

@@ -179,6 +179,7 @@ const video = new NativeVideo(videoPath, {
   width: 1920,
   height: 1080,
   fps: 30,
+  backend: "auto", // "auto" | "native" | "cli"
   audio: true,
 });
 const sprite = new VideoSprite(video);
@@ -190,6 +191,13 @@ await video.play();
 `volume`, and `muted`, plus read-only `currentSrc`, `duration`, `readyState`,
 `paused`, `ended`, `backend`, `error`, `audioError`, `reconnecting`,
 `reconnectAttempts`, and `stats`.
+
+The default `backend: "auto"` tries the in-process Windows FFmpeg 8 decoder
+first and transparently falls back to the bundled CLI when native construction,
+open, or first-frame decoding fails. Explicit `"native"` and `"cli"` values
+remain available for diagnostics. Transfer counters are exposed in `stats`;
+the current native scope is documented in
+[Media and files](media-and-files.md#native-video).
 
 | Method | Behavior |
 | --- | --- |

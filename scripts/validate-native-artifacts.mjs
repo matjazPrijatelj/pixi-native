@@ -8,6 +8,7 @@ import {
   validateFfmpegIdentity,
   getFfmpegDistribution,
 } from "./ffmpeg-distribution.mjs";
+import { getNativeVideoRuntimeFiles } from "./native-video-runtime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const target = `${process.platform}-${process.arch}`;
@@ -21,6 +22,9 @@ const REQUIRED_NATIVE_ARTIFACTS = [
   `native/window/dist/${target}/${target === "win32-x64" ? "SDL3.dll" : "libSDL3.so.0"}`,
   `native/audio/dist/${target}/native_audio.node`,
   `native/video/dist/${target}/native_video.node`,
+  ...getNativeVideoRuntimeFiles(target).map(
+    (filename) => `native/video/dist/${target}/${filename}`,
+  ),
 ];
 const REQUIRED_FFMPEG_ARTIFACTS = [
   ...ffmpegDistribution.packagedFiles,

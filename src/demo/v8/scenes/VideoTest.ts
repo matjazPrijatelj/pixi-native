@@ -58,6 +58,7 @@ export function createVideoTest(
     fps,
     loop: true,
     logDiagnostics: true,
+    backend: "auto",
   });
   let sprite = new NativeVideoSprite(video);
   const videoGroup = new Container();
@@ -238,6 +239,7 @@ export function createVideoTest(
       height: nextHeight,
       fps: nextFps,
       loop: true,
+      backend: "auto",
       audio,
     });
     sprite = new NativeVideoSprite(video, spriteOptions);

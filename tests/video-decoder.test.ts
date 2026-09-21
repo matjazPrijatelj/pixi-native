@@ -104,11 +104,102 @@ test("NativeVideoDecoder forwards continuous loop playback to the native binding
       if (frame) timestamps.push(frame.timestampUs);
       else await new Promise<void>((resolve) => setTimeout(resolve, 5));
     }
-    assert.deepEqual(timestamps, [0, 1_000_000]);
+    assert.deepEqual(
+      timestamps,
+      decoder.implementationBackend() === "native" ? [0, 0] : [0, 1_000_000],
+    );
     assert.equal(decoder.isFinished(), false);
   } finally {
     decoder.close();
   }
+});
+
+test("native FFmpeg backend decodes NV12 in process when its shared SDK is present", async (context) => {
+  let decoder: NativeVideoDecoder;
+  try {
+    decoder = new NativeVideoDecoder({
+      width: 32,
+      height: 32,
+      fps: 1,
+      backend: "native",
+      loop: true,
+    });
+  } catch (error) {
+    if (String(error).includes("not available in this build")) {
+      context.skip("native FFmpeg feature is not present in this platform artifact");
+      return;
+    }
+    throw error;
+  }
+  const source = fileURLToPath(
+    new URL("./fixtures/hevc-one-frame.mp4", import.meta.url),
+  );
+
+  try {
+    decoder.open(source);
+    const deadline = performance.now() + 5_000;
+    let frame: NativeVideoFrame | null = null;
+    while (!frame && performance.now() < deadline) {
+      const error = decoder.pollError();
+      if (error) throw new Error(error);
+      frame = decoder.pollNext();
+      if (!frame) await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    }
+    assert.ok(frame);
+    assert.equal(frame.y.byteLength + frame.uv.byteLength, 1_536);
+    assert.equal(decoder.implementationBackend(), "native");
+    assert.equal(decoder.deliveryPath(), "cpu-nv12");
+    assert.match(decoder.backend(), /libavcodec/);
+    let loopedFrame: NativeVideoFrame | null = null;
+    const loopDeadline = performance.now() + 5_000;
+    while (!loopedFrame && performance.now() < loopDeadline) {
+      const error = decoder.pollError();
+      if (error) throw new Error(error);
+      loopedFrame = decoder.pollNext();
+      if (!loopedFrame)
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    }
+    assert.ok(loopedFrame);
+    assert.equal(decoder.isFinished(), false);
+  } finally {
+    decoder.close();
+  }
+});
+
+test("auto video backend falls back to CLI for options outside native scope", () => {
+  const decoder = new NativeVideoDecoder({
+    width: 32,
+    height: 32,
+    playbackRate: 1.25,
+    backend: "auto",
+  });
+  try {
+    assert.equal(decoder.implementationBackend(), "cli");
+  } finally {
+    decoder.close();
+  }
+});
+
+test("NativeVideo forwards the opt-in decoder backend without changing the default", async () => {
+  const nativeFactory = new FakeDecoderFactory();
+  const nativeVideo = new NativeVideo(
+    "video.mp4",
+    { width: 2, height: 2, backend: "native", audio: false },
+    nativeFactory,
+  );
+  await nativeVideo.play();
+  assert.equal(nativeFactory.options[0].backend, "native");
+  nativeVideo.destroy();
+
+  const cliFactory = new FakeDecoderFactory();
+  const cliVideo = new NativeVideo(
+    "video.mp4",
+    { width: 2, height: 2, audio: false },
+    cliFactory,
+  );
+  await cliVideo.play();
+  assert.equal(cliFactory.options[0].backend, undefined);
+  cliVideo.destroy();
 });
 
 test("BT.709 limited conversion maps video black and white", () => {
@@ -178,8 +269,10 @@ test("NativeVideo logs the effective backend after the first presented frame", a
   assert.equal(logs[0]?.[0], "[pixi-native] Video presentation started");
   assert.deepEqual(logs[0]?.[1], {
     source: "https://***:***@example.test/video.mp4",
+    implementationBackend: "cli",
     backend: "CPU fallback",
     hardwareDecode: false,
+    deliveryPath: "cpu-nv12",
     zeroCopy: false,
     width: 2,
     height: 2,
@@ -327,6 +420,8 @@ test("NativeVideo records end and latest-frame decoder statistics", async () => 
   assert.equal(video.ended, true);
   assert.equal(video.paused, true);
   assert.deepEqual(video.stats, {
+    effectiveBackend: "cli",
+    deliveryPath: "cpu-nv12",
     decodedFrames: 5,
     presentedFrames: 0,
     droppedFrames: 3,
@@ -337,6 +432,9 @@ test("NativeVideo records end and latest-frame decoder statistics", async () => 
     frameBufferAllocations: 0,
     frameBufferReuses: 0,
     recycledFrameBuffers: 0,
+    gpuFrameCopies: 0,
+    cpuFrameBytes: 30,
+    presentationSurfaceDrops: 0,
   });
 });
 

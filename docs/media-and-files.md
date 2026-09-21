@@ -60,6 +60,7 @@ const runtime = await createApp({ backend: "webgpu" });
 const video = new NativeVideo(files.resolvePath("../assets/intro.mp4"), {
   width: 1920,
   height: 1080,
+  backend: "native",
   audio: true,
   logDiagnostics: true,
 });
@@ -82,10 +83,19 @@ Windows uses D3D11VA when available and falls back to CPU decoding. Linux uses
 VA-API when available and has the same CPU fallback. Both platform packages
 contain the project's minimal FFmpeg and FFprobe executables.
 
+`backend` accepts `"cli"`, `"native"`, or `"auto"` and defaults to `"auto"`.
+The Windows `"native"` backend uses in-process FFmpeg 8 and D3D11VA with a CPU
+NV12 transfer at the current milestone. It supports full-file looping at rate
+`1` without custom FFmpeg arguments. `"auto"` tries native first and falls back
+to CLI if native is unavailable, rejects the requested options, cannot open the
+source, or fails before its first decoded frame. Bounded segments, live input,
+playback-rate changes, and custom arguments therefore select the CLI fallback.
+
 Set `logDiagnostics: true` to emit one structured message after the renderer
-presents the first frame. `D3D11VA` or `VA-API` with `hardwareDecode: true`
-confirms hardware decoding. `zeroCopy` remains `false` because decoded NV12
-frames currently pass through CPU memory before their GPU texture upload.
+presents the first frame. `implementationBackend` distinguishes CLI from
+in-process libavcodec. `D3D11VA` or `VA-API` with `hardwareDecode: true`
+confirms hardware decoding, while `deliveryPath`, `zeroCopy`, `cpuFrameBytes`,
+and `gpuFrameCopies` expose the remaining transfer path.
 
 FFmpeg lookup checks an explicit `ffmpegPath`, `FFMPEG_PATH`, the installed
 native platform package, and then development `PATH`.

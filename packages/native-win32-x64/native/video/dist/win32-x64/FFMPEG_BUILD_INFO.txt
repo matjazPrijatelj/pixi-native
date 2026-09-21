@@ -35,6 +35,8 @@ Configure options:
 --enable-d3d11va
 --enable-hwaccel=h264_d3d11va
 --enable-hwaccel=hevc_d3d11va
+--enable-hwaccel=h264_d3d11va2
+--enable-hwaccel=hevc_d3d11va2
 --enable-decoder=h264,hevc,aac,mp3,pcm_u8,pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_f64le
 --enable-parser=h264,hevc,aac,mpegaudio
 --enable-demuxer=mov,mpegts,h264,hevc,aac,mp3,wav,sdp,rtp

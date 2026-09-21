@@ -16,6 +16,7 @@
     "assets:bitmap-font": "node scripts/generate-bitmap-font-test.mjs",
     "assets:audio-test": "node scripts/generate-audio-test.mjs",
     "ffmpeg:build": "node scripts/build-minimal-ffmpeg.mjs",
+    "ffmpeg:sdk:build": "node scripts/build-ffmpeg-native-sdk.mjs",
     "ffmpeg:build:linux": "bash scripts/build-minimal-ffmpeg-linux.sh",
     "ffmpeg:stage": "node scripts/stage-custom-ffmpeg.mjs",
     "dev": "pnpm dev:webgpu",

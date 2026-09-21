@@ -2,6 +2,32 @@
 
 ## 2026-09-21
 
+- Changed video decoder selection to native-first `auto` by default, with a
+  transparent CLI retry for unsupported options, construction/open failures,
+  or native errors before the first decoded frame. Explicit `native` and `cli`
+  modes remain strict for diagnostics and reference comparisons.
+- Fixed native Windows hardware decoding by enabling FFmpeg 8's hw-frames
+  `h264_d3d11va2` and `hevc_d3d11va2` accelerators in both the shared SDK and
+  bundled CLI build, alongside the legacy D3D11VA variants. Added decode-pool
+  slack and verified the 1280x720 H.264
+  demo reaches `D3D11VA libavcodec (CPU transfer)` without the CPU decoder
+  fallback; zero-copy texture delivery remains a later milestone.
+- Added continuous native libav file looping by seeking and flushing the same
+  decoder at EOF, keeping its D3D11 device and frame pool alive. Hardware
+  diagnostics now follow the actual decoded AVFrame format rather than device
+  creation alone, and the video demo again exercises `loop: true`.
+- Added the first opt-in native video backend milestone without changing the
+  proven CLI default: the public decoder contract now selects `cli`, `native`,
+  or `auto`; an FFmpeg 8 feature-gated backend now demuxes and decodes in
+  process, seeks by stream time base, converts frames to NV12, and feeds the
+  existing bounded presentation queue. Builds without the shared SDK reject
+  `native` instead of silently falling back. Added delivery-path, CPU-byte,
+  GPU-copy, and presentation surface-drop diagnostics across decoder restarts.
+- Added a reproducible MSVC shared FFmpeg 8 SDK build for the native backend,
+  staged its version-pinned runtime DLLs with the Windows package, and taught
+  artifact/package validation to require them. The feature build passed 19
+  Rust tests, an in-process HEVC-to-NV12 runtime test, the 194-test workspace
+  suite, TypeScript checking, and native-artifact validation.
 - Added opt-in first-presented-frame video diagnostics that report the
   effective decoder backend, hardware-decode state, dimensions, FPS, and the
   current non-zero-copy pipeline without exposing URL credentials.

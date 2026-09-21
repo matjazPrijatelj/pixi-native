@@ -11,6 +11,9 @@ use std::time::{Duration, Instant};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
+#[cfg(feature = "native-ffmpeg")]
+mod native_ffmpeg;
+
 const FRAME_QUEUE_CAPACITY: usize = 4;
 const HARDWARE_DECODE_ATTEMPTS: usize = 5;
 const HARDWARE_RETRY_DELAY: Duration = Duration::from_millis(500);
@@ -34,6 +37,7 @@ pub struct DecoderOptions {
     pub input_args: Option<Vec<String>>,
     pub output_args: Option<Vec<String>>,
     pub loop_: Option<bool>,
+    pub backend: Option<String>,
 }
 
 #[napi(object)]
@@ -71,15 +75,57 @@ pub fn video_shutdown_diagnostics() -> VideoShutdownDiagnostics {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DecoderBackend {
+    #[cfg(any(target_os = "windows", test))]
     D3d11va,
+    #[cfg(any(target_os = "linux", test))]
     Vaapi,
     Cpu,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DecoderImplementation {
+    Cli,
+    #[cfg(feature = "native-ffmpeg")]
+    Native,
+}
+
+impl DecoderImplementation {
+    fn resolve(requested: Option<&str>) -> Result<Self> {
+        match requested.unwrap_or("cli") {
+            "cli" | "auto" => Ok(Self::Cli),
+            "native" => {
+                #[cfg(feature = "native-ffmpeg")]
+                {
+                    Ok(Self::Native)
+                }
+                #[cfg(not(feature = "native-ffmpeg"))]
+                {
+                    Err(Error::from_reason(
+                        "Native libav video backend is not available in this build",
+                    ))
+                }
+            }
+            backend => Err(Error::from_reason(format!(
+                "Unsupported video decoder backend: {backend}"
+            ))),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Cli => "cli",
+            #[cfg(feature = "native-ffmpeg")]
+            Self::Native => "native",
+        }
+    }
 }
 
 impl DecoderBackend {
     fn name(self) -> &'static str {
         match self {
+            #[cfg(any(target_os = "windows", test))]
             Self::D3d11va => "D3D11VA",
+            #[cfg(any(target_os = "linux", test))]
             Self::Vaapi => "VA-API",
             Self::Cpu => "CPU",
         }
@@ -199,6 +245,7 @@ struct SpawnedFfmpeg {
 struct FfmpegRequest {
     ffmpeg_path: String,
     source: String,
+    #[cfg(any(target_os = "linux", test))]
     vaapi_device: String,
     width: usize,
     height: usize,
@@ -291,11 +338,91 @@ impl NativeVideoDecoder {
             .map_err(|_| Error::from_reason("Invalid video height"))?;
         let fps = self.options.fps.unwrap_or(30.0);
         let start_time = self.options.start_time.unwrap_or(0.0);
+        let looped = self.options.loop_.unwrap_or(false);
+        let implementation = DecoderImplementation::resolve(self.options.backend.as_deref())?;
+
+        #[cfg(feature = "native-ffmpeg")]
+        if implementation == DecoderImplementation::Native {
+            set_backend_name(&self.state, "CPU libavcodec");
+            let state = self.state.clone();
+            let native_source = source.clone();
+            ACTIVE_DECODER_WORKERS.fetch_add(1, Ordering::SeqCst);
+            self.worker = Some(thread::spawn(move || {
+                let _active_worker = ActiveDecoderWorker;
+                let run_decode = |hardware_decode| {
+                    let request = native_ffmpeg::NativeDecodeRequest {
+                        source: &native_source,
+                        width,
+                        height,
+                        fps,
+                        start_time,
+                        looped,
+                        hardware_decode,
+                    };
+                    native_ffmpeg::decode_nv12(
+                        &request,
+                        &state.closed,
+                        |active_hardware_decode| {
+                            set_backend_name(
+                                &state,
+                                if active_hardware_decode {
+                                    "D3D11VA libavcodec (CPU transfer)"
+                                } else {
+                                    "CPU libavcodec"
+                                },
+                            );
+                        },
+                        |frame| {
+                            state.decoded_frames.fetch_add(1, Ordering::SeqCst);
+                            state
+                                .frame_buffer_allocations
+                                .fetch_add(1, Ordering::SeqCst);
+                            enqueue_frame(
+                                PendingFrame {
+                                    timestamp_us: frame.timestamp_us,
+                                    data: frame.data,
+                                },
+                                &state,
+                            )
+                            .map_err(|error| error.to_string())
+                        },
+                    )
+                };
+                let mut result = run_decode(cfg!(target_os = "windows"));
+                if result.is_err()
+                    && cfg!(target_os = "windows")
+                    && state.decoded_frames.load(Ordering::SeqCst) == 0
+                    && !state.closed.load(Ordering::SeqCst)
+                {
+                    let hardware_error = result
+                        .as_ref()
+                        .expect_err("failed hardware decode checked above");
+                    eprintln!(
+                        "Native D3D11VA decoder failed before its first frame: {hardware_error}; retrying with CPU libavcodec"
+                    );
+                    result = run_decode(false);
+                }
+                if let Err(error) = result {
+                    if !state.closed.load(Ordering::SeqCst) {
+                        store_error(&state, error);
+                    }
+                }
+                if !state.closed.load(Ordering::SeqCst) {
+                    state.finished.store(true, Ordering::SeqCst);
+                }
+                state.closed.store(true, Ordering::SeqCst);
+            }));
+            return Ok(());
+        }
+
+        #[cfg(not(feature = "native-ffmpeg"))]
+        let _ = implementation;
         let ffmpeg_path = self
             .options
             .ffmpeg_path
             .clone()
             .unwrap_or_else(|| "ffmpeg".to_string());
+        #[cfg(any(target_os = "linux", test))]
         let vaapi_device = self
             .options
             .vaapi_device
@@ -307,6 +434,7 @@ impl NativeVideoDecoder {
         let request = FfmpegRequest {
             ffmpeg_path,
             source,
+            #[cfg(any(target_os = "linux", test))]
             vaapi_device,
             width,
             height,
@@ -567,6 +695,44 @@ impl NativeVideoDecoder {
     }
 
     #[napi]
+    pub fn delivery_path(&self) -> String {
+        "cpu-nv12".to_string()
+    }
+
+    #[napi]
+    pub fn implementation_backend(&self) -> String {
+        DecoderImplementation::resolve(self.options.backend.as_deref())
+            .unwrap_or(DecoderImplementation::Cli)
+            .name()
+            .to_string()
+    }
+
+    #[napi]
+    pub fn gpu_frame_copies(&self) -> i64 {
+        0
+    }
+
+    #[napi]
+    pub fn cpu_frame_bytes(&self) -> i64 {
+        let frame_bytes = nv12_frame_bytes(
+            usize::try_from(self.options.width).unwrap_or(0),
+            usize::try_from(self.options.height).unwrap_or(0),
+        )
+        .unwrap_or(0) as u64;
+        let bytes = self
+            .state
+            .decoded_frames
+            .load(Ordering::SeqCst)
+            .saturating_mul(frame_bytes);
+        i64::try_from(bytes).unwrap_or(i64::MAX)
+    }
+
+    #[napi]
+    pub fn presentation_surface_drops(&self) -> i64 {
+        0
+    }
+
+    #[napi]
     pub fn is_finished(&self) -> bool {
         self.state.finished.load(Ordering::SeqCst)
     }
@@ -625,6 +791,28 @@ impl Drop for NativeVideoDecoder {
 }
 
 fn validate_options(options: &DecoderOptions) -> Result<()> {
+    let implementation = DecoderImplementation::resolve(options.backend.as_deref())?;
+    #[cfg(feature = "native-ffmpeg")]
+    if implementation == DecoderImplementation::Native {
+        if options.end_time.is_some()
+            || options.source_paced.unwrap_or(false)
+            || options.playback_rate.is_some_and(|rate| rate != 1.0)
+            || options
+                .input_args
+                .as_ref()
+                .is_some_and(|args| !args.is_empty())
+            || options
+                .output_args
+                .as_ref()
+                .is_some_and(|args| !args.is_empty())
+        {
+            return Err(Error::from_reason(
+                "Native libav video backend currently supports unbounded file playback at rate 1 without custom FFmpeg arguments",
+            ));
+        }
+    }
+    #[cfg(not(feature = "native-ffmpeg"))]
+    let _ = implementation;
     if options.width <= 0 || options.height <= 0 {
         return Err(Error::from_reason("Video dimensions must be positive"));
     }
@@ -679,9 +867,11 @@ fn ffmpeg_args(request: &FfmpegRequest, backend: DecoderBackend) -> Vec<String> 
     ];
 
     match backend {
+        #[cfg(any(target_os = "windows", test))]
         DecoderBackend::D3d11va => {
             args.extend(["-hwaccel".to_string(), "d3d11va".to_string()]);
         }
+        #[cfg(any(target_os = "linux", test))]
         DecoderBackend::Vaapi => {
             args.extend([
                 "-hwaccel".to_string(),
@@ -716,7 +906,9 @@ fn ffmpeg_args(request: &FfmpegRequest, backend: DecoderBackend) -> Vec<String> 
         request.fps, request.width, request.height
     );
     let filter = match backend {
+        #[cfg(any(target_os = "linux", test))]
         DecoderBackend::Vaapi => format!("hwdownload,format=nv12,{scale}"),
+        #[cfg(any(target_os = "windows", test))]
         DecoderBackend::D3d11va => scale,
         // Keep the CPU fallback independent from the color-negotiation path
         // used after VA-API download. Some FFmpeg builds fail to initialize
@@ -1080,6 +1272,26 @@ impl Drop for ActiveDecoderWorker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decoder_implementation_defaults_to_cli_and_rejects_unavailable_native() {
+        assert_eq!(
+            DecoderImplementation::resolve(None).unwrap(),
+            DecoderImplementation::Cli
+        );
+        assert_eq!(
+            DecoderImplementation::resolve(Some("auto")).unwrap(),
+            DecoderImplementation::Cli
+        );
+        #[cfg(feature = "native-ffmpeg")]
+        assert_eq!(
+            DecoderImplementation::resolve(Some("native")).unwrap(),
+            DecoderImplementation::Native
+        );
+        #[cfg(not(feature = "native-ffmpeg"))]
+        assert!(DecoderImplementation::resolve(Some("native")).is_err());
+        assert!(DecoderImplementation::resolve(Some("unknown")).is_err());
+    }
     use std::sync::mpsc;
     use std::time::Duration;
 
@@ -1174,6 +1386,7 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
+            backend: None,
         });
         assert!(result.is_err());
     }
@@ -1259,6 +1472,7 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
+            backend: None,
         })
         .unwrap();
         let mut target = vec![0; 6];
@@ -1292,6 +1506,7 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
+            backend: None,
         })
         .unwrap();
         let mut target = vec![0; 5];
@@ -1378,6 +1593,7 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
+            backend: None,
         })
         .unwrap()
     }

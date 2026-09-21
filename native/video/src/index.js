@@ -73,6 +73,26 @@ class NativeVideoDecoder {
     return this.decoder.recycledFrameBuffers?.() ?? 0;
   }
 
+  implementationBackend() {
+    return this.decoder.implementationBackend?.() ?? "cli";
+  }
+
+  deliveryPath() {
+    return this.decoder.deliveryPath?.() ?? "cpu-nv12";
+  }
+
+  gpuFrameCopies() {
+    return this.decoder.gpuFrameCopies?.() ?? 0;
+  }
+
+  cpuFrameBytes() {
+    return this.decoder.cpuFrameBytes?.() ?? 0;
+  }
+
+  presentationSurfaceDrops() {
+    return this.decoder.presentationSurfaceDrops?.() ?? 0;
+  }
+
   isFinished() {
     return this.decoder.isFinished();
   }

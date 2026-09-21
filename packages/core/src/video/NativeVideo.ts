@@ -20,6 +20,9 @@ const UHD_PIXEL_COUNT = 3840 * 2160;
 const SOFTWARE_CHROMA_PIXEL_FORMAT = /^yuv(?:422|444)p/;
 const REUSABLE_FRAME_BUFFER_COUNT = 5;
 
+export type NativeVideoBackend = "cli" | "native" | "auto";
+export type NativeVideoDeliveryPath = "cpu-nv12" | "d3d11-shared-nv12";
+
 export interface Nv12FrameLayout {
   readonly yBytes: number;
   readonly uvBytes: number;
@@ -69,8 +72,29 @@ interface NativeDecoderBinding {
   frameBufferAllocations?(): number;
   frameBufferReuses?(): number;
   recycledFrameBuffers?(): number;
+  implementationBackend?(): NativeVideoBackend;
+  deliveryPath?(): NativeVideoDeliveryPath;
+  gpuFrameCopies?(): number;
+  cpuFrameBytes?(): number;
+  presentationSurfaceDrops?(): number;
   isFinished(): boolean;
   close(): void;
+}
+
+interface NativeDecoderBindingOptions {
+  width: number;
+  height: number;
+  fps: number;
+  startTime: number;
+  ffmpegPath: string;
+  vaapiDevice?: string;
+  playbackRate: number;
+  endTime?: number;
+  sourcePaced?: boolean;
+  inputArgs?: string[];
+  outputArgs?: string[];
+  loop?: boolean;
+  backend?: NativeVideoBackend;
 }
 
 interface NativeVideoShutdownDiagnostics {
@@ -81,20 +105,9 @@ interface NativeVideoShutdownDiagnostics {
 }
 
 interface NativeVideoModule {
-  NativeVideoDecoder: new (options: {
-    width: number;
-    height: number;
-    fps: number;
-    startTime: number;
-    ffmpegPath: string;
-    vaapiDevice?: string;
-    playbackRate: number;
-    endTime?: number;
-    sourcePaced?: boolean;
-    inputArgs?: string[];
-    outputArgs?: string[];
-    loop?: boolean;
-  }) => NativeDecoderBinding;
+  NativeVideoDecoder: new (
+    options: NativeDecoderBindingOptions,
+  ) => NativeDecoderBinding;
   videoShutdownDiagnostics?(): NativeVideoShutdownDiagnostics;
 }
 
@@ -105,6 +118,8 @@ export interface NativeVideoOptions {
   readonly width: number;
   readonly height: number;
   readonly fps?: number;
+  /** Decoder implementation. Defaults to native with transparent CLI fallback. */
+  readonly backend?: NativeVideoBackend;
   /** Logs the effective decoder backend after the first frame is presented. */
   readonly logDiagnostics?: boolean;
   readonly ffmpegPath?: string;
@@ -142,6 +157,8 @@ export interface NativeVideoDecoderOptions extends NativeVideoOptions {
 
 /** Read-only counters for the current video source and presentation lifecycle. */
 export interface NativeVideoStats {
+  readonly effectiveBackend: string;
+  readonly deliveryPath: NativeVideoDeliveryPath;
   readonly decodedFrames: number;
   readonly presentedFrames: number;
   readonly droppedFrames: number;
@@ -152,6 +169,9 @@ export interface NativeVideoStats {
   readonly frameBufferAllocations: number;
   readonly frameBufferReuses: number;
   readonly recycledFrameBuffers: number;
+  readonly gpuFrameCopies: number;
+  readonly cpuFrameBytes: number;
+  readonly presentationSurfaceDrops: number;
 }
 
 export interface NativeVideoDecoderLike {
@@ -169,6 +189,11 @@ export interface NativeVideoDecoderLike {
   frameBufferAllocations?(): number;
   frameBufferReuses?(): number;
   recycledFrameBuffers?(): number;
+  implementationBackend?(): NativeVideoBackend;
+  deliveryPath?(): NativeVideoDeliveryPath;
+  gpuFrameCopies?(): number;
+  cpuFrameBytes?(): number;
+  presentationSurfaceDrops?(): number;
   isFinished(): boolean;
   close(): void;
 }
@@ -366,9 +391,14 @@ function probeMedia(
 }
 
 export class NativeVideoDecoder implements NativeVideoDecoderLike {
-  private readonly decoder: NativeDecoderBinding;
+  private decoder: NativeDecoderBinding;
+  private readonly nativeVideo: NativeVideoModule;
+  private readonly bindingOptions: Omit<NativeDecoderBindingOptions, "backend">;
+  private readonly requestedBackend: NativeVideoBackend;
   private readonly frameBuffers: Buffer[];
   private nextFrameBuffer = 0;
+  private source: string | undefined;
+  private cliFallbackAttempted = false;
 
   public constructor(options: NativeVideoDecoderOptions) {
     const layout = getNv12FrameLayout(options.width, options.height);
@@ -385,9 +415,10 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
       throw new Error("Video playback rate must be positive and finite");
     }
 
-    const nativeVideo = loadNativeVideo<NativeVideoModule>();
-    loadedNativeVideoModule = nativeVideo;
-    this.decoder = new nativeVideo.NativeVideoDecoder({
+    this.nativeVideo = loadNativeVideo<NativeVideoModule>();
+    loadedNativeVideoModule = this.nativeVideo;
+    this.requestedBackend = options.backend ?? "auto";
+    this.bindingOptions = {
       width: options.width,
       height: options.height,
       fps,
@@ -402,7 +433,8 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
       ffmpegPath: resolveFfmpegPath({
         explicitPath: options.ffmpegPath,
       }),
-    });
+    };
+    this.decoder = this.createInitialDecoder();
     this.frameBuffers = Array.from(
       { length: REUSABLE_FRAME_BUFFER_COUNT },
       () => Buffer.allocUnsafe(layout.frameBytes),
@@ -410,7 +442,12 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
   }
 
   public open(source: string): void {
-    this.decoder.open(source);
+    this.source = source;
+    try {
+      this.decoder.open(source);
+    } catch (error) {
+      if (!this.tryCliFallback()) throw error;
+    }
   }
 
   public pollLatest(): NativeVideoFrame | null {
@@ -442,7 +479,15 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
   }
 
   public pollError(): string | null {
-    return this.decoder.pollError();
+    const message = this.decoder.pollError();
+    if (
+      message &&
+      this.decoder.decodedFrames() === 0 &&
+      this.tryCliFallback()
+    ) {
+      return null;
+    }
+    return message;
   }
 
   public backend(): string {
@@ -473,12 +518,73 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
     return this.decoder.recycledFrameBuffers?.() ?? 0;
   }
 
+  public implementationBackend(): NativeVideoBackend {
+    return this.decoder.implementationBackend?.() ?? "cli";
+  }
+
+  public deliveryPath(): NativeVideoDeliveryPath {
+    return this.decoder.deliveryPath?.() ?? "cpu-nv12";
+  }
+
+  public gpuFrameCopies(): number {
+    return this.decoder.gpuFrameCopies?.() ?? 0;
+  }
+
+  public cpuFrameBytes(): number {
+    return this.decoder.cpuFrameBytes?.() ?? 0;
+  }
+
+  public presentationSurfaceDrops(): number {
+    return this.decoder.presentationSurfaceDrops?.() ?? 0;
+  }
+
   public isFinished(): boolean {
     return this.decoder.isFinished();
   }
 
   public close(): void {
     this.decoder.close();
+    this.source = undefined;
+  }
+
+  private createInitialDecoder(): NativeDecoderBinding {
+    if (this.requestedBackend !== "auto") {
+      return this.createDecoder(this.requestedBackend);
+    }
+    try {
+      return this.createDecoder("native");
+    } catch {
+      this.cliFallbackAttempted = true;
+      return this.createDecoder("cli");
+    }
+  }
+
+  private createDecoder(backend: "native" | "cli"): NativeDecoderBinding {
+    return new this.nativeVideo.NativeVideoDecoder({
+      ...this.bindingOptions,
+      backend,
+    });
+  }
+
+  private tryCliFallback(): boolean {
+    if (
+      this.requestedBackend !== "auto" ||
+      this.cliFallbackAttempted ||
+      !this.source
+    ) {
+      return false;
+    }
+    this.cliFallbackAttempted = true;
+    this.decoder.close();
+    const fallback = this.createDecoder("cli");
+    try {
+      fallback.open(this.source);
+      this.decoder = fallback;
+      return true;
+    } catch {
+      fallback.close();
+      return false;
+    }
   }
 
   private pollInto(mode: "latest" | "next"): NativeVideoFrame | null {
@@ -708,10 +814,15 @@ export class NativeVideo extends EventTarget {
   private hasEnded = false;
   private destroyed = false;
   private lastBackend = "not started";
+  private lastImplementationBackend: NativeVideoBackend = "cli";
+  private lastDeliveryPath: NativeVideoDeliveryPath = "cpu-nv12";
   private lastError: Error | null = null;
   private decodedFrameBase = 0;
   private droppedFrameBase = 0;
   private skippedFrameBase = 0;
+  private gpuFrameCopyBase = 0;
+  private cpuFrameByteBase = 0;
+  private presentationSurfaceDropBase = 0;
   private presentedFrameCount = 0;
   private skippedFrameCount = 0;
   private syncOffsetMilliseconds = 0;
@@ -968,6 +1079,10 @@ export class NativeVideo extends EventTarget {
   public get stats(): NativeVideoStats {
     const layout = getNv12FrameLayout(this.width, this.height);
     return {
+      effectiveBackend:
+        this.decoder?.implementationBackend?.() ??
+        this.lastImplementationBackend,
+      deliveryPath: this.decoder?.deliveryPath?.() ?? this.lastDeliveryPath,
       decodedFrames:
         this.decodedFrameBase + (this.decoder?.decodedFrames() ?? 0),
       presentedFrames: this.presentedFrameCount,
@@ -984,6 +1099,15 @@ export class NativeVideo extends EventTarget {
       frameBufferAllocations: this.decoder?.frameBufferAllocations?.() ?? 0,
       frameBufferReuses: this.decoder?.frameBufferReuses?.() ?? 0,
       recycledFrameBuffers: this.decoder?.recycledFrameBuffers?.() ?? 0,
+      gpuFrameCopies:
+        this.gpuFrameCopyBase + (this.decoder?.gpuFrameCopies?.() ?? 0),
+      cpuFrameBytes:
+        this.cpuFrameByteBase +
+        (this.decoder?.cpuFrameBytes?.() ??
+          (this.decoder?.decodedFrames() ?? 0) * layout.frameBytes),
+      presentationSurfaceDrops:
+        this.presentationSurfaceDropBase +
+        (this.decoder?.presentationSurfaceDrops?.() ?? 0),
     };
   }
 
@@ -1151,6 +1275,8 @@ export class NativeVideo extends EventTarget {
       decoder.open(this.decodedSource);
       this.decoder = decoder;
       this.lastBackend = decoder.backend();
+      this.lastImplementationBackend =
+        decoder.implementationBackend?.() ?? this.options.backend ?? "cli";
       if (this.options.mediaType === "live") {
         this.livePresentationDeadlineMs =
           performance.now() + LIVE_PRESENTATION_STALL_TIMEOUT_MS;
@@ -1394,7 +1520,18 @@ export class NativeVideo extends EventTarget {
     this.decodedFrameBase += this.decoder.decodedFrames();
     this.droppedFrameBase += this.decoder.droppedFrames();
     this.skippedFrameBase += this.decoder.skippedFrames();
+    this.gpuFrameCopyBase += this.decoder.gpuFrameCopies?.() ?? 0;
+    this.cpuFrameByteBase +=
+      this.decoder.cpuFrameBytes?.() ??
+      this.decoder.decodedFrames() *
+        getNv12FrameLayout(this.width, this.height).frameBytes;
+    this.presentationSurfaceDropBase +=
+      this.decoder.presentationSurfaceDrops?.() ?? 0;
     this.lastBackend = this.decoder.backend();
+    this.lastImplementationBackend =
+      this.decoder.implementationBackend?.() ?? this.lastImplementationBackend;
+    this.lastDeliveryPath =
+      this.decoder.deliveryPath?.() ?? "cpu-nv12";
     this.decoder.close();
     this.decoder = undefined;
   }
@@ -1477,11 +1614,16 @@ export class NativeVideo extends EventTarget {
     this.positionSeconds = this.segmentStart;
     this.hasEnded = false;
     this.lastBackend = "not started";
+    this.lastImplementationBackend = "cli";
+    this.lastDeliveryPath = "cpu-nv12";
     this.lastError = null;
     this.lastAudioError = null;
     this.decodedFrameBase = 0;
     this.droppedFrameBase = 0;
     this.skippedFrameBase = 0;
+    this.gpuFrameCopyBase = 0;
+    this.cpuFrameByteBase = 0;
+    this.presentationSurfaceDropBase = 0;
     this.presentedFrameCount = 0;
     this.skippedFrameCount = 0;
     this.syncOffsetMilliseconds = 0;
@@ -1505,11 +1647,19 @@ export class NativeVideo extends EventTarget {
       return;
     this.presentationDiagnosticsLogged = true;
     const backend = this.backend;
+    const implementationBackend =
+      this.decoder?.implementationBackend?.() ??
+      this.lastImplementationBackend;
+    const deliveryPath =
+      this.decoder?.deliveryPath?.() ?? this.lastDeliveryPath;
     console.info("[pixi-native] Video presentation started", {
       source: redactMediaSource(this.decodedSource),
+      implementationBackend,
       backend,
-      hardwareDecode: backend === "D3D11VA" || backend === "VA-API",
-      zeroCopy: false,
+      hardwareDecode:
+        backend.startsWith("D3D11VA") || backend.startsWith("VA-API"),
+      deliveryPath,
+      zeroCopy: deliveryPath === "d3d11-shared-nv12",
       width: this.width,
       height: this.height,
       fps: this.fps,
