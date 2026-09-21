@@ -68,6 +68,7 @@ export function createVideoTest(
     height: HEIGHT,
     fps: sources[videoIndex].fps,
     loop: true,
+    logDiagnostics: true,
   });
   let sprite = new NativeVideoSprite7(video);
   const videoGroup = new Container();

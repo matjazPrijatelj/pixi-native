@@ -153,6 +153,41 @@ test("NativeVideo restarts at currentTime for pause, resume, and seek", async ()
   await assert.rejects(video.play(), /destroyed/);
 });
 
+test("NativeVideo logs the effective backend after the first presented frame", async (context) => {
+  const logs: unknown[][] = [];
+  context.mock.method(console, "info", (...values: unknown[]) => {
+    logs.push(values);
+  });
+  const factory = new FakeDecoderFactory();
+  const video = new NativeVideo(
+    "https://user:secret@example.test/video.mp4",
+    { width: 2, height: 2, fps: 30, audio: false, logDiagnostics: true },
+    factory,
+  );
+
+  await video.play();
+  factory.decoders[0].backendName = "CPU fallback";
+  factory.decoders[0].frame = createFrame(0);
+  assert.ok(video.takeLatestFrame());
+  video.markFramePresented();
+  factory.decoders[0].frame = createFrame(0);
+  assert.ok(video.takeLatestFrame());
+  video.markFramePresented();
+
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0]?.[0], "[pixi-native] Video presentation started");
+  assert.deepEqual(logs[0]?.[1], {
+    source: "https://***:***@example.test/video.mp4",
+    backend: "CPU fallback",
+    hardwareDecode: false,
+    zeroCopy: false,
+    width: 2,
+    height: 2,
+    fps: 30,
+  });
+  video.destroy();
+});
+
 test("changing src resets state and continues active playback on the new source", async () => {
   const factory = new FakeDecoderFactory();
   const video = new NativeVideo(
@@ -776,6 +811,7 @@ class FakeDecoder implements NativeVideoDecoderLike {
   public finished = false;
   public closed = false;
   public ready = true;
+  public backendName = "fake";
   public source: string | null = null;
   public readonly catchUpTargets: number[] = [];
 
@@ -825,7 +861,7 @@ class FakeDecoder implements NativeVideoDecoderLike {
   }
 
   public backend(): string {
-    return "fake";
+    return this.backendName;
   }
 
   public decodedFrames(): number {

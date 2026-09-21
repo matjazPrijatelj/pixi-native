@@ -2,6 +2,9 @@
 
 ## 2026-09-21
 
+- Added opt-in first-presented-frame video diagnostics that report the
+  effective decoder backend, hardware-decode state, dimensions, FPS, and the
+  current non-zero-copy pipeline without exposing URL credentials.
 - Prepared the next `0.2.7` runtime and `0.1.11` generator versions after the
   immutable `0.2.6` runtime publication.
 - Kept full-file video and audio loops inside their existing FFmpeg processes,

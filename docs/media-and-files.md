@@ -61,6 +61,7 @@ const video = new NativeVideo(files.resolvePath("../assets/intro.mp4"), {
   width: 1920,
   height: 1080,
   audio: true,
+  logDiagnostics: true,
 });
 const sprite = new VideoSprite(video);
 
@@ -80,6 +81,11 @@ The public video API supports:
 Windows uses D3D11VA when available and falls back to CPU decoding. Linux uses
 VA-API when available and has the same CPU fallback. Both platform packages
 contain the project's minimal FFmpeg and FFprobe executables.
+
+Set `logDiagnostics: true` to emit one structured message after the renderer
+presents the first frame. `D3D11VA` or `VA-API` with `hardwareDecode: true`
+confirms hardware decoding. `zeroCopy` remains `false` because decoded NV12
+frames currently pass through CPU memory before their GPU texture upload.
 
 FFmpeg lookup checks an explicit `ffmpegPath`, `FFMPEG_PATH`, the installed
 native platform package, and then development `PATH`.

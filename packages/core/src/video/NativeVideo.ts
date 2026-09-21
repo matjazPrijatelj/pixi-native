@@ -105,6 +105,8 @@ export interface NativeVideoOptions {
   readonly width: number;
   readonly height: number;
   readonly fps?: number;
+  /** Logs the effective decoder backend after the first frame is presented. */
+  readonly logDiagnostics?: boolean;
   readonly ffmpegPath?: string;
   readonly vaapiDevice?: string;
   readonly audio?: boolean;
@@ -739,6 +741,7 @@ export class NativeVideo extends EventTarget {
   private reconnectAtMs = 0;
   private livePresentationDeadlineMs = 0;
   private frameAwaitingPresentation = false;
+  private presentationDiagnosticsLogged = false;
   private readonly registryReference: WeakRef<NativeVideo>;
   private metadataPromise?: Promise<void>;
   private sourceGeneration = 0;
@@ -1111,6 +1114,7 @@ export class NativeVideo extends EventTarget {
     if (this.destroyed || !this.frameAwaitingPresentation) return;
     this.frameAwaitingPresentation = false;
     this.presentedFrameCount++;
+    this.logPresentationDiagnostics();
     this.handlePresentedFrameState();
   }
 
@@ -1483,6 +1487,7 @@ export class NativeVideo extends EventTarget {
     this.syncOffsetMilliseconds = 0;
     this.reconnectAttempt = 0;
     this.reconnectAtMs = 0;
+    this.presentationDiagnosticsLogged = false;
     this.sourcePixelFormat = undefined;
     this.videoWidth = this.width;
     this.videoHeight = this.height;
@@ -1492,6 +1497,23 @@ export class NativeVideo extends EventTarget {
         : this.segmentEnd ?? Number.NaN;
     this.lastTimeUpdateMs = Number.NEGATIVE_INFINITY;
     this.resetReadiness();
+  }
+
+  /** Logs only after renderer upload, so the reported backend produced a visible frame. */
+  private logPresentationDiagnostics(): void {
+    if (!this.options.logDiagnostics || this.presentationDiagnosticsLogged)
+      return;
+    this.presentationDiagnosticsLogged = true;
+    const backend = this.backend;
+    console.info("[pixi-native] Video presentation started", {
+      source: redactMediaSource(this.decodedSource),
+      backend,
+      hardwareDecode: backend === "D3D11VA" || backend === "VA-API",
+      zeroCopy: false,
+      width: this.width,
+      height: this.height,
+      fps: this.fps,
+    });
   }
 
   private loadMetadataInBackground(): void {
