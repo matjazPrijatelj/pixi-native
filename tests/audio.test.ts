@@ -112,6 +112,37 @@ test(
 );
 
 test(
+  "group fade without active voices sets the volume inherited by later playback",
+  {
+    skip: process.env.PIXI_NATIVE_HEADLESS === "1",
+  },
+  async () => {
+    const { Howl, Howler } = await import("@pixi-native/core/audio");
+    const howl = new Howl({
+      src: [source],
+      sprite: { future: [0, 800] },
+      preloadSprites: true,
+    });
+
+    try {
+      await waitForEvent(howl, "load", 5_000);
+      howl.volume(0);
+      assert.equal(howl.playing(), false);
+
+      howl.fade(0, 0.65, 250);
+      assert.equal(howl.volume(), 0.65);
+
+      const id = howl.play("future");
+      await waitForPlay(howl, 5_000, id);
+      assert.ok(Math.abs(howl.volume(undefined, id) - 0.65) < 0.05);
+    } finally {
+      howl.unload();
+      Howler.unload();
+    }
+  },
+);
+
+test(
   "native miniaudio advances while JS is blocked and batches audible events once",
   {
     skip: process.platform !== "win32" || process.arch !== "x64",

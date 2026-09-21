@@ -13,6 +13,8 @@
 - Fixed the TypeScript video-decoder adapter to forward its continuous-loop
   flag into the native N-API binding, preventing the decoder from falling back
   to a visible process restart at every loop boundary.
+- Made group-level `Howl.fade()` retain its target volume when no voice is
+  active, so later effects and announcements inherit the intended volume.
 - Prepared and validated the lockstep `0.2.6` runtime packages for Windows and
   Linux plus the `0.1.10` generator package, without publication.
 - Advanced PixiJS 7 shared-ticker animations before each native modal
