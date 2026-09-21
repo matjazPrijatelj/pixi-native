@@ -49,6 +49,23 @@ export type App = ManagedNativeApplication<Application, NodeRendererContext>;
 
 let nativeAssetsInitialization: Promise<void> | undefined;
 
+interface ModalFrameTicker {
+  readonly started: boolean;
+  update(timestamp: number): void;
+}
+
+/** Advances shared animations before rendering the same native modal frame. */
+export function dispatchPixi8ModalFrame(
+  timestamp: number,
+  sharedTicker: ModalFrameTicker,
+  listeners: ReadonlySet<() => void>,
+  dispatchAnimationFrame: (timestamp: number) => unknown,
+): void {
+  if (sharedTicker.started) sharedTicker.update(timestamp);
+  for (const listener of [...listeners]) listener();
+  dispatchAnimationFrame(timestamp);
+}
+
 /** Prepares Pixi's browser-facing Assets API for the installed native DOM. */
 function initializeNativeAssets(): Promise<void> {
   nativeAssetsInitialization ??= (() => {

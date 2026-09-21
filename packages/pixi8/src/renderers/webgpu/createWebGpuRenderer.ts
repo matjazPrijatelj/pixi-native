@@ -1,4 +1,4 @@
-import { Application, DOMAdapter, VERSION } from "pixi.js";
+import { Application, DOMAdapter, Ticker, VERSION } from "pixi.js";
 import { Image } from "@napi-rs/canvas";
 import {
   NodeDOMAdapter,
@@ -37,7 +37,10 @@ import {
 import { loadNativeGpu } from "@pixi-native/core/runtime/platformNative.js";
 
 import type { NodeRendererOptions } from "@pixi-native/core/runtime/nativeTypes.js";
-import type { NodeRendererContext } from "../../createPixiRenderer.ts";
+import {
+  dispatchPixi8ModalFrame,
+  type NodeRendererContext,
+} from "../../createPixiRenderer.ts";
 
 export async function createWebGpuRenderer(
   options: NodeRendererOptions = {},
@@ -278,8 +281,13 @@ export async function createWebGpuRenderer(
     window.surface.window,
     () => {
       resizeToWindow(true);
-      for (const listener of [...modalFrameListeners]) listener();
-      domAdapter.dispatchModalFrame(performance.now());
+      const timestamp = performance.now();
+      dispatchPixi8ModalFrame(
+        timestamp,
+        Ticker.shared,
+        modalFrameListeners,
+        (frameTimestamp) => domAdapter.dispatchModalFrame(frameTimestamp),
+      );
     },
     setNativeVideoModalState,
   );

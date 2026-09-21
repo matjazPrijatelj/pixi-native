@@ -6,6 +6,7 @@
   Linux plus the `0.1.10` generator package, without publication.
 - Advanced PixiJS 7 shared-ticker animations before each native modal
   move/resize render, using one timestamp to prevent duplicate ticker updates.
+- Applied the same modal shared-ticker behavior to PixiJS 8 WebGL and WebGPU.
 - Confirmed the modal move/resize animation fix on a target display.
 - Fixed PixiJS 7 native video sprites to apply inherited world alpha to both
   normal NV12 and packed-alpha video using premultiplied shader output.

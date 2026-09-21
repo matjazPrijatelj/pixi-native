@@ -1,11 +1,14 @@
-import { Application, DOMAdapter, VERSION } from "pixi.js";
+import { Application, DOMAdapter, Ticker, VERSION } from "pixi.js";
 import { Image as CanvasImage } from "@napi-rs/canvas";
 
 import { NodeDOMAdapter } from "@pixi-native/core/runtime/NodeDOMAdapter.js";
 import { createNodeSdlWebGLSurface } from "@pixi-native/core/renderers/webgl/NodeSdlWebGLSurface.js";
 import { installWebGlImageUploadAdapter } from "@pixi-native/core/renderers/webgl/webglImageUpload.js";
 import { attachWebGlResourceStats } from "@pixi-native/core/renderers/webgl/webGlResourceTracker.js";
-import type { NodeRendererContext } from "../../createPixiRenderer.ts";
+import {
+  dispatchPixi8ModalFrame,
+  type NodeRendererContext,
+} from "../../createPixiRenderer.ts";
 import type { NodeRendererOptions } from "@pixi-native/core/runtime/nativeTypes.js";
 import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
 import {
@@ -99,8 +102,13 @@ export async function createWebGlRenderer(
       nativeWindowData,
       () => {
         resizeToWindow(true);
-        for (const listener of [...modalFrameListeners]) listener();
-        domAdapter.dispatchModalFrame(performance.now());
+        const timestamp = performance.now();
+        dispatchPixi8ModalFrame(
+          timestamp,
+          Ticker.shared,
+          modalFrameListeners,
+          (frameTimestamp) => domAdapter.dispatchModalFrame(frameTimestamp),
+        );
       },
       setNativeVideoModalState,
     );
