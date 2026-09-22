@@ -36,7 +36,9 @@ const nativeFfmpegEnabled =
 const nativeFfmpegSdk = resolve(
   root,
   process.env.PIXI_NATIVE_FFMPEG_SDK?.trim() ||
-    "../ffmpeg/out/win32-x64-shared",
+    (process.platform === "win32"
+      ? "../ffmpeg/out/win32-x64-shared"
+      : "../ffmpeg/out/linux-x64-shared"),
 );
 const packageOutput = resolve(
   root,
@@ -51,20 +53,28 @@ const packageOutput = resolve(
 const cargoArguments = ["build", "--release"];
 let cargoEnvironment = process.env;
 if (nativeFfmpegEnabled) {
-  if (process.platform !== "win32") {
+  if (process.platform !== "win32" && process.platform !== "linux") {
     throw new Error(
-      "The native FFmpeg backend build currently supports Windows only.",
+      `Native FFmpeg backend builds support Windows and Linux x64, not ${process.platform}.`,
     );
   }
   const includeDirectory = resolve(nativeFfmpegSdk, "include");
   const binaryDirectory = resolve(nativeFfmpegSdk, "bin");
-  // FFmpeg's MSVC install places import libraries next to the DLLs.
-  const libraryDirectory = binaryDirectory;
+  // The MSVC SDK places import libraries beside DLLs; Linux shared SDKs keep
+  // their runtime libraries and pkg-config metadata under lib/.
+  const libraryDirectory =
+    process.platform === "win32" ? binaryDirectory : resolve(nativeFfmpegSdk, "lib");
   for (const requiredPath of [
     resolve(includeDirectory, "libavcodec", "avcodec.h"),
-    resolve(libraryDirectory, "avcodec.lib"),
-    resolve(libraryDirectory, "avformat.lib"),
-    resolve(libraryDirectory, "avutil.lib"),
+    process.platform === "win32"
+      ? resolve(libraryDirectory, "avcodec.lib")
+      : resolve(libraryDirectory, "pkgconfig", "libavcodec.pc"),
+    process.platform === "win32"
+      ? resolve(libraryDirectory, "avformat.lib")
+      : resolve(libraryDirectory, "pkgconfig", "libavformat.pc"),
+    process.platform === "win32"
+      ? resolve(libraryDirectory, "avutil.lib")
+      : resolve(libraryDirectory, "pkgconfig", "libavutil.pc"),
   ]) {
     try {
       await access(requiredPath);
@@ -77,9 +87,20 @@ if (nativeFfmpegEnabled) {
   cargoArguments.push("--features", "native-ffmpeg");
   cargoEnvironment = {
     ...process.env,
-    FFMPEG_INCLUDE_DIR: includeDirectory,
-    FFMPEG_LIBS_DIR: libraryDirectory,
-    PATH: `${binaryDirectory};${process.env.PATH ?? ""}`,
+    ...(process.platform === "win32"
+      ? {
+          FFMPEG_INCLUDE_DIR: includeDirectory,
+          FFMPEG_LIBS_DIR: libraryDirectory,
+          PATH: `${binaryDirectory};${process.env.PATH ?? ""}`,
+        }
+      : {
+          FFMPEG_PKG_CONFIG_PATH: resolve(libraryDirectory, "pkgconfig"),
+          FFMPEG_LINK_MODE: "dynamic",
+          LD_LIBRARY_PATH: `${libraryDirectory}:${process.env.LD_LIBRARY_PATH ?? ""}`,
+          // The package stages FFmpeg .so files beside native_video.node.
+          // Keep that directory in the addon's runtime lookup path.
+          RUSTFLAGS: `${process.env.RUSTFLAGS ?? ""} -C link-arg=-Wl,-rpath,$ORIGIN`.trim(),
+        }),
   };
 }
 
@@ -95,7 +116,7 @@ const nativeBinary = resolve(
 await copyFile(resolve(root, "target", "release", artifact), nativeBinary);
 await copyFile(nativeBinary, resolve(packageOutput, "native_video.node"));
 
-if (nativeFfmpegEnabled) {
+if (nativeFfmpegEnabled && process.platform === "win32") {
   const binaryDirectory = resolve(nativeFfmpegSdk, "bin");
   const availableFiles = new Set(await readdir(binaryDirectory));
   const sharedLibraries = WIN32_NATIVE_VIDEO_FFMPEG_DLLS;
@@ -111,6 +132,29 @@ if (nativeFfmpegEnabled) {
     );
     await copyFile(
       resolve(binaryDirectory, filename),
+      resolve(packageOutput, filename),
+    );
+  }
+}
+
+if (nativeFfmpegEnabled && process.platform === "linux") {
+  const libraryDirectory = resolve(nativeFfmpegSdk, "lib");
+  const libraryFiles = await readdir(libraryDirectory);
+  const sharedLibraries = libraryFiles.filter((filename) =>
+    /^lib(?:avcodec|avdevice|avfilter|avformat|avutil|swresample|swscale)\.so\.\d+(?:\.\d+)*$/u.test(filename),
+  );
+  if (sharedLibraries.length === 0) {
+    throw new Error(
+      `Native FFmpeg SDK is incomplete at ${nativeFfmpegSdk}: no FFmpeg shared libraries found in ${libraryDirectory}`,
+    );
+  }
+  for (const filename of sharedLibraries) {
+    await copyFile(
+      resolve(libraryDirectory, filename),
+      resolve(root, "dist", platformDirectory, filename),
+    );
+    await copyFile(
+      resolve(libraryDirectory, filename),
       resolve(packageOutput, filename),
     );
   }

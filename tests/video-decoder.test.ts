@@ -114,6 +114,8 @@ test("NativeVideoDecoder forwards continuous loop playback to the native binding
 });
 
 test("native FFmpeg backend decodes NV12 in process when its shared SDK is present", async (context) => {
+  const previousBackend = process.env.PIXI_NATIVE_VIDEO_BACKEND;
+  process.env.PIXI_NATIVE_VIDEO_BACKEND = "lib";
   let decoder: NativeVideoDecoder;
   try {
     decoder = new NativeVideoDecoder({
@@ -123,6 +125,11 @@ test("native FFmpeg backend decodes NV12 in process when its shared SDK is prese
       loop: true,
     });
   } catch (error) {
+    if (previousBackend === undefined) {
+      delete process.env.PIXI_NATIVE_VIDEO_BACKEND;
+    } else {
+      process.env.PIXI_NATIVE_VIDEO_BACKEND = previousBackend;
+    }
     if (String(error).includes("not available in this build")) {
       context.skip("native FFmpeg feature is not present in this platform artifact");
       return;
@@ -144,6 +151,10 @@ test("native FFmpeg backend decodes NV12 in process when its shared SDK is prese
       if (!frame) await new Promise<void>((resolve) => setTimeout(resolve, 5));
     }
     assert.ok(frame);
+    if (decoder.implementationBackend() !== "native") {
+      context.skip("native FFmpeg decoder fell back to CLI on this host");
+      return;
+    }
     assert.equal(isGpuNativeVideoFrame(frame), false);
     if (isGpuNativeVideoFrame(frame)) throw new Error("Expected CPU NV12 frame");
     assert.equal(frame.y.byteLength + frame.uv.byteLength, 1_536);
@@ -164,6 +175,11 @@ test("native FFmpeg backend decodes NV12 in process when its shared SDK is prese
     assert.equal(decoder.isFinished(), false);
   } finally {
     decoder.close();
+    if (previousBackend === undefined) {
+      delete process.env.PIXI_NATIVE_VIDEO_BACKEND;
+    } else {
+      process.env.PIXI_NATIVE_VIDEO_BACKEND = previousBackend;
+    }
   }
 });
 

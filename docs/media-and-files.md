@@ -70,9 +70,11 @@ runtime.addDestroyListener(() => video.destroy());
 await video.play();
 ```
 
-The process-wide `PIXI_NATIVE_VIDEO_BACKEND` environment variable selects the
-FFmpeg implementation: `lib` is the default in-process libavcodec decoder and
-`cli` selects the bundled FFmpeg process.
+By default, CPU NV12 delivery (including Pixi 8 WebGL) uses the bundled FFmpeg
+CLI, which has the smoother CPU-transfer pipeline. Pixi 8 WebGPU's `gpu-nv12`
+delivery uses the in-process libavcodec decoder to retain native GPU surfaces.
+Set the process-wide `PIXI_NATIVE_VIDEO_BACKEND=lib` or `cli` to force a
+specific implementation for diagnostics; the selection cannot vary per video.
 
 The public video API supports:
 
@@ -86,17 +88,23 @@ Windows uses D3D11VA when available and falls back to CPU decoding. Linux uses
 VA-API when available and has the same CPU fallback. Both platform packages
 contain the project's minimal FFmpeg and FFprobe executables.
 
-`backend` accepts `"cli"`, `"native"`, or `"auto"` and defaults to `"auto"`.
-The Windows `"native"` backend uses in-process FFmpeg 8 and D3D11VA. PixiJS 8
-WebGPU copies each decoder array slice into a shareable NV12 texture entirely
+The in-process `lib` implementation uses FFmpeg 8 and D3D11VA on Windows.
+PixiJS 8 WebGPU copies each decoder array slice into a shareable NV12 texture entirely
 on the GPU, imports it into Dawn/D3D12, and samples its Y and UV planes in the
 Pixi shader. No frame bytes pass through CPU memory or JavaScript on that path.
-If shared-texture import is unavailable or fails, playback restarts with native
-CPU NV12 delivery. It supports full-file looping at rate `1` without custom
-FFmpeg arguments. `"auto"` tries native first and falls back to CLI if native
-is unavailable, rejects the requested options, cannot open the source, or
-fails before its first decoded frame. Bounded segments, live input,
-playback-rate changes, and custom arguments therefore select the CLI fallback.
+If shared-texture import is unavailable or fails, playback restarts with CLI
+CPU NV12 delivery. The in-process implementation supports full-file looping at
+rate `1` without custom FFmpeg arguments. CPU delivery, bounded segments, live
+input, playback-rate changes, and custom arguments therefore use CLI unless
+`PIXI_NATIVE_VIDEO_BACKEND=lib` explicitly overrides that policy.
+
+For repeatable Windows WebGL comparisons, run
+`pnpm video:benchmark:webgl -- --duration-seconds 30 --asset 4k_60fps.mp4`.
+It writes one log per decoder and `summary.json` beneath
+`artifacts/video-benchmarks/`. To build the optional Linux in-process decoder
+from WSL, run `pnpm native:video:build:linux:lib:wsl`; it builds the matching
+shared FFmpeg 8 SDK first and stages its required shared libraries with the
+Linux native package.
 
 Set `logDiagnostics: true` to emit one structured message after the renderer
 presents the first frame. `implementationBackend` distinguishes CLI from

@@ -6,8 +6,7 @@
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-#[cfg(target_os = "windows")]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rsmpeg::avcodec::AVCodecContext;
 use rsmpeg::avformat::AVFormatContextInput;
@@ -103,6 +102,10 @@ pub(crate) fn decode_nv12(
     let width = i32::try_from(request.width).map_err(|error| error.to_string())?;
     let height = i32::try_from(request.height).map_err(|error| error.to_string())?;
     let mut scaler: Option<SwsContext> = None;
+    let mut transfer_scratch: Option<AVFrame> = None;
+    let mut output_scratch = AVFrame::new();
+    let mut pacer = CpuTransferPacer::default();
+    let mut profile = CpuTransferProfile::from_environment();
     let mut timeline = PlaybackTimeline::new(request.start_time, request.fps);
     let mut reported_hardware = None;
 
@@ -112,6 +115,10 @@ pub(crate) fn decode_nv12(
             drain_frames(
                 &mut codec,
                 &mut scaler,
+                &mut transfer_scratch,
+                &mut output_scratch,
+                &mut pacer,
+                &mut profile,
                 width,
                 height,
                 time_base,
@@ -147,6 +154,10 @@ pub(crate) fn decode_nv12(
         drain_frames(
             &mut codec,
             &mut scaler,
+            &mut transfer_scratch,
+            &mut output_scratch,
+            &mut pacer,
+            &mut profile,
             width,
             height,
             time_base,
@@ -168,6 +179,10 @@ pub(crate) fn decode_nv12(
 fn drain_frames(
     codec: &mut AVCodecContext,
     scaler: &mut Option<SwsContext>,
+    transfer_scratch: &mut Option<AVFrame>,
+    output_scratch: &mut AVFrame,
+    pacer: &mut CpuTransferPacer,
+    profile: &mut CpuTransferProfile,
     width: i32,
     height: i32,
     time_base: ffi::AVRational,
@@ -225,16 +240,14 @@ fn drain_frames(
             configured(hardware_decode, false);
             *reported_hardware = Some(hardware_decode);
         }
-        let transferred = if decoded.format == ffi::AV_PIX_FMT_D3D11 {
-            let mut software = AVFrame::new();
-            software
-                .hwframe_transfer_data(&decoded)
-                .map_err(error_string)?;
-            Some(software)
+        pacer.wait_until(timestamp_us, closed);
+        let transfer_started = Instant::now();
+        let decoded = if decoded.format == ffi::AV_PIX_FMT_D3D11 {
+            transfer_into_reusable_frame(transfer_scratch, &decoded)?
         } else {
-            None
+            &decoded
         };
-        let decoded = transferred.as_ref().unwrap_or(&decoded);
+        profile.download_elapsed(transfer_started.elapsed());
         if scaler.is_none() {
             *scaler = SwsContext::get_context(
                 decoded.width,
@@ -256,15 +269,6 @@ fn drain_frames(
         let scaler = scaler
             .as_mut()
             .ok_or_else(|| "Could not create FFmpeg NV12 scaler".to_string())?;
-        let mut nv12 = AVFrame::new();
-        nv12.set_format(ffi::AV_PIX_FMT_NV12);
-        nv12.set_width(width);
-        nv12.set_height(height);
-        nv12.get_buffer(32).map_err(error_string)?;
-        scaler
-            .scale_frame(&decoded, 0, decoded.height, &mut nv12)
-            .map_err(error_string)?;
-
         let frame_bytes = request
             .width
             .checked_mul(request.height)
@@ -272,11 +276,125 @@ fn drain_frames(
             .and_then(|bytes| bytes.checked_div(2))
             .ok_or_else(|| "NV12 frame size overflow".to_string())?;
         let mut data = acquire_cpu_buffer(frame_bytes)?;
-        copy_nv12_into(&nv12, request.width, request.height, data.as_mut_slice())?;
+        output_scratch.set_format(ffi::AV_PIX_FMT_NV12);
+        output_scratch.set_width(width);
+        output_scratch.set_height(height);
+        // The queue owns `data` after `present` returns. While scaling, this
+        // temporary AVFrame merely describes that exact mutable allocation,
+        // avoiding a second NV12 AVFrame allocation and row-by-row copy.
+        unsafe {
+            output_scratch
+                .fill_arrays(data.as_ptr(), ffi::AV_PIX_FMT_NV12, width, height)
+                .map_err(error_string)?;
+        }
+        let scale_started = Instant::now();
+        scaler
+            .scale_frame(decoded, 0, decoded.height, output_scratch)
+            .map_err(error_string)?;
+        profile.scale_elapsed(scale_started.elapsed());
+        let delivery_started = Instant::now();
         present(DecodedVideoFrame::Cpu(DecodedNv12Frame {
             timestamp_us,
             data,
         }))?;
+        profile.delivery_elapsed(delivery_started.elapsed());
+    }
+}
+
+/// Keeps the D3D11VA download allocation alive for frames with matching layout.
+fn transfer_into_reusable_frame<'a>(
+    scratch: &'a mut Option<AVFrame>,
+    decoded: &AVFrame,
+) -> Result<&'a AVFrame, String> {
+    let needs_new_frame = scratch
+        .as_ref()
+        .is_none_or(|frame| frame.width != decoded.width || frame.height != decoded.height);
+    if needs_new_frame {
+        let mut transferred = AVFrame::new();
+        transferred
+            .hwframe_transfer_data(decoded)
+            .map_err(error_string)?;
+        *scratch = Some(transferred);
+    } else if let Some(transferred) = scratch.as_mut() {
+        if transferred.hwframe_transfer_data(decoded).is_err() {
+            let mut replacement = AVFrame::new();
+            replacement
+                .hwframe_transfer_data(decoded)
+                .map_err(error_string)?;
+            *transferred = replacement;
+        }
+    }
+    scratch
+        .as_ref()
+        .ok_or_else(|| "D3D11VA transfer scratch was not initialized".to_string())
+}
+
+#[derive(Default)]
+struct CpuTransferPacer {
+    origin: Option<(i64, Instant)>,
+}
+
+impl CpuTransferPacer {
+    fn wait_until(&mut self, timestamp_us: i64, closed: &AtomicBool) {
+        let (origin_timestamp_us, origin_instant) = *self
+            .origin
+            .get_or_insert_with(|| (timestamp_us, Instant::now()));
+        let elapsed_us = timestamp_us.saturating_sub(origin_timestamp_us) as u64;
+        let deadline = origin_instant + Duration::from_micros(elapsed_us);
+        while !closed.load(Ordering::SeqCst) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            std::thread::sleep(remaining.min(Duration::from_millis(2)));
+        }
+    }
+}
+
+struct CpuTransferProfile {
+    enabled: bool,
+    frames: u64,
+    download: Duration,
+    scale: Duration,
+    delivery: Duration,
+}
+
+impl CpuTransferProfile {
+    fn from_environment() -> Self {
+        Self {
+            enabled: std::env::var("PIXI_NATIVE_VIDEO_PROFILE").is_ok_and(|value| value == "1"),
+            frames: 0,
+            download: Duration::ZERO,
+            scale: Duration::ZERO,
+            delivery: Duration::ZERO,
+        }
+    }
+
+    fn download_elapsed(&mut self, elapsed: Duration) {
+        self.download += elapsed;
+    }
+
+    fn scale_elapsed(&mut self, elapsed: Duration) {
+        self.scale += elapsed;
+    }
+
+    fn delivery_elapsed(&mut self, elapsed: Duration) {
+        self.delivery += elapsed;
+        self.frames += 1;
+        if self.enabled && self.frames % 60 == 0 {
+            let frames = self.frames as f64;
+            eprintln!(
+                "[pixi-native] Native CPU-transfer profile: frames={}, download_ms={:.2}, scale_ms={:.2}, queue_ms={:.2}",
+                self.frames,
+                self.download.as_secs_f64() * 1_000.0 / frames,
+                self.scale.as_secs_f64() * 1_000.0 / frames,
+                self.delivery.as_secs_f64() * 1_000.0 / frames,
+            );
+            self.frames = 0;
+            self.download = Duration::ZERO;
+            self.scale = Duration::ZERO;
+            self.delivery = Duration::ZERO;
+        }
     }
 }
 

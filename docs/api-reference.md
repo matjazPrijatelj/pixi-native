@@ -191,10 +191,11 @@ await video.play();
 `paused`, `ended`, `backend`, `error`, `audioError`, `reconnecting`,
 `reconnectAttempts`, and `stats`.
 
-Set `PIXI_NATIVE_VIDEO_BACKEND=cli` to use the bundled FFmpeg process. The
-default `PIXI_NATIVE_VIDEO_BACKEND=lib` uses the in-process libavcodec decoder.
-This choice is process-wide and cannot vary per `NativeVideo`. Transfer
-counters are exposed in `stats`; the current native scope is documented in
+Without `PIXI_NATIVE_VIDEO_BACKEND`, CPU NV12 delivery (including WebGL) uses
+the bundled FFmpeg CLI, while Pixi 8 WebGPU's `gpu-nv12` delivery uses the
+in-process libavcodec decoder. Set `PIXI_NATIVE_VIDEO_BACKEND=cli` or `lib` to
+force either implementation process-wide; it cannot vary per `NativeVideo`.
+Transfer counters are exposed in `stats`; the current native scope is documented in
 [Media and files](media-and-files.md#native-video).
 
 | Method | Behavior |

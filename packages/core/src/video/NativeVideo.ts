@@ -1390,7 +1390,7 @@ export class NativeVideo extends EventTarget {
       this.decoder = decoder;
       this.lastBackend = decoder.backend();
       this.lastImplementationBackend =
-        decoder.implementationBackend?.() ?? "native";
+        decoder.implementationBackend?.() ?? "cli";
       if (this.options.mediaType === "live") {
         this.livePresentationDeadlineMs =
           performance.now() + LIVE_PRESENTATION_STALL_TIMEOUT_MS;

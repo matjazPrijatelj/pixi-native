@@ -104,14 +104,17 @@ enum DecoderImplementation {
 }
 
 impl DecoderImplementation {
-    fn resolve_from_environment() -> Result<Self> {
-        Self::resolve_configured(std::env::var("PIXI_NATIVE_VIDEO_BACKEND").ok().as_deref())
+    fn resolve_from_environment(delivery_path: Option<&str>) -> Result<Self> {
+        Self::resolve_configured(
+            std::env::var("PIXI_NATIVE_VIDEO_BACKEND").ok().as_deref(),
+            delivery_path,
+        )
     }
 
-    fn resolve_configured(value: Option<&str>) -> Result<Self> {
+    fn resolve_configured(value: Option<&str>, delivery_path: Option<&str>) -> Result<Self> {
         match value {
             Some("cli") => Ok(Self::Cli),
-            Some("lib") | None => {
+            Some("lib") | None if delivery_path == Some("gpu-nv12") || value == Some("lib") => {
                 #[cfg(feature = "native-ffmpeg")]
                 {
                     Ok(Self::Native)
@@ -121,6 +124,7 @@ impl DecoderImplementation {
                     Ok(Self::Cli)
                 }
             }
+            None => Ok(Self::Cli),
             Some(value) => Err(Error::from_reason(format!(
                 "PIXI_NATIVE_VIDEO_BACKEND must be lib or cli; received {value}"
             ))),
@@ -433,7 +437,8 @@ impl NativeVideoDecoder {
         let fps = self.options.fps.unwrap_or(30.0);
         let start_time = self.options.start_time.unwrap_or(0.0);
         let looped = self.options.loop_.unwrap_or(false);
-        let implementation = DecoderImplementation::resolve_from_environment()?;
+        let implementation =
+            DecoderImplementation::resolve_from_environment(self.options.delivery_path.as_deref())?;
 
         #[cfg(feature = "native-ffmpeg")]
         if implementation == DecoderImplementation::Native {
@@ -487,9 +492,6 @@ impl NativeVideoDecoder {
                         |frame| match frame {
                             native_ffmpeg::DecodedVideoFrame::Cpu(frame) => {
                                 state.decoded_frames.fetch_add(1, Ordering::SeqCst);
-                                state
-                                    .frame_buffer_allocations
-                                    .fetch_add(1, Ordering::SeqCst);
                                 enqueue_frame(
                                     PendingFrame {
                                         timestamp_us: frame.timestamp_us,
@@ -910,7 +912,7 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn implementation_backend(&self) -> String {
-        DecoderImplementation::resolve_from_environment()
+        DecoderImplementation::resolve_from_environment(self.options.delivery_path.as_deref())
             .unwrap_or(DecoderImplementation::Cli)
             .name()
             .to_string()
@@ -1012,7 +1014,8 @@ fn validate_options(options: &DecoderOptions) -> Result<()> {
             "Video deliveryPath must be cpu-nv12 or gpu-nv12",
         ));
     }
-    let implementation = DecoderImplementation::resolve_from_environment()?;
+    let implementation =
+        DecoderImplementation::resolve_from_environment(options.delivery_path.as_deref())?;
     #[cfg(feature = "native-ffmpeg")]
     if implementation == DecoderImplementation::Native {
         if options.end_time.is_some()
@@ -1555,22 +1558,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decoder_implementation_uses_lib_by_default_and_accepts_cli_override() {
+    fn decoder_implementation_uses_cli_for_cpu_delivery_and_lib_for_gpu_delivery() {
         assert_eq!(
-            DecoderImplementation::resolve_configured(Some("cli")).unwrap(),
+            DecoderImplementation::resolve_configured(Some("cli"), Some("gpu-nv12")).unwrap(),
+            DecoderImplementation::Cli
+        );
+        assert_eq!(
+            DecoderImplementation::resolve_configured(None, Some("cpu-nv12")).unwrap(),
             DecoderImplementation::Cli
         );
         #[cfg(feature = "native-ffmpeg")]
         assert_eq!(
-            DecoderImplementation::resolve_configured(None).unwrap(),
+            DecoderImplementation::resolve_configured(None, Some("gpu-nv12")).unwrap(),
             DecoderImplementation::Native
         );
         #[cfg(not(feature = "native-ffmpeg"))]
         assert_eq!(
-            DecoderImplementation::resolve_configured(None).unwrap(),
+            DecoderImplementation::resolve_configured(None, Some("gpu-nv12")).unwrap(),
             DecoderImplementation::Cli
         );
-        assert!(DecoderImplementation::resolve_configured(Some("native")).is_err());
+        assert!(DecoderImplementation::resolve_configured(Some("native"), None).is_err());
     }
     use std::sync::mpsc;
     use std::time::Duration;

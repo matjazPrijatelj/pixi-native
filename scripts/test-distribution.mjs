@@ -328,6 +328,11 @@ try {
   await rm(generatedRoot, { recursive: true, force: true });
 }
 
+// Native addons can retain a Node handle after every smoke assertion and its
+// temporary consumer directories have been released. This is a standalone
+// verification process, so finish explicitly instead of stalling packaging.
+process.exit(0);
+
 function runPnpm(arguments_, options) {
   const extension = extname(pnpmEntrypoint).toLowerCase();
   const isJavaScriptEntrypoint = [".cjs", ".js", ".mjs"].includes(extension);

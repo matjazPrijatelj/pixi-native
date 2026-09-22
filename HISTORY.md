@@ -2,6 +2,31 @@
 
 ## 2026-09-22
 
+- Changed automatic video implementation selection to match delivery cost:
+  CPU NV12 (including WebGL and WebGPU fallback) now uses the smoother CLI
+  pipeline, while Pixi 8 WebGPU's GPU-NV12 path uses in-process libavcodec.
+  `PIXI_NATIVE_VIDEO_BACKEND=lib|cli` remains the process-wide diagnostic
+  override. Added a repeatable Windows WebGL CLI/lib benchmark command and a
+  WSL Linux in-process build that creates a matching shared FFmpeg 8 SDK and
+  stages its runtime libraries.
+- Corrected the WSL libavcodec build invocation to execute a checked-in Bash
+  build script directly, avoiding PowerShell multi-line argument handling that
+  could otherwise open an interactive shell before the FFmpeg SDK build.
+- Made the WSL shared Linux FFmpeg SDK build provision its checked prerequisites
+  (`nasm`, `libva-dev`, `pkg-config`, and `libclang-dev`) through `sudo apt-get`
+  when absent; NASM assembly remains enabled for normal FFmpeg performance.
+- Fixed the video compatibility fallback to report a decoder without an
+  `implementationBackend()` method as CLI, matching CPU-delivery policy and
+  allowing package tests to distinguish an unavailable native runtime from a
+  real implementation regression.
+- Made the standalone distribution smoke exit explicitly after its successful
+  temporary-directory cleanup, preventing an idle native addon handle from
+  stalling `pnpm pack:dist` after every consumer assertion has completed.
+- Optimized the Windows native-lib CPU NV12 path for WebGL: D3D11VA download
+  frames are reused, swscale writes directly into the recycled delivery
+  buffer, and decoded file frames are paced before expensive CPU transfer.
+  `PIXI_NATIVE_VIDEO_PROFILE=1` reports bounded download, scale, and queue
+  timing samples; buffer-allocation diagnostics now count real allocations.
 - Moved FFmpeg implementation selection out of `NativeVideo` and into
   `PIXI_NATIVE_VIDEO_BACKEND`: `lib` is the default in-process libavcodec
   decoder and `cli` explicitly selects the external FFmpeg decoder. Live,
