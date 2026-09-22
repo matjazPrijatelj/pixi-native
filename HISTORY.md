@@ -33,6 +33,10 @@
   Bunny smoke presented 30 fps with no decoder, Dawn, or D3D errors; native CPU
   delivery remains available through `PIXI_NATIVE_VIDEO_ZERO_COPY=0` for A/B
   diagnosis, and the demo defaults back to continuous looping.
+- Fixed unbounded native libav CPU-frame retention. The in-process decoder now
+  borrows NV12 storage from the same bounded recycle pool as the CLI backend,
+  and the pool itself rejects surplus buffers instead of retaining roughly one
+  full frame per presentation forever.
 
 ## 2026-09-21
 

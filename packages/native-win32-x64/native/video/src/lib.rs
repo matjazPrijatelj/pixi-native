@@ -226,7 +226,13 @@ impl FrameQueue {
     }
 
     fn recycle(&mut self, buffer: Vec<u8>) {
-        self.recycled.push(buffer);
+        // A decoder backend must borrow from this pool before allocating a
+        // replacement. Keep the pool bounded as a final ownership guard so a
+        // producer regression cannot retain one full NV12 allocation per
+        // presented frame indefinitely.
+        if self.recycled.len() < FRAME_QUEUE_CAPACITY {
+            self.recycled.push(buffer);
+        }
     }
 
     fn push_back(&mut self, frame: PendingFrame) {
@@ -414,6 +420,10 @@ impl NativeVideoDecoder {
                         &state.closed,
                         #[cfg(target_os = "windows")]
                         &state.shared_pool,
+                        |frame_bytes| {
+                            acquire_frame_buffer(frame_bytes, &state)
+                                .map_err(|error| error.to_string())
+                        },
                         |active_hardware_decode, active_shared_delivery| {
                             set_backend_name(
                                 &state,
@@ -1627,6 +1637,16 @@ mod tests {
         assert_eq!(latest.unwrap().timestamp_us, 30);
         assert_eq!(skipped, 2);
         assert_eq!(queue.len(), 0);
+    }
+
+    #[test]
+    fn recycled_frame_pool_is_bounded() {
+        let mut queue = FrameQueue::default();
+        for value in 0..(FRAME_QUEUE_CAPACITY * 3) {
+            queue.recycle(vec![value as u8]);
+        }
+
+        assert_eq!(queue.recycled.len(), FRAME_QUEUE_CAPACITY);
     }
 
     #[test]

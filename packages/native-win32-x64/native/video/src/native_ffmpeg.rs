@@ -59,6 +59,7 @@ pub(crate) fn decode_nv12(
     request: &NativeDecodeRequest<'_>,
     closed: &AtomicBool,
     #[cfg(target_os = "windows")] shared_pool: &Arc<Mutex<Option<SharedSurfacePool>>>,
+    mut acquire_cpu_buffer: impl FnMut(usize) -> Result<Vec<u8>, String>,
     mut configured: impl FnMut(bool, bool),
     mut present: impl FnMut(DecodedVideoFrame) -> Result<(), String>,
 ) -> Result<(), String> {
@@ -118,6 +119,7 @@ pub(crate) fn decode_nv12(
                 shared_pool,
                 &mut timeline,
                 &mut reported_hardware,
+                &mut acquire_cpu_buffer,
                 &mut configured,
                 &mut present,
             )?;
@@ -152,6 +154,7 @@ pub(crate) fn decode_nv12(
             shared_pool,
             &mut timeline,
             &mut reported_hardware,
+            &mut acquire_cpu_buffer,
             &mut configured,
             &mut present,
         )?;
@@ -171,6 +174,7 @@ fn drain_frames(
     #[cfg(target_os = "windows")] shared_pool: &Arc<Mutex<Option<SharedSurfacePool>>>,
     timeline: &mut PlaybackTimeline,
     reported_hardware: &mut Option<bool>,
+    acquire_cpu_buffer: &mut impl FnMut(usize) -> Result<Vec<u8>, String>,
     configured: &mut impl FnMut(bool, bool),
     present: &mut impl FnMut(DecodedVideoFrame) -> Result<(), String>,
 ) -> Result<(), String> {
@@ -255,9 +259,17 @@ fn drain_frames(
             .scale_frame(&decoded, 0, decoded.height, &mut nv12)
             .map_err(error_string)?;
 
+        let frame_bytes = request
+            .width
+            .checked_mul(request.height)
+            .and_then(|pixels| pixels.checked_mul(3))
+            .and_then(|bytes| bytes.checked_div(2))
+            .ok_or_else(|| "NV12 frame size overflow".to_string())?;
+        let mut data = acquire_cpu_buffer(frame_bytes)?;
+        copy_nv12_into(&nv12, request.width, request.height, data.as_mut_slice())?;
         present(DecodedVideoFrame::Cpu(DecodedNv12Frame {
             timestamp_us,
-            data: copy_nv12(&nv12, request.width, request.height)?,
+            data,
         }))?;
     }
 }
@@ -391,13 +403,28 @@ unsafe extern "C" fn select_d3d11_format(
     software_fallback
 }
 
-fn copy_nv12(frame: &AVFrame, width: usize, height: usize) -> Result<Vec<u8>, String> {
+fn copy_nv12_into(
+    frame: &AVFrame,
+    width: usize,
+    height: usize,
+    output: &mut [u8],
+) -> Result<(), String> {
     let y_stride = usize::try_from(frame.linesize[0]).map_err(|error| error.to_string())?;
     let uv_stride = usize::try_from(frame.linesize[1]).map_err(|error| error.to_string())?;
     if frame.data[0].is_null() || frame.data[1].is_null() || y_stride < width || uv_stride < width {
         return Err("FFmpeg returned an invalid NV12 frame layout".to_string());
     }
-    let mut output = vec![0; width * height * 3 / 2];
+    let expected = width
+        .checked_mul(height)
+        .and_then(|pixels| pixels.checked_mul(3))
+        .and_then(|bytes| bytes.checked_div(2))
+        .ok_or_else(|| "NV12 frame size overflow".to_string())?;
+    if output.len() != expected {
+        return Err(format!(
+            "NV12 output buffer has {} bytes; expected {expected}",
+            output.len()
+        ));
+    }
     for row in 0..height {
         // SAFETY: FFmpeg guarantees linesize * plane-height readable bytes;
         // the layout checks above constrain every row copy.
@@ -420,7 +447,7 @@ fn copy_nv12(frame: &AVFrame, width: usize, height: usize) -> Result<Vec<u8>, St
             );
         }
     }
-    Ok(output)
+    Ok(())
 }
 
 fn error_string(error: impl std::fmt::Display) -> String {
@@ -430,6 +457,7 @@ fn error_string(error: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn links_against_ffmpeg_eight_avcodec() {
@@ -509,4 +537,46 @@ mod tests {
         assert!(!attempted);
     }
 
+    #[test]
+    fn native_loop_decodes_a_second_pass_with_monotonic_timestamps() {
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/hevc-one-frame.mp4")
+            .to_string_lossy()
+            .into_owned();
+        let request = NativeDecodeRequest {
+            source: &source,
+            width: 32,
+            height: 32,
+            fps: 1.0,
+            start_time: 0.0,
+            looped: true,
+            hardware_decode: false,
+            shared_delivery: false,
+        };
+        let closed = AtomicBool::new(false);
+        #[cfg(target_os = "windows")]
+        let shared_pool = Arc::new(Mutex::new(None));
+        let mut timestamps = Vec::new();
+
+        decode_nv12(
+            &request,
+            &closed,
+            #[cfg(target_os = "windows")]
+            &shared_pool,
+            |frame_bytes| Ok(vec![0; frame_bytes]),
+            |_, _| {},
+            |frame| {
+                if let DecodedVideoFrame::Cpu(frame) = frame {
+                    timestamps.push(frame.timestamp_us);
+                    if timestamps.len() == 2 {
+                        closed.store(true, Ordering::SeqCst);
+                    }
+                }
+                Ok(())
+            },
+        )
+        .expect("looping fixture should decode");
+
+        assert_eq!(timestamps, vec![0, 1_000_000]);
+    }
 }
