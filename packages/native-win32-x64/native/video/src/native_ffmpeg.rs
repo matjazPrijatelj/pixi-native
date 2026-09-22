@@ -45,6 +45,8 @@ pub(crate) enum DecodedVideoFrame {
         timestamp_us: i64,
         surface_id: u32,
         handle: usize,
+        width: u32,
+        height: u32,
     },
 }
 
@@ -198,11 +200,7 @@ fn drain_frames(
                     .lock()
                     .map_err(|_| "Shared video surface pool lock poisoned".to_string())?;
                 if pool.is_none() {
-                    *pool = Some(SharedSurfacePool::from_decoded_frame(
-                        &decoded,
-                        request.width as u32,
-                        request.height as u32,
-                    )?);
+                    *pool = Some(SharedSurfacePool::from_decoded_frame(&decoded)?);
                 }
                 pool.as_ref()
                     .expect("shared pool initialized above")
@@ -213,6 +211,10 @@ fn drain_frames(
                     timestamp_us,
                     surface_id: frame.surface_id,
                     handle: frame.handle,
+                    width: u32::try_from(decoded.width)
+                        .map_err(|_| "D3D11VA frame width must be positive".to_string())?,
+                    height: u32::try_from(decoded.height)
+                        .map_err(|_| "D3D11VA frame height must be positive".to_string())?,
                 })?,
                 None => return Ok(()),
             }
@@ -241,7 +243,11 @@ fn drain_frames(
                 width,
                 height,
                 ffi::AV_PIX_FMT_NV12,
-                ffi::SWS_BILINEAR,
+                // This is the hot D3D11VA -> CPU -> WebGL path. Keep it
+                // equivalent to the CLI's `scale=...:flags=fast_bilinear`
+                // conversion, rather than spending CPU time on the default
+                // higher-quality bilinear scaler for every 4K frame.
+                ffi::SWS_FAST_BILINEAR,
                 None,
                 None,
                 None,

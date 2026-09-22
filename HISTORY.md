@@ -2,6 +2,24 @@
 
 ## 2026-09-22
 
+- Moved FFmpeg implementation selection out of `NativeVideo` and into
+  `PIXI_NATIVE_VIDEO_BACKEND`: `lib` is the default in-process libavcodec
+  decoder and `cli` explicitly selects the external FFmpeg decoder. Live,
+  source-paced playback now retains at most two queued NV12 frames; file
+  playback remains at four for stable prebuffering.
+- Matched the native D3D11VA CPU-transfer scaler with the CLI's fast-bilinear
+  conversion. This removes the unnecessary full-quality 4K-to-output CPU
+  scaling cost on the WebGL upload path.
+- Changed Windows GPU-NV12 presentation surfaces to use each decoded frame's
+  visible source dimensions rather than the requested display layout. Pixi 8
+  now imports 4K and 1080p sources at native resolution and samples them into
+  the existing sprite geometry; a source replacement carries its new texture
+  dimensions through the native frame contract.
+- Fixed scaled Windows native-video playback: when D3D11VA's shared-NV12
+  presentation path rejects a source whose decoded dimensions differ from the
+  requested output, native playback now retries D3D11VA with CPU NV12 transfer
+  before falling back to a fully software libavcodec decoder. This keeps 4K
+  and padded 1080p sources on the hardware decoder at a 1280x720 output size.
 - Added a VideoTest runtime regression for Roulette's stream lifecycle: it
   keeps one `NativeVideo` and `VideoSprite`, fades presentation out while
   suspended, then simulates `BETS_CLOSED` by restoring visibility and

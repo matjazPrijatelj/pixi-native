@@ -60,7 +60,6 @@ const runtime = await createApp({ backend: "webgpu" });
 const video = new NativeVideo(files.resolvePath("../assets/intro.mp4"), {
   width: 1920,
   height: 1080,
-  backend: "native",
   audio: true,
   logDiagnostics: true,
 });
@@ -70,6 +69,10 @@ runtime.app.stage.addChild(sprite);
 runtime.addDestroyListener(() => video.destroy());
 await video.play();
 ```
+
+The process-wide `PIXI_NATIVE_VIDEO_BACKEND` environment variable selects the
+FFmpeg implementation: `lib` is the default in-process libavcodec decoder and
+`cli` selects the bundled FFmpeg process.
 
 The public video API supports:
 

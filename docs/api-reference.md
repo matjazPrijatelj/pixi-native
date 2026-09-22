@@ -179,7 +179,6 @@ const video = new NativeVideo(videoPath, {
   width: 1920,
   height: 1080,
   fps: 30,
-  backend: "auto", // "auto" | "native" | "cli"
   audio: true,
 });
 const sprite = new VideoSprite(video);
@@ -192,11 +191,10 @@ await video.play();
 `paused`, `ended`, `backend`, `error`, `audioError`, `reconnecting`,
 `reconnectAttempts`, and `stats`.
 
-The default `backend: "auto"` tries the in-process Windows FFmpeg 8 decoder
-first and transparently falls back to the bundled CLI when native construction,
-open, or first-frame decoding fails. Explicit `"native"` and `"cli"` values
-remain available for diagnostics. Transfer counters are exposed in `stats`;
-the current native scope is documented in
+Set `PIXI_NATIVE_VIDEO_BACKEND=cli` to use the bundled FFmpeg process. The
+default `PIXI_NATIVE_VIDEO_BACKEND=lib` uses the in-process libavcodec decoder.
+This choice is process-wide and cannot vary per `NativeVideo`. Transfer
+counters are exposed in `stats`; the current native scope is documented in
 [Media and files](media-and-files.md#native-video).
 
 | Method | Behavior |

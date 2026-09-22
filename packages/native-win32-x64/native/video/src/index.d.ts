@@ -11,7 +11,6 @@ export interface DecoderOptions {
   inputArgs?: string[];
   outputArgs?: string[];
   loop?: boolean;
-  backend?: "cli" | "native" | "auto";
   deliveryPath?: "cpu-nv12" | "gpu-nv12";
 }
 

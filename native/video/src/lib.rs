@@ -16,7 +16,8 @@ mod d3d11_shared;
 #[cfg(feature = "native-ffmpeg")]
 mod native_ffmpeg;
 
-const FRAME_QUEUE_CAPACITY: usize = 4;
+const FILE_FRAME_QUEUE_CAPACITY: usize = 4;
+const LIVE_FRAME_QUEUE_CAPACITY: usize = 2;
 const HARDWARE_DECODE_ATTEMPTS: usize = 5;
 const HARDWARE_RETRY_DELAY: Duration = Duration::from_millis(500);
 
@@ -40,7 +41,6 @@ pub struct DecoderOptions {
     pub input_args: Option<Vec<String>>,
     pub output_args: Option<Vec<String>>,
     pub loop_: Option<bool>,
-    pub backend: Option<String>,
     pub delivery_path: Option<String>,
 }
 
@@ -104,23 +104,25 @@ enum DecoderImplementation {
 }
 
 impl DecoderImplementation {
-    fn resolve(requested: Option<&str>) -> Result<Self> {
-        match requested.unwrap_or("cli") {
-            "cli" | "auto" => Ok(Self::Cli),
-            "native" => {
+    fn resolve_from_environment() -> Result<Self> {
+        Self::resolve_configured(std::env::var("PIXI_NATIVE_VIDEO_BACKEND").ok().as_deref())
+    }
+
+    fn resolve_configured(value: Option<&str>) -> Result<Self> {
+        match value {
+            Some("cli") => Ok(Self::Cli),
+            Some("lib") | None => {
                 #[cfg(feature = "native-ffmpeg")]
                 {
                     Ok(Self::Native)
                 }
                 #[cfg(not(feature = "native-ffmpeg"))]
                 {
-                    Err(Error::from_reason(
-                        "Native libav video backend is not available in this build",
-                    ))
+                    Ok(Self::Cli)
                 }
             }
-            backend => Err(Error::from_reason(format!(
-                "Unsupported video decoder backend: {backend}"
+            Some(value) => Err(Error::from_reason(format!(
+                "PIXI_NATIVE_VIDEO_BACKEND must be lib or cli; received {value}"
             ))),
         }
     }
@@ -163,6 +165,17 @@ impl DecoderBackend {
     }
 }
 
+fn should_retry_d3d11va_with_cpu_transfer(
+    shared_delivery_requested: bool,
+    decoded_frames: u64,
+    decoder_closed: bool,
+) -> bool {
+    cfg!(target_os = "windows")
+        && shared_delivery_requested
+        && decoded_frames == 0
+        && !decoder_closed
+}
+
 #[derive(Clone)]
 struct DecoderState {
     closed: Arc<AtomicBool>,
@@ -197,17 +210,27 @@ struct PendingSharedFrame {
     timestamp_us: i64,
     surface_id: u32,
     handle: usize,
+    width: u32,
+    height: u32,
 }
 
-#[derive(Default)]
 struct FrameQueue {
+    capacity: usize,
     frames: VecDeque<PendingFrame>,
     recycled: Vec<Vec<u8>>,
 }
 
 impl FrameQueue {
+    fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            frames: VecDeque::new(),
+            recycled: Vec::new(),
+        }
+    }
+
     fn push_latest(&mut self, frame: PendingFrame) -> Option<Vec<u8>> {
-        let recycled = if self.frames.len() >= FRAME_QUEUE_CAPACITY {
+        let recycled = if self.frames.len() >= self.capacity {
             self.frames.pop_front().map(|dropped| dropped.data)
         } else {
             None
@@ -230,7 +253,7 @@ impl FrameQueue {
         // replacement. Keep the pool bounded as a final ownership guard so a
         // producer regression cannot retain one full NV12 allocation per
         // presented frame indefinitely.
-        if self.recycled.len() < FRAME_QUEUE_CAPACITY {
+        if self.recycled.len() < self.capacity {
             self.recycled.push(buffer);
         }
     }
@@ -265,6 +288,20 @@ impl FrameQueue {
     fn clear(&mut self) {
         self.frames.clear();
         self.recycled.clear();
+    }
+}
+
+impl Default for FrameQueue {
+    fn default() -> Self {
+        Self::new(FILE_FRAME_QUEUE_CAPACITY)
+    }
+}
+
+fn frame_queue_capacity(source_paced: bool) -> usize {
+    if source_paced {
+        LIVE_FRAME_QUEUE_CAPACITY
+    } else {
+        FILE_FRAME_QUEUE_CAPACITY
     }
 }
 
@@ -318,7 +355,10 @@ impl NativeVideoDecoder {
                 closed: Arc::new(AtomicBool::new(true)),
                 finished: Arc::new(AtomicBool::new(false)),
                 child: Arc::new(Mutex::new(None)),
-                frames: Arc::new((Mutex::new(FrameQueue::default()), Condvar::new())),
+                frames: Arc::new((
+                    Mutex::new(FrameQueue::new(frame_queue_capacity(source_paced))),
+                    Condvar::new(),
+                )),
                 catch_up_timestamp_us: Arc::new(AtomicI64::new(-1)),
                 source_paced,
                 error: Arc::new(Mutex::new(None)),
@@ -393,7 +433,7 @@ impl NativeVideoDecoder {
         let fps = self.options.fps.unwrap_or(30.0);
         let start_time = self.options.start_time.unwrap_or(0.0);
         let looped = self.options.loop_.unwrap_or(false);
-        let implementation = DecoderImplementation::resolve(self.options.backend.as_deref())?;
+        let implementation = DecoderImplementation::resolve_from_environment()?;
 
         #[cfg(feature = "native-ffmpeg")]
         if implementation == DecoderImplementation::Native {
@@ -404,7 +444,7 @@ impl NativeVideoDecoder {
             ACTIVE_DECODER_WORKERS.fetch_add(1, Ordering::SeqCst);
             self.worker = Some(thread::spawn(move || {
                 let _active_worker = ActiveDecoderWorker;
-                let run_decode = |hardware_decode| {
+                let run_decode = |hardware_decode, shared_delivery| {
                     let request = native_ffmpeg::NativeDecodeRequest {
                         source: &native_source,
                         width,
@@ -413,7 +453,7 @@ impl NativeVideoDecoder {
                         start_time,
                         looped,
                         hardware_decode,
-                        shared_delivery,
+                        shared_delivery: hardware_decode && shared_delivery,
                     };
                     native_ffmpeg::decode_nv12(
                         &request,
@@ -464,6 +504,8 @@ impl NativeVideoDecoder {
                                 timestamp_us,
                                 surface_id,
                                 handle,
+                                width,
+                                height,
                             } => {
                                 state.decoded_frames.fetch_add(1, Ordering::SeqCst);
                                 state.gpu_frame_copies.fetch_add(1, Ordering::SeqCst);
@@ -472,6 +514,8 @@ impl NativeVideoDecoder {
                                         timestamp_us,
                                         surface_id,
                                         handle,
+                                        width,
+                                        height,
                                     },
                                     &state,
                                 )
@@ -479,7 +523,26 @@ impl NativeVideoDecoder {
                         },
                     )
                 };
-                let mut result = run_decode(cfg!(target_os = "windows"));
+                let mut result = run_decode(cfg!(target_os = "windows"), shared_delivery);
+                if result.is_err()
+                    && should_retry_d3d11va_with_cpu_transfer(
+                        shared_delivery,
+                        state.decoded_frames.load(Ordering::SeqCst),
+                        state.closed.load(Ordering::SeqCst),
+                    )
+                {
+                    let shared_delivery_error = result
+                        .as_ref()
+                        .expect_err("failed shared delivery checked above");
+                    eprintln!(
+                        "Native D3D11VA shared NV12 delivery failed before its first frame: {shared_delivery_error}; retrying D3D11VA with CPU transfer"
+                    );
+                    #[cfg(target_os = "windows")]
+                    if let Ok(mut pool) = state.shared_pool.lock() {
+                        *pool = None;
+                    }
+                    result = run_decode(true, false);
+                }
                 if result.is_err()
                     && cfg!(target_os = "windows")
                     && state.decoded_frames.load(Ordering::SeqCst) == 0
@@ -491,7 +554,7 @@ impl NativeVideoDecoder {
                     eprintln!(
                         "Native D3D11VA decoder failed before its first frame: {hardware_error}; retrying with CPU libavcodec"
                     );
-                    result = run_decode(false);
+                    result = run_decode(false, false);
                 }
                 if let Err(error) = result {
                     if !state.closed.load(Ordering::SeqCst) {
@@ -778,8 +841,8 @@ impl NativeVideoDecoder {
 
     fn to_shared_video_frame(&self, pending: PendingSharedFrame) -> Option<SharedVideoFrame> {
         Some(SharedVideoFrame {
-            width: self.options.width,
-            height: self.options.height,
+            width: i64::from(pending.width),
+            height: i64::from(pending.height),
             timestamp_us: pending.timestamp_us,
             session_id: self.state.session_id.load(Ordering::SeqCst),
             surface_id: pending.surface_id as i64,
@@ -847,7 +910,7 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn implementation_backend(&self) -> String {
-        DecoderImplementation::resolve(self.options.backend.as_deref())
+        DecoderImplementation::resolve_from_environment()
             .unwrap_or(DecoderImplementation::Cli)
             .name()
             .to_string()
@@ -949,7 +1012,7 @@ fn validate_options(options: &DecoderOptions) -> Result<()> {
             "Video deliveryPath must be cpu-nv12 or gpu-nv12",
         ));
     }
-    let implementation = DecoderImplementation::resolve(options.backend.as_deref())?;
+    let implementation = DecoderImplementation::resolve_from_environment()?;
     #[cfg(feature = "native-ffmpeg")]
     if implementation == DecoderImplementation::Native {
         if options.end_time.is_some()
@@ -1286,7 +1349,7 @@ fn enqueue_frame(frame: PendingFrame, state: &DecoderState) -> io::Result<()> {
             frames.recycle(recycled);
         }
     } else {
-        while frames.len() >= FRAME_QUEUE_CAPACITY
+        while frames.len() >= frames.capacity
             && !state.closed.load(Ordering::SeqCst)
             && state.catch_up_timestamp_us.load(Ordering::SeqCst) < 0
         {
@@ -1330,7 +1393,7 @@ fn enqueue_shared_frame(
         .shared_frames
         .lock()
         .map_err(|_| "Shared video frame queue lock poisoned".to_string())?;
-    if frames.len() >= FRAME_QUEUE_CAPACITY {
+    if frames.len() >= frame_queue_capacity(state.source_paced) {
         if let Some(dropped) = frames.pop_front() {
             release_shared_surface(state, dropped.surface_id);
             state.dropped_frames.fetch_add(1, Ordering::SeqCst);
@@ -1492,23 +1555,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decoder_implementation_defaults_to_cli_and_rejects_unavailable_native() {
+    fn decoder_implementation_uses_lib_by_default_and_accepts_cli_override() {
         assert_eq!(
-            DecoderImplementation::resolve(None).unwrap(),
-            DecoderImplementation::Cli
-        );
-        assert_eq!(
-            DecoderImplementation::resolve(Some("auto")).unwrap(),
+            DecoderImplementation::resolve_configured(Some("cli")).unwrap(),
             DecoderImplementation::Cli
         );
         #[cfg(feature = "native-ffmpeg")]
         assert_eq!(
-            DecoderImplementation::resolve(Some("native")).unwrap(),
+            DecoderImplementation::resolve_configured(None).unwrap(),
             DecoderImplementation::Native
         );
         #[cfg(not(feature = "native-ffmpeg"))]
-        assert!(DecoderImplementation::resolve(Some("native")).is_err());
-        assert!(DecoderImplementation::resolve(Some("unknown")).is_err());
+        assert_eq!(
+            DecoderImplementation::resolve_configured(None).unwrap(),
+            DecoderImplementation::Cli
+        );
+        assert!(DecoderImplementation::resolve_configured(Some("native")).is_err());
     }
     use std::sync::mpsc;
     use std::time::Duration;
@@ -1517,6 +1579,33 @@ mod tests {
     fn calculates_nv12_frame_size() {
         assert_eq!(nv12_frame_bytes(1280, 720).unwrap(), 1_382_400);
         assert_eq!(nv12_frame_bytes(1920, 1080).unwrap(), 3_110_400);
+    }
+
+    #[test]
+    fn shared_frames_keep_the_decoded_dimensions() {
+        let decoder = test_decoder();
+        let frame = decoder
+            .to_shared_video_frame(PendingSharedFrame {
+                timestamp_us: 1_000,
+                surface_id: 3,
+                handle: 0x1234,
+                width: 3_840,
+                height: 2_160,
+            })
+            .expect("shared frame metadata");
+
+        assert_eq!(frame.width, 3_840);
+        assert_eq!(frame.height, 2_160);
+        assert_eq!(frame.timestamp_us, 1_000);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn retries_failed_shared_delivery_through_d3d11va_cpu_transfer() {
+        assert!(should_retry_d3d11va_with_cpu_transfer(true, 0, false));
+        assert!(!should_retry_d3d11va_with_cpu_transfer(false, 0, false));
+        assert!(!should_retry_d3d11va_with_cpu_transfer(true, 1, false));
+        assert!(!should_retry_d3d11va_with_cpu_transfer(true, 0, true));
     }
 
     #[test]
@@ -1604,7 +1693,6 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
-            backend: None,
             delivery_path: None,
         });
         assert!(result.is_err());
@@ -1613,15 +1701,15 @@ mod tests {
     #[test]
     fn frame_queue_preserves_order_and_drops_oldest_on_overflow() {
         let mut queue = FrameQueue::default();
-        for timestamp_us in 0..FRAME_QUEUE_CAPACITY as i64 {
+        for timestamp_us in 0..FILE_FRAME_QUEUE_CAPACITY as i64 {
             assert!(queue.push_latest(pending(timestamp_us)).is_none());
         }
 
         let recycled = queue
-            .push_latest(pending(FRAME_QUEUE_CAPACITY as i64))
+            .push_latest(pending(FILE_FRAME_QUEUE_CAPACITY as i64))
             .expect("oldest frame should be recycled");
         assert_eq!(recycled, vec![0]);
-        assert_eq!(queue.len(), FRAME_QUEUE_CAPACITY);
+        assert_eq!(queue.len(), FILE_FRAME_QUEUE_CAPACITY);
         assert_eq!(queue.pop_next().unwrap().timestamp_us, 1);
         assert_eq!(queue.pop_next().unwrap().timestamp_us, 2);
     }
@@ -1642,17 +1730,23 @@ mod tests {
     #[test]
     fn recycled_frame_pool_is_bounded() {
         let mut queue = FrameQueue::default();
-        for value in 0..(FRAME_QUEUE_CAPACITY * 3) {
+        for value in 0..(FILE_FRAME_QUEUE_CAPACITY * 3) {
             queue.recycle(vec![value as u8]);
         }
 
-        assert_eq!(queue.recycled.len(), FRAME_QUEUE_CAPACITY);
+        assert_eq!(queue.recycled.len(), FILE_FRAME_QUEUE_CAPACITY);
+    }
+
+    #[test]
+    fn live_playback_keeps_two_queued_frames() {
+        assert_eq!(frame_queue_capacity(false), FILE_FRAME_QUEUE_CAPACITY);
+        assert_eq!(frame_queue_capacity(true), LIVE_FRAME_QUEUE_CAPACITY);
     }
 
     #[test]
     fn file_queue_applies_backpressure_until_a_frame_is_consumed() {
         let state = decoder_state(false);
-        for timestamp_us in 0..FRAME_QUEUE_CAPACITY as i64 {
+        for timestamp_us in 0..FILE_FRAME_QUEUE_CAPACITY as i64 {
             enqueue_frame(pending(timestamp_us), &state).unwrap();
         }
 
@@ -1701,7 +1795,6 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
-            backend: None,
             delivery_path: None,
         })
         .unwrap();
@@ -1736,7 +1829,6 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
-            backend: None,
             delivery_path: None,
         })
         .unwrap();
@@ -1824,7 +1916,6 @@ mod tests {
             input_args: None,
             output_args: None,
             loop_: None,
-            backend: None,
             delivery_path: None,
         })
         .unwrap()
@@ -1835,7 +1926,10 @@ mod tests {
             closed: Arc::new(AtomicBool::new(false)),
             finished: Arc::new(AtomicBool::new(false)),
             child: Arc::new(Mutex::new(None)),
-            frames: Arc::new((Mutex::new(FrameQueue::default()), Condvar::new())),
+            frames: Arc::new((
+                Mutex::new(FrameQueue::new(frame_queue_capacity(source_paced))),
+                Condvar::new(),
+            )),
             catch_up_timestamp_us: Arc::new(AtomicI64::new(-1)),
             source_paced,
             error: Arc::new(Mutex::new(None)),

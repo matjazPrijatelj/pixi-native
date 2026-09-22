@@ -39,29 +39,33 @@ pub(crate) struct SharedSurfacePool {
 unsafe impl Send for SharedSurfacePool {}
 
 impl SharedSurfacePool {
-    pub(crate) fn from_decoded_frame(
-        frame: &AVFrame,
-        width: u32,
-        height: u32,
-    ) -> Result<Self, String> {
+    pub(crate) fn from_decoded_frame(frame: &AVFrame) -> Result<Self, String> {
         let source = borrowed_texture(frame)?;
         let mut source_desc = D3D11_TEXTURE2D_DESC::default();
         unsafe { source.GetDesc(&mut source_desc) };
-        if frame.width != width as i32
-            || frame.height != height as i32
+        let width = u32::try_from(frame.width)
+            .map_err(|_| format!("D3D11VA frame width must be positive, got {}", frame.width))?;
+        let height = u32::try_from(frame.height).map_err(|_| {
+            format!(
+                "D3D11VA frame height must be positive, got {}",
+                frame.height
+            )
+        })?;
+        if width == 0
+            || height == 0
+            || width % 2 != 0
+            || height % 2 != 0
             || source_desc.Format != DXGI_FORMAT_NV12
             || width > source_desc.Width
             || height > source_desc.Height
         {
             return Err(format!(
-                "D3D11VA output cannot use the shared NV12 path: format={:?}, frame={}x{}, texture={}x{}, requested={}x{}",
+                "D3D11VA output cannot use the shared NV12 path: format={:?}, frame={}x{}, texture={}x{}",
                 source_desc.Format,
                 frame.width,
                 frame.height,
                 source_desc.Width,
-                source_desc.Height,
-                width,
-                height
+                source_desc.Height
             ));
         }
 

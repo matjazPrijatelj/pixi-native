@@ -27,11 +27,6 @@ const ALPHA_MASK_SCALE = 0.5;
 const STREAM_FADE_DURATION_MS = 250;
 const STREAM_HIDDEN_DURATION_MS = 750;
 const STREAM_STRESS_DELAY_MS = 500;
-const VIDEO_BACKEND =
-  process.env.PIXI_NATIVE_VIDEO_BACKEND === "cli" ||
-  process.env.PIXI_NATIVE_VIDEO_BACKEND === "native"
-    ? process.env.PIXI_NATIVE_VIDEO_BACKEND
-    : "native";
 const VIDEO_LOOP = process.env.PIXI_NATIVE_VIDEO_LOOP !== "0";
 
 export interface VideoTestScene extends DisposableDemoScene {
@@ -67,7 +62,6 @@ export function createVideoTest(
     fps,
     loop: VIDEO_LOOP,
     logDiagnostics: true,
-    backend: VIDEO_BACKEND,
   });
   let sprite = new NativeVideoSprite(video);
   const videoGroup = new Container();
@@ -255,7 +249,6 @@ export function createVideoTest(
       height: nextHeight,
       fps: nextFps,
       loop: VIDEO_LOOP,
-      backend: VIDEO_BACKEND,
       audio,
     });
     sprite = new NativeVideoSprite(video, spriteOptions);

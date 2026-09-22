@@ -120,7 +120,6 @@ test("native FFmpeg backend decodes NV12 in process when its shared SDK is prese
       width: 32,
       height: 32,
       fps: 1,
-      backend: "native",
       loop: true,
     });
   } catch (error) {
@@ -168,40 +167,16 @@ test("native FFmpeg backend decodes NV12 in process when its shared SDK is prese
   }
 });
 
-test("auto video backend falls back to CLI for options outside native scope", () => {
-  const decoder = new NativeVideoDecoder({
-    width: 32,
-    height: 32,
-    playbackRate: 1.25,
-    backend: "auto",
-  });
-  try {
-    assert.equal(decoder.implementationBackend(), "cli");
-  } finally {
-    decoder.close();
-  }
-});
-
-test("NativeVideo forwards the opt-in decoder backend without changing the default", async () => {
-  const nativeFactory = new FakeDecoderFactory();
-  const nativeVideo = new NativeVideo(
-    "video.mp4",
-    { width: 2, height: 2, backend: "native", audio: false },
-    nativeFactory,
-  );
-  await nativeVideo.play();
-  assert.equal(nativeFactory.options[0].backend, "native");
-  nativeVideo.destroy();
-
-  const cliFactory = new FakeDecoderFactory();
-  const cliVideo = new NativeVideo(
+test("NativeVideo keeps FFmpeg implementation selection outside video options", async () => {
+  const factory = new FakeDecoderFactory();
+  const video = new NativeVideo(
     "video.mp4",
     { width: 2, height: 2, audio: false },
-    cliFactory,
+    factory,
   );
-  await cliVideo.play();
-  assert.equal(cliFactory.options[0].backend, undefined);
-  cliVideo.destroy();
+  await video.play();
+  assert.equal("backend" in factory.options[0], false);
+  video.destroy();
 });
 
 test("BT.709 limited conversion maps video black and white", () => {
