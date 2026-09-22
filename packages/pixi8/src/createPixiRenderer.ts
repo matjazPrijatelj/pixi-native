@@ -15,6 +15,7 @@ import type {
   NodeGPUInstance,
 } from "@pixi-native/core/runtime/nativeTypes.js";
 import { installNativeFontAssets } from "./nativeFontAssets.ts";
+import { releaseNativeVideoGpuSurfaces } from "@pixi-native/core/video/NativeVideo.js";
 
 export interface NodeRendererContext {
   readonly gpu: NodeGPUInstance | null;
@@ -113,7 +114,12 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   return manageNativeApplication({
     app,
     native,
-    present: () => native.renderer.swap(),
+    present: () => {
+      const releasedSurfaces = native.renderer.swap();
+      if (releasedSurfaces?.length) {
+        releaseNativeVideoGpuSurfaces(releasedSurfaces);
+      }
+    },
     destroyApplication: () => {
       // Pixi 8's default Application.destroy order releases the stage
       // before GPU systems. Native textures can still notify bind groups,

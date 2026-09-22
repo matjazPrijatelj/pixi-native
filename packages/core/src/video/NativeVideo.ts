@@ -21,7 +21,10 @@ const SOFTWARE_CHROMA_PIXEL_FORMAT = /^yuv(?:422|444)p/;
 const REUSABLE_FRAME_BUFFER_COUNT = 5;
 
 export type NativeVideoBackend = "cli" | "native" | "auto";
-export type NativeVideoDeliveryPath = "cpu-nv12" | "d3d11-shared-nv12";
+export type NativeVideoDeliveryPath =
+  | "cpu-nv12"
+  | "gpu-nv12"
+  | "d3d11-shared-nv12";
 
 export interface Nv12FrameLayout {
   readonly yBytes: number;
@@ -31,7 +34,7 @@ export interface Nv12FrameLayout {
   readonly uvStride: number;
 }
 
-export interface NativeVideoFrame {
+export interface CpuNativeVideoFrame {
   readonly width: number;
   readonly height: number;
   readonly timestampUs: number;
@@ -40,6 +43,24 @@ export interface NativeVideoFrame {
   readonly yStride: number;
   readonly uvStride: number;
   readonly pixelFormat: "nv12";
+}
+
+export interface GpuNativeVideoFrame {
+  readonly width: number;
+  readonly height: number;
+  readonly timestampUs: number;
+  readonly pixelFormat: "nv12";
+  readonly sessionId: number;
+  readonly surfaceId: number;
+  readonly sharedHandle: Uint8Array;
+}
+
+export type NativeVideoFrame = CpuNativeVideoFrame | GpuNativeVideoFrame;
+
+export function isGpuNativeVideoFrame(
+  frame: NativeVideoFrame,
+): frame is GpuNativeVideoFrame {
+  return "sharedHandle" in frame;
 }
 
 interface NativePackedVideoFrame {
@@ -55,10 +76,22 @@ interface NativePackedVideoFrameInfo {
   readonly timestampUs: number;
 }
 
+interface NativeSharedVideoFrame {
+  readonly width: number;
+  readonly height: number;
+  readonly timestampUs: number;
+  readonly sessionId: number;
+  readonly surfaceId: number;
+  readonly sharedHandle: Uint8Array;
+}
+
 interface NativeDecoderBinding {
   open(source: string): void;
   pollLatest(): NativePackedVideoFrame | null;
   pollNext(): NativePackedVideoFrame | null;
+  pollLatestShared?(): NativeSharedVideoFrame | null;
+  pollNextShared?(): NativeSharedVideoFrame | null;
+  releaseSharedFrame?(sessionId: number, surfaceId: number): boolean;
   supportsFrameBufferReuse?(): boolean;
   pollLatestInto?(target: Buffer): NativePackedVideoFrameInfo | null;
   pollNextInto?(target: Buffer): NativePackedVideoFrameInfo | null;
@@ -95,6 +128,7 @@ interface NativeDecoderBindingOptions {
   outputArgs?: string[];
   loop?: boolean;
   backend?: NativeVideoBackend;
+  deliveryPath?: "cpu-nv12" | "gpu-nv12";
 }
 
 interface NativeVideoShutdownDiagnostics {
@@ -112,6 +146,11 @@ interface NativeVideoModule {
 }
 
 let loadedNativeVideoModule: NativeVideoModule | undefined;
+let nativeVideoGpuInteropSupported = false;
+
+export function setNativeVideoGpuInteropSupported(supported: boolean): void {
+  nativeVideoGpuInteropSupported = supported;
+}
 
 /** Playback, decoding, and reconnect options for {@link NativeVideo}. */
 export interface NativeVideoOptions {
@@ -178,6 +217,8 @@ export interface NativeVideoDecoderLike {
   open(source: string): void;
   pollLatest(): NativeVideoFrame | null;
   pollNext(): NativeVideoFrame | null;
+  releaseFrame?(frame: GpuNativeVideoFrame): boolean;
+  releaseGpuSurface?(sessionId: number, surfaceId: number): boolean;
   queuedFrames(): number;
   catchUpTo(timestampUs: number): void;
   isReady(): boolean;
@@ -265,7 +306,7 @@ export function getNv12FrameLayout(
 
 export function splitNv12Frame(
   frame: NativePackedVideoFrame,
-): NativeVideoFrame {
+): CpuNativeVideoFrame {
   const layout = getNv12FrameLayout(frame.width, frame.height);
   if (frame.data.byteLength !== layout.frameBytes) {
     throw new Error(
@@ -433,6 +474,10 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
       ffmpegPath: resolveFfmpegPath({
         explicitPath: options.ffmpegPath,
       }),
+      deliveryPath:
+        nativeVideoGpuInteropSupported && process.platform === "win32"
+          ? "gpu-nv12"
+          : "cpu-nv12",
     };
     this.decoder = this.createInitialDecoder();
     this.frameBuffers = Array.from(
@@ -451,6 +496,10 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
   }
 
   public pollLatest(): NativeVideoFrame | null {
+    if (this.decoder.deliveryPath?.() === "gpu-nv12") {
+      const frame = this.decoder.pollLatestShared?.();
+      return frame ? { ...frame, pixelFormat: "nv12" } : null;
+    }
     if (this.decoder.supportsFrameBufferReuse?.()) {
       return this.pollInto("latest");
     }
@@ -459,6 +508,10 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
   }
 
   public pollNext(): NativeVideoFrame | null {
+    if (this.decoder.deliveryPath?.() === "gpu-nv12") {
+      const frame = this.decoder.pollNextShared?.();
+      return frame ? { ...frame, pixelFormat: "nv12" } : null;
+    }
     if (this.decoder.supportsFrameBufferReuse?.()) {
       return this.pollInto("next");
     }
@@ -468,6 +521,17 @@ export class NativeVideoDecoder implements NativeVideoDecoderLike {
 
   public queuedFrames(): number {
     return this.decoder.queuedFrames();
+  }
+
+  public releaseFrame(frame: GpuNativeVideoFrame): boolean {
+    return (
+      this.decoder.releaseSharedFrame?.(frame.sessionId, frame.surfaceId) ??
+      false
+    );
+  }
+
+  public releaseGpuSurface(sessionId: number, surfaceId: number): boolean {
+    return this.decoder.releaseSharedFrame?.(sessionId, surfaceId) ?? false;
   }
 
   public catchUpTo(timestampUs: number): void {
@@ -741,6 +805,25 @@ export function setNativeVideoModalState(active: boolean): void {
     const video = reference.deref();
     if (video) video.setModalState(active);
     else activeVideos.delete(reference);
+  }
+}
+
+/** Releases shared surfaces only after Dawn has ended their access scopes. */
+export function releaseNativeVideoGpuSurfaces(
+  surfaces: ReadonlyArray<{
+    readonly sessionId: number;
+    readonly surfaceId: number;
+  }>,
+): void {
+  for (const surface of surfaces) {
+    for (const reference of activeVideos) {
+      const video = reference.deref();
+      if (!video) {
+        activeVideos.delete(reference);
+        continue;
+      }
+      if (video.releaseGpuSurface(surface.sessionId, surface.surfaceId)) break;
+    }
   }
 }
 
@@ -1233,6 +1316,41 @@ export class NativeVideo extends EventTarget {
     return null;
   }
 
+  /** @internal Returns a shared GPU presentation surface to its decoder pool. */
+  public releaseFrame(frame: NativeVideoFrame): void {
+    if (isGpuNativeVideoFrame(frame)) {
+      this.decoder?.releaseFrame?.(frame);
+    }
+  }
+
+  /** @internal Returns a surface after the native renderer ended Dawn access. */
+  public releaseGpuSurface(sessionId: number, surfaceId: number): boolean {
+    return this.decoder?.releaseGpuSurface?.(sessionId, surfaceId) ?? false;
+  }
+
+  /** @internal Restarts through the CPU delivery path if Dawn cannot import a shared surface. */
+  public fallbackFromGpuFrame(frame: GpuNativeVideoFrame, cause: unknown): void {
+    this.releaseFrame(frame);
+    this.frameAwaitingPresentation = false;
+    if (this.destroyed || this.isPaused) return;
+
+    setNativeVideoGpuInteropSupported(false);
+    const position = this.currentTime;
+    console.warn(
+      "[pixi-native] Shared NV12 import failed; restarting video with CPU delivery",
+      asError(cause),
+    );
+    try {
+      this.startDecoder(position);
+    } catch (error) {
+      this.lastError = asError(error);
+      this.isPaused = true;
+      this.stopDecoder();
+      this.stopAudio();
+      this.emit("error");
+    }
+  }
+
   /** @internal Records that a renderer presented the claimed frame. */
   public markFramePresented(): void {
     if (this.destroyed || !this.frameAwaitingPresentation) return;
@@ -1453,7 +1571,10 @@ export class NativeVideo extends EventTarget {
         break;
       }
 
-      if (selected) this.skippedFrameCount++;
+      if (selected) {
+        this.skippedFrameCount++;
+        this.releaseFrame(selected);
+      }
       selected = frame;
       frame = this.decoder?.pollNext() ?? null;
     }
@@ -1491,6 +1612,7 @@ export class NativeVideo extends EventTarget {
       audioTime - AUDIO_FRAME_LEAD_SECONDS,
     );
     this.catchUpTargetUs = Math.round(targetSeconds * 1_000_000);
+    if (this.pendingFrame) this.releaseFrame(this.pendingFrame);
     this.pendingFrame = null;
     this.decoder.catchUpTo(this.catchUpTargetUs);
   }
@@ -1503,7 +1625,13 @@ export class NativeVideo extends EventTarget {
     let selected = latest ?? pending;
     if (pending && latest) {
       this.skippedFrameCount++;
-      selected = latest.timestampUs >= pending.timestampUs ? latest : pending;
+      if (latest.timestampUs >= pending.timestampUs) {
+        this.releaseFrame(pending);
+        selected = latest;
+      } else {
+        this.releaseFrame(latest);
+        selected = pending;
+      }
     }
     if (selected) this.positionSeconds = selected.timestampUs / 1_000_000;
     this.syncOffsetMilliseconds = 0;
@@ -1511,6 +1639,7 @@ export class NativeVideo extends EventTarget {
   }
 
   private stopDecoder(): void {
+    if (this.pendingFrame) this.releaseFrame(this.pendingFrame);
     this.pendingFrame = null;
     this.catchUpTargetUs = undefined;
     this.playbackClockStartedAtMs = undefined;

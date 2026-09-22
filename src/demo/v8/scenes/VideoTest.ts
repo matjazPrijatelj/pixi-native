@@ -24,6 +24,12 @@ const ALPHA_FRAME_WIDTH = 1920;
 const ALPHA_FRAME_HEIGHT = 768;
 const ALPHA_COLOR_WIDTH = 1280;
 const ALPHA_MASK_SCALE = 0.5;
+const VIDEO_BACKEND =
+  process.env.PIXI_NATIVE_VIDEO_BACKEND === "cli" ||
+  process.env.PIXI_NATIVE_VIDEO_BACKEND === "native"
+    ? process.env.PIXI_NATIVE_VIDEO_BACKEND
+    : "auto";
+const VIDEO_LOOP = process.env.PIXI_NATIVE_VIDEO_LOOP !== "0";
 
 export interface VideoTestScene extends DisposableDemoScene {
   handleKey(key: string | null, repeat?: number): boolean;
@@ -56,9 +62,9 @@ export function createVideoTest(
     width: WIDTH,
     height: HEIGHT,
     fps,
-    loop: true,
+    loop: VIDEO_LOOP,
     logDiagnostics: true,
-    backend: "auto",
+    backend: VIDEO_BACKEND,
   });
   let sprite = new NativeVideoSprite(video);
   const videoGroup = new Container();
@@ -238,8 +244,8 @@ export function createVideoTest(
       width: nextWidth,
       height: nextHeight,
       fps: nextFps,
-      loop: true,
-      backend: "auto",
+      loop: VIDEO_LOOP,
+      backend: VIDEO_BACKEND,
       audio,
     });
     sprite = new NativeVideoSprite(video, spriteOptions);
@@ -350,6 +356,7 @@ export function createVideoTest(
   };
 
   let nextStatusUpdateTime = 0;
+  let nextDiagnosticsLogTime = 0;
   videoScene.update = (deltaMS = 0) => {
     if (maskEnabled) {
       maskTime += deltaMS / 1000;
@@ -364,6 +371,17 @@ export function createVideoTest(
     }
 
     const now = performance.now();
+    if (
+      process.env.PIXI_NATIVE_VIDEO_STATS_LOG === "1" &&
+      now >= nextDiagnosticsLogTime
+    ) {
+      nextDiagnosticsLogTime = now + 1_000;
+      console.log("[pixi-native] Video runtime stats", {
+        source: fileName,
+        currentTime: video.currentTime,
+        ...stats,
+      });
+    }
     if (
       eventMode &&
       autoSwitch &&

@@ -84,18 +84,23 @@ VA-API when available and has the same CPU fallback. Both platform packages
 contain the project's minimal FFmpeg and FFprobe executables.
 
 `backend` accepts `"cli"`, `"native"`, or `"auto"` and defaults to `"auto"`.
-The Windows `"native"` backend uses in-process FFmpeg 8 and D3D11VA with a CPU
-NV12 transfer at the current milestone. It supports full-file looping at rate
-`1` without custom FFmpeg arguments. `"auto"` tries native first and falls back
-to CLI if native is unavailable, rejects the requested options, cannot open the
-source, or fails before its first decoded frame. Bounded segments, live input,
+The Windows `"native"` backend uses in-process FFmpeg 8 and D3D11VA. PixiJS 8
+WebGPU copies each decoder array slice into a shareable NV12 texture entirely
+on the GPU, imports it into Dawn/D3D12, and samples its Y and UV planes in the
+Pixi shader. No frame bytes pass through CPU memory or JavaScript on that path.
+If shared-texture import is unavailable or fails, playback restarts with native
+CPU NV12 delivery. It supports full-file looping at rate `1` without custom
+FFmpeg arguments. `"auto"` tries native first and falls back to CLI if native
+is unavailable, rejects the requested options, cannot open the source, or
+fails before its first decoded frame. Bounded segments, live input,
 playback-rate changes, and custom arguments therefore select the CLI fallback.
 
 Set `logDiagnostics: true` to emit one structured message after the renderer
 presents the first frame. `implementationBackend` distinguishes CLI from
 in-process libavcodec. `D3D11VA` or `VA-API` with `hardwareDecode: true`
-confirms hardware decoding, while `deliveryPath`, `zeroCopy`, `cpuFrameBytes`,
-and `gpuFrameCopies` expose the remaining transfer path.
+confirms hardware decoding. `deliveryPath: "gpu-nv12"` and `cpuFrameBytes: 0`
+confirm GPU delivery; `gpuFrameCopies` counts the required presentation copies.
+`zeroCopy` remains false because that D3D11 GPU-to-GPU copy still exists.
 
 FFmpeg lookup checks an explicit `ffmpegPath`, `FFMPEG_PATH`, the installed
 native platform package, and then development `PATH`.

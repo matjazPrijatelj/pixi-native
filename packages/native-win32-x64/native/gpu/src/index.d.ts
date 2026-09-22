@@ -2781,7 +2781,18 @@ interface Renderer {
   getAlphaMode(): 'opaque' | 'premultiplied' | 'inherit';
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
-  swap();
+  acquireVideoFrame(descriptor: {
+    sessionId: number;
+    surfaceId: number;
+    sharedHandle: Uint8Array;
+    width: number;
+    height: number;
+  }): {
+    texture: GPUTexture;
+    yView: GPUTextureView;
+    uvView: GPUTextureView;
+  };
+  swap(): Array<{ sessionId: number; surfaceId: number }>;
   resize();
   destroy();
 }
@@ -2841,6 +2852,7 @@ interface WebGPU {
     renderer: Renderer;
     requestedAlphaMode: "opaque" | "premultiplied";
     alphaMode: "opaque" | "premultiplied" | "inherit";
+    videoInteropSupported: boolean;
   };
   destroy(context: object);
 }

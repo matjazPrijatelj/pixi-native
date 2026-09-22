@@ -18,7 +18,11 @@ import {
   createWebGpuBindGroupCacheController,
   shouldResetWebGpuBindGroupCache,
 } from "./webGpuBindGroupCache.ts";
-import { setNativeVideoModalState } from "@pixi-native/core/video/NativeVideo.js";
+import {
+  setNativeVideoGpuInteropSupported,
+  setNativeVideoModalState,
+} from "@pixi-native/core/video/NativeVideo.js";
+import { registerNativeVideoGpuInterop } from "@pixi-native/core/video/gpuInterop.js";
 import {
   createCompositorFrameWaiter,
   createModalFrameController,
@@ -68,6 +72,13 @@ export async function createWebGpuRenderer(
   const adapter = gpuContext.adapter;
   const device = gpuContext.device;
   const renderer = gpuContext.renderer;
+  const videoInteropSupported =
+    gpuContext.videoInteropSupported === true &&
+    process.env.PIXI_NATIVE_VIDEO_ZERO_COPY !== "0";
+  setNativeVideoGpuInteropSupported(videoInteropSupported);
+  if (videoInteropSupported) {
+    registerNativeVideoGpuInterop(device, renderer);
+  }
   const actualAlphaMode =
     gpuContext.alphaMode ??
     renderer.getAlphaMode?.() ??

@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
+#[cfg(all(feature = "native-ffmpeg", target_os = "windows"))]
+mod d3d11_shared;
 #[cfg(feature = "native-ffmpeg")]
 mod native_ffmpeg;
 
@@ -22,6 +24,7 @@ static ACTIVE_DECODER_WORKERS: AtomicU64 = AtomicU64::new(0);
 static PENDING_DECODER_SHUTDOWNS: AtomicU64 = AtomicU64::new(0);
 static COMPLETED_DECODER_SHUTDOWNS: AtomicU64 = AtomicU64::new(0);
 static MAX_DECODER_SHUTDOWN_MS: AtomicU64 = AtomicU64::new(0);
+static NEXT_VIDEO_SESSION_ID: AtomicI64 = AtomicI64::new(1);
 
 #[napi(object)]
 pub struct DecoderOptions {
@@ -38,6 +41,7 @@ pub struct DecoderOptions {
     pub output_args: Option<Vec<String>>,
     pub loop_: Option<bool>,
     pub backend: Option<String>,
+    pub delivery_path: Option<String>,
 }
 
 #[napi(object)]
@@ -53,6 +57,16 @@ pub struct VideoFrameInfo {
     pub width: i64,
     pub height: i64,
     pub timestamp_us: i64,
+}
+
+#[napi(object)]
+pub struct SharedVideoFrame {
+    pub width: i64,
+    pub height: i64,
+    pub timestamp_us: i64,
+    pub session_id: i64,
+    pub surface_id: i64,
+    pub shared_handle: Buffer,
 }
 
 #[napi(object)]
@@ -165,11 +179,24 @@ struct DecoderState {
     frame_buffer_reuses: Arc<AtomicU64>,
     backend: Arc<Mutex<String>>,
     stderr_workers: Arc<Mutex<Vec<thread::JoinHandle<()>>>>,
+    delivery_path: Arc<Mutex<String>>,
+    gpu_frame_copies: Arc<AtomicU64>,
+    presentation_surface_drops: Arc<AtomicU64>,
+    session_id: Arc<AtomicI64>,
+    shared_frames: Arc<Mutex<VecDeque<PendingSharedFrame>>>,
+    #[cfg(all(feature = "native-ffmpeg", target_os = "windows"))]
+    shared_pool: Arc<Mutex<Option<d3d11_shared::SharedSurfacePool>>>,
 }
 
 struct PendingFrame {
     timestamp_us: i64,
     data: Vec<u8>,
+}
+
+struct PendingSharedFrame {
+    timestamp_us: i64,
+    surface_id: u32,
+    handle: usize,
 }
 
 #[derive(Default)]
@@ -296,6 +323,13 @@ impl NativeVideoDecoder {
                 frame_buffer_reuses: Arc::new(AtomicU64::new(0)),
                 backend: Arc::new(Mutex::new(backend)),
                 stderr_workers: Arc::new(Mutex::new(Vec::new())),
+                delivery_path: Arc::new(Mutex::new("cpu-nv12".to_string())),
+                gpu_frame_copies: Arc::new(AtomicU64::new(0)),
+                presentation_surface_drops: Arc::new(AtomicU64::new(0)),
+                session_id: Arc::new(AtomicI64::new(0)),
+                shared_frames: Arc::new(Mutex::new(VecDeque::new())),
+                #[cfg(all(feature = "native-ffmpeg", target_os = "windows"))]
+                shared_pool: Arc::new(Mutex::new(None)),
             },
         })
     }
@@ -322,6 +356,15 @@ impl NativeVideoDecoder {
             .frame_buffer_allocations
             .store(0, Ordering::SeqCst);
         self.state.frame_buffer_reuses.store(0, Ordering::SeqCst);
+        self.state.gpu_frame_copies.store(0, Ordering::SeqCst);
+        self.state
+            .presentation_surface_drops
+            .store(0, Ordering::SeqCst);
+        self.state.session_id.store(
+            NEXT_VIDEO_SESSION_ID.fetch_add(1, Ordering::SeqCst),
+            Ordering::SeqCst,
+        );
+        set_delivery_path(&self.state, "cpu-nv12");
 
         if let Ok(mut error) = self.state.error.lock() {
             *error = None;
@@ -329,6 +372,11 @@ impl NativeVideoDecoder {
         let (frames, _) = &*self.state.frames;
         if let Ok(mut frames) = frames.lock() {
             frames.clear();
+        }
+        clear_shared_frames(&self.state);
+        #[cfg(all(feature = "native-ffmpeg", target_os = "windows"))]
+        if let Ok(mut pool) = self.state.shared_pool.lock() {
+            *pool = None;
         }
         self.state.catch_up_timestamp_us.store(-1, Ordering::SeqCst);
 
@@ -346,6 +394,7 @@ impl NativeVideoDecoder {
             set_backend_name(&self.state, "CPU libavcodec");
             let state = self.state.clone();
             let native_source = source.clone();
+            let shared_delivery = self.options.delivery_path.as_deref() == Some("gpu-nv12");
             ACTIVE_DECODER_WORKERS.fetch_add(1, Ordering::SeqCst);
             self.worker = Some(thread::spawn(move || {
                 let _active_worker = ActiveDecoderWorker;
@@ -358,33 +407,65 @@ impl NativeVideoDecoder {
                         start_time,
                         looped,
                         hardware_decode,
+                        shared_delivery,
                     };
                     native_ffmpeg::decode_nv12(
                         &request,
                         &state.closed,
-                        |active_hardware_decode| {
+                        #[cfg(target_os = "windows")]
+                        &state.shared_pool,
+                        |active_hardware_decode, active_shared_delivery| {
                             set_backend_name(
                                 &state,
-                                if active_hardware_decode {
+                                if active_shared_delivery {
+                                    "D3D11VA libavcodec (GPU NV12)"
+                                } else if active_hardware_decode {
                                     "D3D11VA libavcodec (CPU transfer)"
                                 } else {
                                     "CPU libavcodec"
                                 },
                             );
-                        },
-                        |frame| {
-                            state.decoded_frames.fetch_add(1, Ordering::SeqCst);
-                            state
-                                .frame_buffer_allocations
-                                .fetch_add(1, Ordering::SeqCst);
-                            enqueue_frame(
-                                PendingFrame {
-                                    timestamp_us: frame.timestamp_us,
-                                    data: frame.data,
-                                },
+                            set_delivery_path(
                                 &state,
-                            )
-                            .map_err(|error| error.to_string())
+                                if active_shared_delivery {
+                                    "gpu-nv12"
+                                } else {
+                                    "cpu-nv12"
+                                },
+                            );
+                        },
+                        |frame| match frame {
+                            native_ffmpeg::DecodedVideoFrame::Cpu(frame) => {
+                                state.decoded_frames.fetch_add(1, Ordering::SeqCst);
+                                state
+                                    .frame_buffer_allocations
+                                    .fetch_add(1, Ordering::SeqCst);
+                                enqueue_frame(
+                                    PendingFrame {
+                                        timestamp_us: frame.timestamp_us,
+                                        data: frame.data,
+                                    },
+                                    &state,
+                                )
+                                .map_err(|error| error.to_string())
+                            }
+                            #[cfg(target_os = "windows")]
+                            native_ffmpeg::DecodedVideoFrame::Shared {
+                                timestamp_us,
+                                surface_id,
+                                handle,
+                            } => {
+                                state.decoded_frames.fetch_add(1, Ordering::SeqCst);
+                                state.gpu_frame_copies.fetch_add(1, Ordering::SeqCst);
+                                enqueue_shared_frame(
+                                    PendingSharedFrame {
+                                        timestamp_us,
+                                        surface_id,
+                                        handle,
+                                    },
+                                    &state,
+                                )
+                            }
                         },
                     )
                 };
@@ -570,6 +651,37 @@ impl NativeVideoDecoder {
     }
 
     #[napi]
+    pub fn poll_latest_shared(&self) -> Option<SharedVideoFrame> {
+        let mut frames = self.state.shared_frames.lock().ok()?;
+        let latest = frames.pop_back();
+        let skipped = frames.len();
+        while let Some(frame) = frames.pop_front() {
+            release_shared_surface(&self.state, frame.surface_id);
+        }
+        drop(frames);
+        if skipped > 0 {
+            self.state
+                .skipped_frames
+                .fetch_add(skipped as u64, Ordering::SeqCst);
+        }
+        self.to_shared_video_frame(latest?)
+    }
+
+    #[napi]
+    pub fn poll_next_shared(&self) -> Option<SharedVideoFrame> {
+        let pending = self.state.shared_frames.lock().ok()?.pop_front()?;
+        self.to_shared_video_frame(pending)
+    }
+
+    #[napi]
+    pub fn release_shared_frame(&self, session_id: i64, surface_id: i64) -> bool {
+        if session_id != self.state.session_id.load(Ordering::SeqCst) || surface_id < 0 {
+            return false;
+        }
+        release_shared_surface(&self.state, surface_id as u32)
+    }
+
+    #[napi]
     pub fn poll_latest_into(&self, mut target: BufferSlice) -> Result<Option<VideoFrameInfo>> {
         let (frames, available) = &*self.state.frames;
         let (pending, skipped) = frames
@@ -606,6 +718,14 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn queued_frames(&self) -> i64 {
+        if self.delivery_path() == "gpu-nv12" {
+            return self
+                .state
+                .shared_frames
+                .lock()
+                .map(|frames| i64::try_from(frames.len()).unwrap_or(i64::MAX))
+                .unwrap_or(0);
+        }
         let (frames, _) = &*self.state.frames;
         frames
             .lock()
@@ -632,6 +752,7 @@ impl NativeVideoDecoder {
                 .skipped_frames
                 .fetch_add(skipped as u64, Ordering::SeqCst);
         }
+        clear_shared_frames(&self.state);
         available.notify_all();
         Ok(())
     }
@@ -642,6 +763,17 @@ impl NativeVideoDecoder {
             height: self.options.height,
             timestamp_us: pending.timestamp_us,
             data: Buffer::from(pending.data),
+        })
+    }
+
+    fn to_shared_video_frame(&self, pending: PendingSharedFrame) -> Option<SharedVideoFrame> {
+        Some(SharedVideoFrame {
+            width: self.options.width,
+            height: self.options.height,
+            timestamp_us: pending.timestamp_us,
+            session_id: self.state.session_id.load(Ordering::SeqCst),
+            surface_id: pending.surface_id as i64,
+            shared_handle: Buffer::from(pending.handle.to_ne_bytes().to_vec()),
         })
     }
 
@@ -696,7 +828,11 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn delivery_path(&self) -> String {
-        "cpu-nv12".to_string()
+        self.state
+            .delivery_path
+            .lock()
+            .map(|path| path.clone())
+            .unwrap_or_else(|_| "cpu-nv12".to_string())
     }
 
     #[napi]
@@ -709,11 +845,14 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn gpu_frame_copies(&self) -> i64 {
-        0
+        atomic_i64(&self.state.gpu_frame_copies)
     }
 
     #[napi]
     pub fn cpu_frame_bytes(&self) -> i64 {
+        if self.delivery_path() == "gpu-nv12" {
+            return 0;
+        }
         let frame_bytes = nv12_frame_bytes(
             usize::try_from(self.options.width).unwrap_or(0),
             usize::try_from(self.options.height).unwrap_or(0),
@@ -729,7 +868,7 @@ impl NativeVideoDecoder {
 
     #[napi]
     pub fn presentation_surface_drops(&self) -> i64 {
-        0
+        atomic_i64(&self.state.presentation_surface_drops)
     }
 
     #[napi]
@@ -791,6 +930,15 @@ impl Drop for NativeVideoDecoder {
 }
 
 fn validate_options(options: &DecoderOptions) -> Result<()> {
+    if options
+        .delivery_path
+        .as_deref()
+        .is_some_and(|path| path != "cpu-nv12" && path != "gpu-nv12")
+    {
+        return Err(Error::from_reason(
+            "Video deliveryPath must be cpu-nv12 or gpu-nv12",
+        ));
+    }
     let implementation = DecoderImplementation::resolve(options.backend.as_deref())?;
     #[cfg(feature = "native-ffmpeg")]
     if implementation == DecoderImplementation::Native {
@@ -1155,6 +1303,59 @@ fn enqueue_frame(frame: PendingFrame, state: &DecoderState) -> io::Result<()> {
     Ok(())
 }
 
+fn enqueue_shared_frame(
+    frame: PendingSharedFrame,
+    state: &DecoderState,
+) -> std::result::Result<(), String> {
+    let catch_up_timestamp_us = state.catch_up_timestamp_us.load(Ordering::SeqCst);
+    if catch_up_timestamp_us >= 0 && frame.timestamp_us < catch_up_timestamp_us {
+        state.skipped_frames.fetch_add(1, Ordering::SeqCst);
+        release_shared_surface(state, frame.surface_id);
+        return Ok(());
+    }
+    if catch_up_timestamp_us >= 0 {
+        state.catch_up_timestamp_us.store(-1, Ordering::SeqCst);
+    }
+    let mut frames = state
+        .shared_frames
+        .lock()
+        .map_err(|_| "Shared video frame queue lock poisoned".to_string())?;
+    if frames.len() >= FRAME_QUEUE_CAPACITY {
+        if let Some(dropped) = frames.pop_front() {
+            release_shared_surface(state, dropped.surface_id);
+            state.dropped_frames.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    frames.push_back(frame);
+    Ok(())
+}
+
+fn clear_shared_frames(state: &DecoderState) {
+    let Ok(mut frames) = state.shared_frames.lock() else {
+        return;
+    };
+    while let Some(frame) = frames.pop_front() {
+        release_shared_surface(state, frame.surface_id);
+    }
+}
+
+fn release_shared_surface(state: &DecoderState, surface_id: u32) -> bool {
+    #[cfg(all(feature = "native-ffmpeg", target_os = "windows"))]
+    {
+        return state
+            .shared_pool
+            .lock()
+            .ok()
+            .and_then(|pool| pool.as_ref().map(|pool| pool.release(surface_id)))
+            .unwrap_or(false);
+    }
+    #[cfg(not(all(feature = "native-ffmpeg", target_os = "windows")))]
+    {
+        let _ = (state, surface_id);
+        false
+    }
+}
+
 fn acquire_frame_buffer(frame_bytes: usize, state: &DecoderState) -> io::Result<Vec<u8>> {
     let (frames, _) = &*state.frames;
     if let Some(buffer) = frames
@@ -1185,6 +1386,12 @@ fn join_stderr_workers(state: &DecoderState) {
 fn set_backend_name(state: &DecoderState, name: &str) {
     if let Ok(mut backend) = state.backend.lock() {
         *backend = name.to_string();
+    }
+}
+
+fn set_delivery_path(state: &DecoderState, path: &str) {
+    if let Ok(mut delivery_path) = state.delivery_path.lock() {
+        *delivery_path = path.to_string();
     }
 }
 
@@ -1233,6 +1440,7 @@ fn request_close_state(state: &DecoderState) -> Option<Child> {
     if let Ok(mut frames) = frames.lock() {
         frames.clear();
     }
+    clear_shared_frames(state);
     child
 }
 
@@ -1387,6 +1595,7 @@ mod tests {
             output_args: None,
             loop_: None,
             backend: None,
+            delivery_path: None,
         });
         assert!(result.is_err());
     }
@@ -1473,6 +1682,7 @@ mod tests {
             output_args: None,
             loop_: None,
             backend: None,
+            delivery_path: None,
         })
         .unwrap();
         let mut target = vec![0; 6];
@@ -1507,6 +1717,7 @@ mod tests {
             output_args: None,
             loop_: None,
             backend: None,
+            delivery_path: None,
         })
         .unwrap();
         let mut target = vec![0; 5];
@@ -1594,6 +1805,7 @@ mod tests {
             output_args: None,
             loop_: None,
             backend: None,
+            delivery_path: None,
         })
         .unwrap()
     }
@@ -1614,6 +1826,13 @@ mod tests {
             frame_buffer_reuses: Arc::new(AtomicU64::new(0)),
             backend: Arc::new(Mutex::new("test".to_string())),
             stderr_workers: Arc::new(Mutex::new(Vec::new())),
+            delivery_path: Arc::new(Mutex::new("cpu-nv12".to_string())),
+            gpu_frame_copies: Arc::new(AtomicU64::new(0)),
+            presentation_surface_drops: Arc::new(AtomicU64::new(0)),
+            session_id: Arc::new(AtomicI64::new(1)),
+            shared_frames: Arc::new(Mutex::new(VecDeque::new())),
+            #[cfg(all(feature = "native-ffmpeg", target_os = "windows"))]
+            shared_pool: Arc::new(Mutex::new(None)),
         }
     }
 

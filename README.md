@@ -163,8 +163,9 @@ Package tarballs include these guides and the public TypeScript declarations.
   when premultiplied alpha is unavailable.
 - Transparent pixels still receive pointer input. The public API does not
   provide click-through windows or custom title bars.
-- Native video outputs SDR BT.709 limited-range NV12. The decoder-to-GPU path
-  still performs a copy.
+- Native video outputs SDR BT.709 limited-range NV12. Windows PixiJS 8 WebGPU
+  keeps native D3D11VA frames on the GPU, but still performs one GPU-to-GPU
+  copy from FFmpeg's decoder array into a shareable presentation texture.
 - Live video sources do not support seeking and require playback rate `1`.
 - `maxFps` applies from 24 to 360 FPS when `vsync` is false. With `vsync: true`,
   VSync owns pacing.

@@ -259,8 +259,9 @@ its SHA-256 checksum under `third_party/`.
 - Linux WebGPU transparency depends on compositor surface capabilities and
   falls back to an opaque surface when premultiplied alpha is unavailable.
 - Transparent windows remain pointer-active in transparent areas.
-- Native video outputs SDR BT.709 limited-range NV12 and still copies decoder
-  output before GPU sampling.
+- Native video outputs SDR BT.709 limited-range NV12. Windows PixiJS 8 WebGPU
+  avoids CPU/JavaScript frame transfer but retains one GPU-to-GPU copy into a
+  shareable single-layer presentation texture.
 - Live video is non-seekable and supports playback rate `1`.
 - The runtime provides no WebView or browser renderer fallback.
 

@@ -12,6 +12,7 @@ export interface DecoderOptions {
   outputArgs?: string[];
   loop?: boolean;
   backend?: "cli" | "native" | "auto";
+  deliveryPath?: "cpu-nv12" | "gpu-nv12";
 }
 
 export interface VideoFrame {
@@ -27,6 +28,15 @@ export interface VideoFrameInfo {
   timestampUs: number;
 }
 
+export interface SharedVideoFrame {
+  width: number;
+  height: number;
+  timestampUs: number;
+  sessionId: number;
+  surfaceId: number;
+  sharedHandle: Uint8Array;
+}
+
 export interface VideoShutdownDiagnostics {
   activeDecoderWorkers: number;
   pendingDecoderShutdowns: number;
@@ -39,6 +49,9 @@ export class NativeVideoDecoder {
   public open(source: string): void;
   public pollLatest(): VideoFrame | null;
   public pollNext(): VideoFrame | null;
+  public pollLatestShared(): SharedVideoFrame | null;
+  public pollNextShared(): SharedVideoFrame | null;
+  public releaseSharedFrame(sessionId: number, surfaceId: number): boolean;
   public supportsFrameBufferReuse(): boolean;
   public pollLatestInto(target: Buffer): VideoFrameInfo | null;
   public pollNextInto(target: Buffer): VideoFrameInfo | null;
@@ -53,7 +66,7 @@ export class NativeVideoDecoder {
   public frameBufferReuses(): number;
   public recycledFrameBuffers(): number;
   public implementationBackend(): "cli" | "native";
-  public deliveryPath(): "cpu-nv12" | "d3d11-shared-nv12";
+  public deliveryPath(): "cpu-nv12" | "gpu-nv12" | "d3d11-shared-nv12";
   public gpuFrameCopies(): number;
   public cpuFrameBytes(): number;
   public presentationSurfaceDrops(): number;

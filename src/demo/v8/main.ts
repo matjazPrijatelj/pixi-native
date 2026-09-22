@@ -160,7 +160,11 @@ const eventVideoSources = videos
   .filter(({ source }) => videoPaths.includes(source))
   .filter(({ fps }) => Math.abs(fps - 30) < 0.001);
 
-let videoIndex = 0;
+const requestedVideoAsset = process.env.PIXI_NATIVE_VIDEO_ASSET?.trim();
+const requestedVideoIndex = requestedVideoAsset
+  ? availableVideos.findIndex(({ file }) => file === requestedVideoAsset)
+  : -1;
+let videoIndex = requestedVideoIndex >= 0 ? requestedVideoIndex : 0;
 
 const scenes: Array<() => ReturnType<typeof createGraphicsTest>> = [
   () => createGraphicsTest(),

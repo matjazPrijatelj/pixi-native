@@ -7,6 +7,8 @@ import {
   VideoFpsMeter,
   convertBt709LimitedNv12SampleToRgb,
   getNv12FrameLayout,
+  isGpuNativeVideoFrame,
+  releaseNativeVideoGpuSurfaces,
   resolveFfmpegPath,
   splitNv12Frame,
   type NativeVideoDecoderLike,
@@ -104,10 +106,7 @@ test("NativeVideoDecoder forwards continuous loop playback to the native binding
       if (frame) timestamps.push(frame.timestampUs);
       else await new Promise<void>((resolve) => setTimeout(resolve, 5));
     }
-    assert.deepEqual(
-      timestamps,
-      decoder.implementationBackend() === "native" ? [0, 0] : [0, 1_000_000],
-    );
+    assert.deepEqual(timestamps, [0, 1_000_000]);
     assert.equal(decoder.isFinished(), false);
   } finally {
     decoder.close();
@@ -146,6 +145,8 @@ test("native FFmpeg backend decodes NV12 in process when its shared SDK is prese
       if (!frame) await new Promise<void>((resolve) => setTimeout(resolve, 5));
     }
     assert.ok(frame);
+    assert.equal(isGpuNativeVideoFrame(frame), false);
+    if (isGpuNativeVideoFrame(frame)) throw new Error("Expected CPU NV12 frame");
     assert.equal(frame.y.byteLength + frame.uv.byteLength, 1_536);
     assert.equal(decoder.implementationBackend(), "native");
     assert.equal(decoder.deliveryPath(), "cpu-nv12");
@@ -160,6 +161,7 @@ test("native FFmpeg backend decodes NV12 in process when its shared SDK is prese
         await new Promise<void>((resolve) => setTimeout(resolve, 5));
     }
     assert.ok(loopedFrame);
+    assert.equal(loopedFrame.timestampUs, 1_000_000);
     assert.equal(decoder.isFinished(), false);
   } finally {
     decoder.close();
@@ -542,6 +544,76 @@ test("NativeVideo drains due frames in order without blocking the decoder queue"
   assert.ok(Math.abs(video.stats.syncOffsetMs - 10) < 0.01);
 });
 
+test("NativeVideo releases skipped and presented shared GPU surfaces", async () => {
+  const factory = new FakeAudioVideoFactory();
+  const video = new NativeVideo(
+    "video-with-audio.mp4",
+    { width: 2, height: 2, fps: 30 },
+    factory,
+  );
+
+  await video.play();
+  const audio = factory.audios[0];
+  const decoder = factory.decoders[0];
+  decoder.enqueue(
+    createGpuFrame(0, 0),
+    createGpuFrame(33_333, 1),
+    createGpuFrame(66_667, 2),
+    createGpuFrame(100_000, 3),
+  );
+
+  audio.currentTime = 0.05;
+  const selected = video.takeLatestFrame();
+  assert.equal(selected?.timestampUs, 66_667);
+  assert.deepEqual(decoder.releasedSurfaceIds, [0, 1]);
+  if (selected) video.releaseFrame(selected);
+  assert.deepEqual(decoder.releasedSurfaceIds, [0, 1, 2]);
+  video.destroy();
+});
+
+test("Dawn swap completion releases the matching shared GPU surface", async () => {
+  const factory = new FakeDecoderFactory();
+  const video = new NativeVideo(
+    "video.mp4",
+    { width: 2, height: 2, fps: 30 },
+    factory,
+  );
+
+  await video.play();
+  factory.decoders[0].gpuSessionId = 123_456;
+  releaseNativeVideoGpuSurfaces([
+    { sessionId: 99, surfaceId: 1 },
+    { sessionId: 123_456, surfaceId: 2 },
+  ]);
+
+  assert.deepEqual(factory.decoders[0].releasedSurfaceIds, [2]);
+  video.destroy();
+});
+
+test("NativeVideo restarts with CPU delivery after a shared GPU import failure", async () => {
+  const factory = new FakeAudioVideoFactory();
+  const video = new NativeVideo(
+    "video-with-audio.mp4",
+    { width: 2, height: 2, fps: 30 },
+    factory,
+  );
+
+  await video.play();
+  factory.audios[0].currentTime = 0.5;
+  const frame = createGpuFrame(500_000, 2);
+  factory.decoders[0].enqueue(frame);
+  const selected = video.takeLatestFrame();
+  assert.ok(selected && isGpuNativeVideoFrame(selected));
+  video.fallbackFromGpuFrame(selected, new Error("test import failure"));
+
+  assert.deepEqual(factory.decoders[0].releasedSurfaceIds, [2]);
+  assert.equal(factory.decoders[0].closed, true);
+  assert.equal(factory.decoders.length, 2);
+  assert.equal(factory.options[1].startTime, 0.5);
+  assert.equal(video.paused, false);
+  video.destroy();
+});
+
 test("NativeVideo requests native catch-up when a file frame is too late", async () => {
   const factory = new FakeAudioVideoFactory();
   const video = new NativeVideo(
@@ -912,6 +984,8 @@ class FakeDecoder implements NativeVideoDecoderLike {
   public backendName = "fake";
   public source: string | null = null;
   public readonly catchUpTargets: number[] = [];
+  public readonly releasedSurfaceIds: number[] = [];
+  public gpuSessionId = 7;
 
   public open(source: string): void {
     this.source = source;
@@ -946,6 +1020,18 @@ class FakeDecoder implements NativeVideoDecoderLike {
   public catchUpTo(timestampUs: number): void {
     this.catchUpTargets.push(timestampUs);
     this.frames = [];
+  }
+
+  public releaseFrame(frame: NativeVideoFrame): boolean {
+    if (!isGpuNativeVideoFrame(frame)) return false;
+    this.releasedSurfaceIds.push(frame.surfaceId);
+    return true;
+  }
+
+  public releaseGpuSurface(sessionId: number, surfaceId: number): boolean {
+    if (sessionId !== this.gpuSessionId) return false;
+    this.releasedSurfaceIds.push(surfaceId);
+    return true;
   }
 
   public isReady(): boolean {
@@ -993,6 +1079,21 @@ function createFrame(timestampUs: number): NativeVideoFrame {
     uv: data.subarray(4),
     yStride: 2,
     uvStride: 2,
+    pixelFormat: "nv12",
+  };
+}
+
+function createGpuFrame(
+  timestampUs: number,
+  surfaceId: number,
+): NativeVideoFrame {
+  return {
+    width: 2,
+    height: 2,
+    timestampUs,
+    sessionId: 7,
+    surfaceId,
+    sharedHandle: new Uint8Array(8),
     pixelFormat: "nv12",
   };
 }

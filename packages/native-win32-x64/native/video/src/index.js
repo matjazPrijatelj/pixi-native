@@ -21,6 +21,18 @@ class NativeVideoDecoder {
     return this.decoder.pollNext();
   }
 
+  pollLatestShared() {
+    return this.decoder.pollLatestShared?.() ?? null;
+  }
+
+  pollNextShared() {
+    return this.decoder.pollNextShared?.() ?? null;
+  }
+
+  releaseSharedFrame(sessionId, surfaceId) {
+    return this.decoder.releaseSharedFrame?.(sessionId, surfaceId) ?? false;
+  }
+
   supportsFrameBufferReuse() {
     return typeof this.decoder.pollNextInto === "function";
   }

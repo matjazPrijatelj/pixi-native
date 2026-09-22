@@ -46,6 +46,7 @@ export interface NodeGPUApi {
     renderer: NodeWindowRenderer;
     requestedAlphaMode?: "opaque" | "premultiplied";
     alphaMode?: "opaque" | "premultiplied" | "inherit";
+    videoInteropSupported?: boolean;
   };
   destroy(context: object): void;
 }
@@ -55,14 +56,31 @@ export interface NodeWindowRenderer {
   getAlphaMode?(): "opaque" | "premultiplied" | "inherit";
   getCurrentTexture(): GPUTexture;
   getCurrentTextureView(): GPUTextureView;
-  swap(): void;
+  acquireVideoFrame?(descriptor: {
+    readonly sessionId: number;
+    readonly surfaceId: number;
+    readonly sharedHandle: Uint8Array;
+    readonly width: number;
+    readonly height: number;
+  }): {
+    readonly texture: GPUTexture;
+    readonly yView: GPUTextureView;
+    readonly uvView: GPUTextureView;
+  };
+  swap(): ReadonlyArray<{
+    readonly sessionId: number;
+    readonly surfaceId: number;
+  }> | void;
   resize(): void;
   destroy(): void;
 }
 
 export interface NodeRenderSurface {
   resize(width: number, height: number): void;
-  swap(): void;
+  swap(): ReadonlyArray<{
+    readonly sessionId: number;
+    readonly surfaceId: number;
+  }> | void;
   destroy(): void;
 }
 

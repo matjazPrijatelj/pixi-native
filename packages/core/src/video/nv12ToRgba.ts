@@ -1,10 +1,16 @@
-import type { NativeVideoFrame } from "./NativeVideo.ts";
+import {
+  isGpuNativeVideoFrame,
+  type NativeVideoFrame,
+} from "./NativeVideo.ts";
 
 /** Converts one limited-range BT.709 NV12 frame for the Pixi 7 CPU bridge. */
 export function convertNv12ToRgba(
   frame: NativeVideoFrame,
   output = new Uint8Array(frame.width * frame.height * 4),
 ): Uint8Array {
+  if (isGpuNativeVideoFrame(frame)) {
+    throw new Error("A shared GPU NV12 frame cannot be converted on the CPU");
+  }
   for (let y = 0; y < frame.height; y++) {
     const yRow = y * frame.yStride;
     const uvRow = Math.floor(y / 2) * frame.uvStride;

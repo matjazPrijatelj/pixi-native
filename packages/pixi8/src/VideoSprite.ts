@@ -1,9 +1,11 @@
 import {
   BufferImageSource,
+  ExternalSource,
   Mesh,
   MeshGeometry,
   Shader,
   Texture,
+  TextureView,
   compileHighShaderGpuProgram,
   compileHighShaderGlProgram,
   localUniformBit,
@@ -13,7 +15,13 @@ import {
   type Renderer,
   type TextureSource,
 } from "pixi.js";
-import { NativeVideo, type NativeVideoFrame } from "@pixi-native/core";
+import {
+  NativeVideo,
+  isGpuNativeVideoFrame,
+  type GpuNativeVideoFrame,
+  type NativeVideoFrame,
+} from "@pixi-native/core";
+import { acquireNativeVideoGpuTexture } from "@pixi-native/core/video/gpuInterop.js";
 import {
   getPackedAlphaVideoLayout,
   type PackedAlphaVideoLayout,
@@ -27,6 +35,7 @@ type GlVideoProgram = ReturnType<typeof compileHighShaderGlProgram>;
 
 interface WebGpuVideoRenderer {
   readonly name: string;
+  readonly uid: number;
   readonly gpu: { readonly device: GPUDevice };
   readonly texture: {
     getGpuSource(source: TextureSource): GPUTexture;
@@ -84,6 +93,12 @@ const NV12_GPU_PROGRAM = compileHighShaderGpuProgram({
   name: "native-video-nv12",
   bits: [localUniformBit, NV12_TEXTURE_BIT, roundPixelsBit],
 });
+
+// Pixi keys TextureView objects by this exact descriptor serialization. Dawn's
+// JS converter does not expose multi-planar aspects, so native code creates the
+// views and these keys let Pixi reuse them without calling createView itself.
+const NV12_Y_VIEW_CACHE_KEY = "r8unorm..plane0-only.0..0.";
+const NV12_UV_VIEW_CACHE_KEY = "rg8unorm..plane1-only.0..0.";
 
 function createPackedAlphaGpuProgram(
   layout: PackedAlphaVideoLayout,
@@ -240,6 +255,14 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
   private readonly ownedGeometry: MeshGeometry;
   private readonly ownedShader: Shader;
   private readonly emptyFrame: NativeVideoFrame;
+  private gpuSource: ExternalSource | undefined;
+  private gpuYView: TextureView | undefined;
+  private gpuUvView: TextureView | undefined;
+  private readonly gpuViewsBySurface = new Map<
+    string,
+    { readonly y: TextureView; readonly uv: TextureView }
+  >();
+  private gpuFrameAwaitingRelease: GpuNativeVideoFrame | undefined;
   private needsClear = false;
   private readonly handleVideoEmptied = (): void => {
     this.needsClear = true;
@@ -344,6 +367,16 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
   public override destroy(): void {
     if (this.destroyed) return;
     this.video.removeEventListener("emptied", this.handleVideoEmptied);
+    if (this.gpuFrameAwaitingRelease) {
+      this.video.releaseFrame(this.gpuFrameAwaitingRelease);
+      this.gpuFrameAwaitingRelease = undefined;
+    }
+    for (const views of this.gpuViewsBySurface.values()) {
+      views.y.destroy();
+      views.uv.destroy();
+    }
+    this.gpuViewsBySurface.clear();
+    this.gpuSource?.destroy();
     this.onRender = null;
     super.destroy();
     this.ownedShader.destroy(false);
@@ -359,22 +392,117 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     const isClear = this.needsClear;
     const frame = isClear ? this.emptyFrame : this.video.takeLatestFrame();
     if (!frame) return;
+    const previousGpuFrame = this.gpuFrameAwaitingRelease;
 
     if (renderer.name === "webgpu") {
       const webGpuRenderer = renderer as unknown as WebGpuVideoRenderer;
-      uploadNv12FrameWebGpu(webGpuRenderer, this.ySource, this.uvSource, frame);
+      if (isGpuNativeVideoFrame(frame)) {
+        try {
+          this.presentGpuFrame(webGpuRenderer, renderer, frame);
+        } catch (error) {
+          if (previousGpuFrame) {
+            this.video.releaseFrame(previousGpuFrame);
+            this.gpuFrameAwaitingRelease = undefined;
+          }
+          this.video.fallbackFromGpuFrame(frame, error);
+          return;
+        }
+      } else {
+        this.restoreCpuResources();
+        uploadNv12FrameWebGpu(
+          webGpuRenderer,
+          this.ySource,
+          this.uvSource,
+          frame,
+        );
+        this.gpuFrameAwaitingRelease = undefined;
+      }
     } else if (renderer.name === "webgl") {
+      if (isGpuNativeVideoFrame(frame)) {
+        this.video.releaseFrame(frame);
+        throw new Error("Shared NV12 frames require the WebGPU renderer");
+      }
+      this.restoreCpuResources();
       uploadNv12FrameWebGl(
         renderer as unknown as WebGlVideoRenderer,
         this.ySource,
         this.uvSource,
         frame,
       );
+      this.gpuFrameAwaitingRelease = undefined;
     } else {
       throw new Error("NativeVideoSprite requires WebGPU or WebGL");
     }
+    // A replaced shared surface remains leased until renderer.swap() ends its
+    // Dawn access scope and returns the exact session/surface pair. CPU and
+    // clear transitions have no later native replacement, so release directly.
+    if (previousGpuFrame && this.gpuFrameAwaitingRelease !== frame) {
+      this.video.releaseFrame(previousGpuFrame);
+    }
     if (isClear) this.needsClear = false;
     else this.video.markFramePresented();
+  }
+
+  private presentGpuFrame(
+    renderer: WebGpuVideoRenderer,
+    pixiRenderer: Renderer,
+    frame: GpuNativeVideoFrame,
+  ): void {
+    const imported = acquireNativeVideoGpuTexture(renderer.gpu.device, frame);
+    if (!this.gpuSource) {
+      this.gpuSource = new ExternalSource({
+        resource: imported.texture,
+        renderer: pixiRenderer,
+        width: frame.width,
+        height: frame.height,
+        label: "NativeVideo shared NV12 surface",
+      });
+    } else {
+      this.gpuSource.updateGPUTexture(
+        imported.texture,
+        frame.width,
+        frame.height,
+      );
+    }
+    const surfaceKey = `${frame.sessionId}:${frame.surfaceId}`;
+    let views = this.gpuViewsBySurface.get(surfaceKey);
+    if (!views) {
+      views = {
+        y: new TextureView(this.gpuSource, {
+          format: "r8unorm",
+          aspect: "plane0-only" as GPUTextureAspect,
+        }),
+        uv: new TextureView(this.gpuSource, {
+          format: "rg8unorm",
+          aspect: "plane1-only" as GPUTextureAspect,
+        }),
+      };
+      this.gpuViewsBySurface.set(surfaceKey, views);
+    }
+    // TextureView keeps one resource id even when ExternalSource changes.
+    // A distinct pair per decoder surface gives Pixi's bind-group cache a
+    // stable key for each imported texture instead of reusing frame zero.
+    this.gpuYView = views.y;
+    this.gpuUvView = views.uv;
+    const gpuData = (
+      this.gpuSource as unknown as {
+        _gpuData: Record<
+          number,
+          { textureViews: Record<string, GPUTextureView> }
+        >;
+      }
+    )._gpuData[renderer.uid];
+    gpuData.textureViews[NV12_Y_VIEW_CACHE_KEY] = imported.yView;
+    gpuData.textureViews[NV12_UV_VIEW_CACHE_KEY] = imported.uvView;
+    this.ownedShader.resources.yTexture = this.gpuYView!;
+    this.ownedShader.resources.uvTexture = this.gpuUvView!;
+    this.gpuFrameAwaitingRelease = frame;
+  }
+
+  private restoreCpuResources(): void {
+    if (this.ownedShader.resources.yTexture === this.ySource) return;
+    this.ownedShader.resources.yTexture = this.ySource;
+    this.ownedShader.resources.uvTexture = this.uvSource;
   }
 }
 
@@ -384,6 +512,9 @@ export function uploadNv12FrameWebGpu(
   uvSource: TextureSource,
   frame: NativeVideoFrame,
 ): void {
+  if (isGpuNativeVideoFrame(frame)) {
+    throw new Error("Shared NV12 frames must be imported, not uploaded");
+  }
   const device = renderer.gpu.device;
   const yTexture = renderer.texture.getGpuSource(ySource);
   const uvTexture = renderer.texture.getGpuSource(uvSource);
@@ -412,6 +543,9 @@ export function uploadNv12FrameWebGl(
   uvSource: TextureSource,
   frame: NativeVideoFrame,
 ): void {
+  if (isGpuNativeVideoFrame(frame)) {
+    throw new Error("Shared NV12 frames are not supported by WebGL");
+  }
   const yTexture = renderer.texture.getGlSource(ySource);
   const uvTexture = renderer.texture.getGlSource(uvSource);
   const gl = renderer.gl;

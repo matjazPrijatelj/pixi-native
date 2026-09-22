@@ -1,5 +1,39 @@
 # Development history
 
+## 2026-09-22
+
+- Added the Windows GPU NV12 presentation path: D3D11VA decoder array slices
+  are copied on-GPU into a bounded pool of one-layer shared D3D11 textures,
+  imported by Dawn/D3D12, and sampled as Y and UV planes by the existing Pixi
+  WGSL conversion. Frame bytes no longer cross CPU memory or JavaScript on
+  this path; diagnostics report the remaining GPU-to-GPU copy explicitly.
+- Added shared-surface lease cleanup for skipped, presented, stopped, and
+  destroyed frames, plus automatic restart through native CPU delivery if a
+  Dawn shared-texture import fails. The CLI backend remains the final `auto`
+  fallback if native decoding subsequently fails.
+- Fixed continuous native libav looping by rebasing each post-seek pass onto a
+  monotonic presentation timeline. Container PTS may restart at zero, while
+  the audio and video scheduler clocks now continue across loop boundaries.
+- Fixed the first-frame-only D3D11VA-to-Dawn presentation failure. Pixi's
+  `TextureView` keeps its resource id when an `ExternalSource` changes, so the
+  bind-group cache continued sampling surface zero after decoder rotation.
+  Video sprites now keep one stable Y/UV view pair per shared decoder surface,
+  and shared-access descriptors are explicitly zero-initialized. A 20-second
+  WebGPU smoke stayed on native GPU NV12 delivery with zero Dawn access errors.
+- Added bounded GPU-surface backpressure for unpaced native file decoding, so
+  libavcodec retries the current decoded frame instead of racing to EOF while
+  Dawn owns all presentation surfaces. Also fixed keyed-mutex polling to inspect
+  its raw HRESULT because Windows reports `WAIT_TIMEOUT` as a non-failing
+  result; treating it as ownership caused `DXGI_ERROR_INVALID_CALL`. The
+  follow-up GPU-NV12 smoke completed without Dawn, D3D, or decoder errors.
+- Fixed visible GPU-NV12 stutter caused by returning the currently sampled
+  shared surface to the decoder on 60 Hz ticks without a replacement 30 fps
+  frame. A surface now remains leased while displayed, and replaced surfaces
+  return to the decoder only after native `swap()` has ended Dawn access. The
+  Bunny smoke presented 30 fps with no decoder, Dawn, or D3D errors; native CPU
+  delivery remains available through `PIXI_NATIVE_VIDEO_ZERO_COPY=0` for A/B
+  diagnosis, and the demo defaults back to continuous looping.
+
 ## 2026-09-21
 
 - Changed video decoder selection to native-first `auto` by default, with a

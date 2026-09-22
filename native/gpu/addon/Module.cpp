@@ -1,9 +1,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -11,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -80,12 +82,9 @@ struct BackendInfo {
 };
 
 constexpr BackendInfo kBackends[] = {
-    {"null", nullptr, wgpu::BackendType::Null},
-    {"webgpu", nullptr, wgpu::BackendType::WebGPU},
-    {"d3d11", nullptr, wgpu::BackendType::D3D11},
-    {"d3d12", "d3d", wgpu::BackendType::D3D12},
-    {"metal", nullptr, wgpu::BackendType::Metal},
-    {"vulkan", "vk", wgpu::BackendType::Vulkan},
+    {"null", nullptr, wgpu::BackendType::Null},   {"webgpu", nullptr, wgpu::BackendType::WebGPU},
+    {"d3d11", nullptr, wgpu::BackendType::D3D11}, {"d3d12", "d3d", wgpu::BackendType::D3D12},
+    {"metal", nullptr, wgpu::BackendType::Metal}, {"vulkan", "vk", wgpu::BackendType::Vulkan},
 };
 
 struct NativeGpuContext {
@@ -96,6 +95,7 @@ struct NativeGpuContext {
     wgpu::Adapter adapter;
     wgpu::Device device;
     std::optional<DeviceLostPromise> lostPromise;
+    bool videoInteropSupported = false;
 };
 
 struct DeviceLostContext {
@@ -164,11 +164,11 @@ std::optional<wgpu::BackendType> ResolveBackend(Napi::Env env, const Flags& flag
     std::string name = flags.Get("backend").value_or(GetEnvironmentVariable("DAWNNODE_BACKEND"));
     std::transform(name.begin(), name.end(), name.begin(),
                    [](unsigned char character) { return std::tolower(character); });
-    if (name.empty()) return backend;
+    if (name.empty())
+        return backend;
     const auto parsed = ParseBackend(name);
     if (!parsed.has_value()) {
-        Napi::Error::New(env, "unrecognised backend '" + name + "'")
-            .ThrowAsJavaScriptException();
+        Napi::Error::New(env, "unrecognised backend '" + name + "'").ThrowAsJavaScriptException();
         return std::nullopt;
     }
     return *parsed;
@@ -195,7 +195,8 @@ std::shared_ptr<NativeGpuContext> CreateNativeContext(Napi::Env env, Flags flags
     wgpu::RequestAdapterOptions adapterOptions;
     adapterOptions.featureLevel = wgpu::FeatureLevel::Core;
     const auto backend = ResolveBackend(env, context->flags);
-    if (!backend.has_value()) return nullptr;
+    if (!backend.has_value())
+        return nullptr;
     adapterOptions.backendType = *backend;
     wgpu::DawnTogglesDescriptor adapterToggles = togglesLoader.GetDescriptor();
     adapterOptions.nextInChain = &adapterToggles;
@@ -232,6 +233,19 @@ std::shared_ptr<NativeGpuContext> CreateNativeContext(Napi::Env env, Flags flags
     deviceDescriptor.nextInChain = &deviceToggles;
     deviceDescriptor.SetUncapturedErrorCallback(
         wgpu::binding::GPUDevice::handleUncapturedErrorCallback);
+#if defined(_WIN32)
+    const wgpu::FeatureName videoFeatures[] = {
+        wgpu::FeatureName::DawnMultiPlanarFormats,
+        wgpu::FeatureName::SharedTextureMemoryDXGISharedHandle,
+    };
+    context->videoInteropSupported = *backend == wgpu::BackendType::D3D12 &&
+                                     context->adapter.HasFeature(videoFeatures[0]) &&
+                                     context->adapter.HasFeature(videoFeatures[1]);
+    if (context->videoInteropSupported) {
+        deviceDescriptor.requiredFeatureCount = std::size(videoFeatures);
+        deviceDescriptor.requiredFeatures = videoFeatures;
+    }
+#endif
     context->lostPromise.emplace(env, PROMISE_INFO);
     deviceDescriptor.SetDeviceLostCallback(
         wgpu::CallbackMode::AllowSpontaneous,
@@ -267,9 +281,7 @@ Napi::External<std::shared_ptr<T>> SharedExternal(Napi::Env env, std::shared_ptr
         [](Napi::Env, std::shared_ptr<T>* pointer) { delete pointer; });
 }
 
-WGPUSurface CreateWindowSurface(Napi::Env env,
-                                WGPUInstance instance,
-                                const Napi::Object& window) {
+WGPUSurface CreateWindowSurface(Napi::Env env, WGPUInstance instance, const Napi::Object& window) {
     Napi::Object surface = window.Get("surface").As<Napi::Object>();
     const std::string api = surface.Get("api").As<Napi::String>().Utf8Value();
     auto readPointer = [&](const char* name) -> uintptr_t {
@@ -292,8 +304,7 @@ WGPUSurface CreateWindowSurface(Napi::Env env,
     WGPUSurfaceDescriptor descriptor = {};
 #if defined(_WIN32)
     if (api != "win32") {
-        Napi::TypeError::New(env, "expected a Win32 native surface")
-            .ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "expected a Win32 native surface").ThrowAsJavaScriptException();
         return nullptr;
     }
     WGPUSurfaceSourceWindowsHWND source = {};
@@ -332,17 +343,20 @@ WGPUSurface CreateWindowSurface(Napi::Env env,
 }
 
 class Renderer final : public Napi::ObjectWrap<Renderer> {
-  public:
+   public:
     static void Init(Napi::Env env) {
-        Napi::Function constructor = DefineClass(env, "Renderer", {
-            InstanceMethod("getPreferredFormat", &Renderer::GetPreferredFormat),
-            InstanceMethod("getAlphaMode", &Renderer::GetAlphaMode),
-            InstanceMethod("getCurrentTexture", &Renderer::GetCurrentTexture),
-            InstanceMethod("getCurrentTextureView", &Renderer::GetCurrentTextureView),
-            InstanceMethod("swap", &Renderer::Swap),
-            InstanceMethod("resize", &Renderer::Resize),
-            InstanceMethod("destroy", &Renderer::Destroy),
-        });
+        Napi::Function constructor = DefineClass(
+            env, "Renderer",
+            {
+                InstanceMethod("getPreferredFormat", &Renderer::GetPreferredFormat),
+                InstanceMethod("getAlphaMode", &Renderer::GetAlphaMode),
+                InstanceMethod("getCurrentTexture", &Renderer::GetCurrentTexture),
+                InstanceMethod("getCurrentTextureView", &Renderer::GetCurrentTextureView),
+                InstanceMethod("acquireVideoFrame", &Renderer::AcquireVideoFrame),
+                InstanceMethod("swap", &Renderer::Swap),
+                InstanceMethod("resize", &Renderer::Resize),
+                InstanceMethod("destroy", &Renderer::Destroy),
+            });
         gRendererConstructor = Napi::Persistent(constructor);
         gRendererConstructor.SuppressDestruct();
     }
@@ -352,7 +366,8 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
                             Napi::Object window,
                             Napi::String presentMode,
                             Napi::String alphaMode) {
-        return gRendererConstructor.New({SharedExternal(env, context), window, presentMode, alphaMode});
+        return gRendererConstructor.New(
+            {SharedExternal(env, context), window, presentMode, alphaMode});
     }
 
     explicit Renderer(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Renderer>(info) {
@@ -371,7 +386,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
 
     ~Renderer() override { DestroySurface(); }
 
-  private:
+   private:
     std::shared_ptr<NativeGpuContext> context_;
     Napi::ObjectReference window_;
     WGPUSurface surface_ = nullptr;
@@ -383,18 +398,38 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     bool configured_ = false;
     bool alphaFallback_ = false;
 
+#if defined(_WIN32)
+    struct VideoTextureEntry {
+        int64_t sessionId = 0;
+        int64_t surfaceId = 0;
+        wgpu::SharedTextureMemory memory;
+        wgpu::Texture texture;
+        wgpu::TextureDescriptor descriptor;
+        wgpu::TextureView yView;
+        wgpu::TextureView uvView;
+        wgpu::TextureViewDescriptor yViewDescriptor;
+        wgpu::TextureViewDescriptor uvViewDescriptor;
+        bool active = false;
+        uint64_t beganAtPresentation = 0;
+    };
+    std::unordered_map<std::string, VideoTextureEntry> videoTextures_;
+    // Pixi samples the last video texture again on frames where no decoder
+    // surface arrives. Keep that texture inside Dawn's access scope until a
+    // replacement has been submitted, rather than ending every present.
+    std::string currentVideoTextureKey_;
+    uint64_t presentationSerial_ = 0;
+#endif
+
     uint32_t ReadWindowDimension(Napi::Env env, const char* name) const {
         Napi::Value value = window_.Get(name);
         if (!value.IsNumber()) {
-            Napi::TypeError::New(
-                env, std::string("native window is missing numeric ") + name)
+            Napi::TypeError::New(env, std::string("native window is missing numeric ") + name)
                 .ThrowAsJavaScriptException();
             return 0;
         }
         const double dimension = value.As<Napi::Number>().DoubleValue();
         if (!std::isfinite(dimension) || dimension < 1.0) {
-            Napi::RangeError::New(
-                env, std::string("native window has invalid ") + name)
+            Napi::RangeError::New(env, std::string("native window has invalid ") + name)
                 .ThrowAsJavaScriptException();
             return 0;
         }
@@ -405,8 +440,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     // so every success and failure path releases the acquisition through RAII.
     wgpu::Texture AcquireCurrentTexture(Napi::Env env) const {
         if (!configured_ || surface_ == nullptr) {
-            Napi::Error::New(env, "WebGPU surface is not configured")
-                .ThrowAsJavaScriptException();
+            Napi::Error::New(env, "WebGPU surface is not configured").ThrowAsJavaScriptException();
             return {};
         }
 
@@ -417,10 +451,8 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
             surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal ||
             surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal;
         if (!succeeded || !texture) {
-            Napi::Error::New(
-                env,
-                std::string("WebGPU surface texture acquisition failed: ") +
-                    SurfaceTextureStatusName(surfaceTexture.status))
+            Napi::Error::New(env, std::string("WebGPU surface texture acquisition failed: ") +
+                                      SurfaceTextureStatusName(surfaceTexture.status))
                 .ThrowAsJavaScriptException();
             return {};
         }
@@ -436,8 +468,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         bool opaqueSupported = false;
         for (size_t index = 0; index < capabilities.alphaModeCount; ++index) {
             alphaSupported |= capabilities.alphaModes[index] == alphaMode_;
-            inheritSupported |=
-                capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Inherit;
+            inheritSupported |= capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Inherit;
             opaqueSupported |= capabilities.alphaModes[index] == WGPUCompositeAlphaMode_Opaque;
         }
 #if defined(__linux__)
@@ -467,12 +498,14 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         gProcs->surfaceCapabilitiesFreeMembers(capabilities);
         const uint32_t width = ReadWindowDimension(env, "pixelWidth");
         const uint32_t height = ReadWindowDimension(env, "pixelHeight");
-        if (env.IsExceptionPending()) return;
+        if (env.IsExceptionPending())
+            return;
         ConfigureSurface(width, height);
     }
 
     void ConfigureSurface(uint32_t width, uint32_t height) {
-        if (surface_ == nullptr || (configured_ && width == width_ && height == height_)) return;
+        if (surface_ == nullptr || (configured_ && width == width_ && height == height_))
+            return;
         WGPUSurfaceConfiguration configuration = {};
         configuration.device = context_->device.Get();
         configuration.format = preferredFormat_;
@@ -488,8 +521,22 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
     }
 
     void DestroySurface() {
-        if (surface_ == nullptr) return;
-        if (configured_) gProcs->surfaceUnconfigure(surface_);
+        if (surface_ == nullptr)
+            return;
+#if defined(_WIN32)
+        for (auto& [key, entry] : videoTextures_) {
+            if (!entry.active)
+                continue;
+            wgpu::SharedTextureMemoryEndAccessState end = {};
+            entry.memory.EndAccess(entry.texture, &end);
+            entry.active = false;
+        }
+        videoTextures_.clear();
+        currentVideoTextureKey_.clear();
+        presentationSerial_ = 0;
+#endif
+        if (configured_)
+            gProcs->surfaceUnconfigure(surface_);
         gProcs->surfaceRelease(surface_);
         surface_ = nullptr;
         configured_ = false;
@@ -501,8 +548,8 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         wgpu::interop::GPUTextureFormat format;
         wgpu::binding::Converter converter(info.Env());
         return converter(format, static_cast<wgpu::TextureFormat>(preferredFormat_))
-            ? wgpu::interop::ToJS(info.Env(), format)
-            : info.Env().Null();
+                   ? wgpu::interop::ToJS(info.Env(), format)
+                   : info.Env().Null();
     }
 
     Napi::Value GetAlphaMode(const Napi::CallbackInfo& info) {
@@ -512,13 +559,13 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         } else if (alphaMode_ == WGPUCompositeAlphaMode_Inherit) {
             alphaMode = "inherit";
         }
-        return Napi::String::New(
-            info.Env(), alphaMode);
+        return Napi::String::New(info.Env(), alphaMode);
     }
 
     Napi::Value GetCurrentTexture(const Napi::CallbackInfo& info) {
         wgpu::Texture texture = AcquireCurrentTexture(info.Env());
-        if (!texture) return info.Env().Undefined();
+        if (!texture)
+            return info.Env().Undefined();
 
         gProcs->deviceAddRef(context_->device.Get());
         return wgpu::interop::GPUTexture::Create<wgpu::binding::GPUTexture>(
@@ -528,12 +575,142 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
 
     Napi::Value GetCurrentTextureView(const Napi::CallbackInfo& info) {
         wgpu::Texture texture = AcquireCurrentTexture(info.Env());
-        if (!texture) return info.Env().Undefined();
+        if (!texture)
+            return info.Env().Undefined();
 
         const wgpu::TextureViewDescriptor descriptor = {};
         wgpu::TextureView view = texture.CreateView(&descriptor);
         return wgpu::interop::GPUTextureView::Create<wgpu::binding::GPUTextureView>(
             info.Env(), descriptor, std::move(view));
+    }
+
+    // Imports each decoder-owned handle once, then only brackets reuse with
+    // BeginAccess/EndAccess. Plane views are created here because Dawn's Node
+    // WebGPU converter does not expose the experimental multi-planar aspects.
+    Napi::Value AcquireVideoFrame(const Napi::CallbackInfo& info) {
+#if defined(_WIN32)
+        Napi::Env env = info.Env();
+        if (!context_->videoInteropSupported) {
+            Napi::Error::New(env, "D3D12 shared NV12 video interop is unavailable")
+                .ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        if (info.Length() != 1 || !info[0].IsObject()) {
+            Napi::TypeError::New(env, "acquireVideoFrame expects one descriptor object")
+                .ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        Napi::Object options = info[0].As<Napi::Object>();
+        const int64_t sessionId = options.Get("sessionId").As<Napi::Number>().Int64Value();
+        const int64_t surfaceId = options.Get("surfaceId").As<Napi::Number>().Int64Value();
+        const uint32_t width = options.Get("width").As<Napi::Number>().Uint32Value();
+        const uint32_t height = options.Get("height").As<Napi::Number>().Uint32Value();
+        Napi::Value handleValue = options.Get("sharedHandle");
+        if (!handleValue.IsBuffer()) {
+            Napi::TypeError::New(env, "sharedHandle must be a native pointer buffer")
+                .ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        Napi::Buffer<uint8_t> handleBuffer = handleValue.As<Napi::Buffer<uint8_t>>();
+        if (handleBuffer.Length() < sizeof(HANDLE)) {
+            Napi::TypeError::New(env, "sharedHandle is truncated").ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        HANDLE handle = nullptr;
+        std::memcpy(&handle, handleBuffer.Data(), sizeof(handle));
+        const std::string key = std::to_string(sessionId) + ":" + std::to_string(surfaceId);
+        for (auto iterator = videoTextures_.begin(); iterator != videoTextures_.end();) {
+            if (iterator->second.sessionId != sessionId && !iterator->second.active) {
+                iterator = videoTextures_.erase(iterator);
+            } else {
+                ++iterator;
+            }
+        }
+        auto found = videoTextures_.find(key);
+        if (found == videoTextures_.end()) {
+            wgpu::SharedTextureMemoryDXGISharedHandleDescriptor handleDescriptor;
+            handleDescriptor.handle = handle;
+            handleDescriptor.useKeyedMutex = true;
+            wgpu::SharedTextureMemoryDescriptor memoryDescriptor;
+            memoryDescriptor.nextInChain = &handleDescriptor;
+            memoryDescriptor.label = "pixi-native shared NV12 video surface";
+            wgpu::SharedTextureMemory memory =
+                context_->device.ImportSharedTextureMemory(&memoryDescriptor);
+            wgpu::SharedTextureMemoryProperties properties;
+            if (memory.GetProperties(&properties) != wgpu::Status::Success ||
+                properties.format != wgpu::TextureFormat::R8BG8Biplanar420Unorm ||
+                properties.size.width != width || properties.size.height != height) {
+                Napi::Error::New(env, "Dawn rejected the shared NV12 video surface")
+                    .ThrowAsJavaScriptException();
+                return env.Undefined();
+            }
+            wgpu::TextureDescriptor descriptor;
+            descriptor.label = "pixi-native imported NV12 video frame";
+            descriptor.size = properties.size;
+            descriptor.format = properties.format;
+            descriptor.dimension = wgpu::TextureDimension::e2D;
+            descriptor.usage = wgpu::TextureUsage::TextureBinding;
+            wgpu::Texture texture = memory.CreateTexture(&descriptor);
+            wgpu::TextureViewDescriptor yViewDescriptor;
+            yViewDescriptor.label = "pixi-native NV12 Y plane";
+            yViewDescriptor.format = wgpu::TextureFormat::R8Unorm;
+            yViewDescriptor.dimension = wgpu::TextureViewDimension::e2D;
+            yViewDescriptor.aspect = wgpu::TextureAspect::Plane0Only;
+            wgpu::TextureViewDescriptor uvViewDescriptor;
+            uvViewDescriptor.label = "pixi-native NV12 UV plane";
+            uvViewDescriptor.format = wgpu::TextureFormat::RG8Unorm;
+            uvViewDescriptor.dimension = wgpu::TextureViewDimension::e2D;
+            uvViewDescriptor.aspect = wgpu::TextureAspect::Plane1Only;
+            wgpu::TextureView yView = texture.CreateView(&yViewDescriptor);
+            wgpu::TextureView uvView = texture.CreateView(&uvViewDescriptor);
+            found = videoTextures_
+                        .emplace(key,
+                                 VideoTextureEntry{
+                                     sessionId,
+                                     surfaceId,
+                                     std::move(memory),
+                                     std::move(texture),
+                                     descriptor,
+                                     std::move(yView),
+                                     std::move(uvView),
+                                     yViewDescriptor,
+                                     uvViewDescriptor,
+                                     false,
+                                 })
+                        .first;
+        }
+        VideoTextureEntry& entry = found->second;
+        if (!entry.active) {
+            // Dawn descriptors are C-compatible aggregates. Explicitly clear
+            // the chain pointer and optional synchronization fields before
+            // setting initialized; leaving them indeterminate makes BeginAccess
+            // appear to succeed while the imported texture has no valid scope.
+            wgpu::SharedTextureMemoryBeginAccessDescriptor begin = {};
+            begin.initialized = true;
+            if (entry.memory.BeginAccess(entry.texture, &begin) != wgpu::Status::Success) {
+                Napi::Error::New(env, "Could not acquire the shared NV12 video surface")
+                    .ThrowAsJavaScriptException();
+                return env.Undefined();
+            }
+            entry.active = true;
+            entry.beganAtPresentation = presentationSerial_;
+        }
+        currentVideoTextureKey_ = key;
+        Napi::Object result = Napi::Object::New(env);
+        gProcs->deviceAddRef(context_->device.Get());
+        result.Set("texture", wgpu::interop::GPUTexture::Create<wgpu::binding::GPUTexture>(
+                                  env, wgpu::Device::Acquire(context_->device.Get()),
+                                  entry.descriptor, entry.texture));
+        result.Set("yView", wgpu::interop::GPUTextureView::Create<wgpu::binding::GPUTextureView>(
+                                env, entry.yViewDescriptor, entry.yView));
+        result.Set("uvView", wgpu::interop::GPUTextureView::Create<wgpu::binding::GPUTextureView>(
+                                 env, entry.uvViewDescriptor, entry.uvView));
+        return result;
+#else
+        Napi::Error::New(info.Env(), "Shared NV12 video interop is Windows-only")
+            .ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+#endif
     }
 
     Napi::Value Swap(const Napi::CallbackInfo& info) {
@@ -542,14 +719,39 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
                 .ThrowAsJavaScriptException();
             return info.Env().Undefined();
         }
+        Napi::Array released = Napi::Array::New(info.Env());
+#if defined(_WIN32)
+        uint32_t releasedIndex = 0;
+        for (auto& [key, entry] : videoTextures_) {
+            if (!entry.active || key == currentVideoTextureKey_)
+                continue;
+            // Pixi may have built this submit from the prior bind group before
+            // its onRender hook installed the replacement texture. Retain one
+            // full present after replacement before ending the stale access.
+            if (entry.beganAtPresentation + 1 >= presentationSerial_)
+                continue;
+            wgpu::SharedTextureMemoryEndAccessState end = {};
+            if (entry.memory.EndAccess(entry.texture, &end) == wgpu::Status::Success) {
+                Napi::Object lease = Napi::Object::New(info.Env());
+                lease.Set("sessionId", Napi::Number::New(info.Env(), entry.sessionId));
+                lease.Set("surfaceId", Napi::Number::New(info.Env(), entry.surfaceId));
+                released.Set(releasedIndex++, lease);
+                entry.active = false;
+            }
+        }
+#endif
         gProcs->surfacePresent(surface_);
-        return info.Env().Undefined();
+#if defined(_WIN32)
+        ++presentationSerial_;
+#endif
+        return released;
     }
 
     Napi::Value Resize(const Napi::CallbackInfo& info) {
         const uint32_t width = ReadWindowDimension(info.Env(), "pixelWidth");
         const uint32_t height = ReadWindowDimension(info.Env(), "pixelHeight");
-        if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+        if (info.Env().IsExceptionPending())
+            return info.Env().Undefined();
         ConfigureSurface(width, height);
         return info.Env().Undefined();
     }
@@ -573,10 +775,10 @@ Napi::Value CreateWindowContext(const Napi::CallbackInfo& info) {
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
-    const std::string presentMode = options.Has("presentMode")
-        ? options.Get("presentMode").ToString().Utf8Value() : "fifo";
-    const std::string alphaMode = options.Has("alphaMode")
-        ? options.Get("alphaMode").ToString().Utf8Value() : "opaque";
+    const std::string presentMode =
+        options.Has("presentMode") ? options.Get("presentMode").ToString().Utf8Value() : "fifo";
+    const std::string alphaMode =
+        options.Has("alphaMode") ? options.Get("alphaMode").ToString().Utf8Value() : "opaque";
     if (!kPresentModes.contains(presentMode)) {
         Napi::TypeError::New(env, "presentMode has an invalid value").ThrowAsJavaScriptException();
         return env.Undefined();
@@ -587,17 +789,20 @@ Napi::Value CreateWindowContext(const Napi::CallbackInfo& info) {
     }
 
     auto flags = ParseFlags(env, options.Get("flags"));
-    if (!flags.has_value()) return env.Undefined();
+    if (!flags.has_value())
+        return env.Undefined();
     auto context = CreateNativeContext(env, std::move(*flags));
-    if (context == nullptr) return env.Undefined();
+    if (context == nullptr)
+        return env.Undefined();
     auto adapter = wgpu::interop::GPUAdapter::Create<wgpu::binding::GPUAdapter>(
         env, context->adapter, context->flags, context->async);
     auto device = wgpu::interop::GPUDevice::Bind(
-        env, std::make_unique<wgpu::binding::GPUDevice>(
-            env, wgpu::DeviceDescriptor(), context->device, *context->lostPromise, context->async));
-    Napi::Object renderer = Renderer::New(
-        env, context, options.Get("window").As<Napi::Object>(),
-        Napi::String::New(env, presentMode), Napi::String::New(env, alphaMode));
+        env,
+        std::make_unique<wgpu::binding::GPUDevice>(env, wgpu::DeviceDescriptor(), context->device,
+                                                   *context->lostPromise, context->async));
+    Napi::Object renderer =
+        Renderer::New(env, context, options.Get("window").As<Napi::Object>(),
+                      Napi::String::New(env, presentMode), Napi::String::New(env, alphaMode));
 
     Napi::Object adapterObject = adapter;
     Napi::Object deviceObject = device;
@@ -608,7 +813,9 @@ Napi::Value CreateWindowContext(const Napi::CallbackInfo& info) {
     result.Set("device", deviceObject);
     result.Set("renderer", renderer);
     result.Set("requestedAlphaMode", alphaMode);
-    result.Set("alphaMode", renderer.Get("getAlphaMode").As<Napi::Function>().Call(renderer, {}).ToString());
+    result.Set("alphaMode",
+               renderer.Get("getAlphaMode").As<Napi::Function>().Call(renderer, {}).ToString());
+    result.Set("videoInteropSupported", context->videoInteropSupported);
     result.Set("_nativeContext", SharedExternal(env, context));
     return result;
 }

@@ -9,7 +9,7 @@ import {
   Texture,
   TYPES,
 } from "pixi.js-v7";
-import { NativeVideo } from "@pixi-native/core";
+import { NativeVideo, isGpuNativeVideoFrame } from "@pixi-native/core";
 import {
   getPackedAlphaVideoLayout,
   type PackedAlphaVideoLayout,
@@ -207,6 +207,10 @@ export class NativeVideoSprite7 extends Mesh<Shader> {
     }
     const frame = this.video.takeLatestFrame();
     if (!frame) return false;
+    if (isGpuNativeVideoFrame(frame)) {
+      this.video.releaseFrame(frame);
+      throw new Error("Shared NV12 frames require the PixiJS 8 WebGPU renderer");
+    }
     copyPlane(
       this.yPlane.data,
       frame.y,
