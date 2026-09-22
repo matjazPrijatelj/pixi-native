@@ -24,11 +24,14 @@ const ALPHA_FRAME_WIDTH = 1920;
 const ALPHA_FRAME_HEIGHT = 768;
 const ALPHA_COLOR_WIDTH = 1280;
 const ALPHA_MASK_SCALE = 0.5;
+const STREAM_FADE_DURATION_MS = 250;
+const STREAM_HIDDEN_DURATION_MS = 750;
+const STREAM_STRESS_DELAY_MS = 500;
 const VIDEO_BACKEND =
   process.env.PIXI_NATIVE_VIDEO_BACKEND === "cli" ||
   process.env.PIXI_NATIVE_VIDEO_BACKEND === "native"
     ? process.env.PIXI_NATIVE_VIDEO_BACKEND
-    : "auto";
+    : "native";
 const VIDEO_LOOP = process.env.PIXI_NATIVE_VIDEO_LOOP !== "0";
 
 export interface VideoTestScene extends DisposableDemoScene {
@@ -96,6 +99,12 @@ export function createVideoTest(
   let eventSnapshot: VideoEventMonitorSnapshot | undefined;
   let autoSwitch = false;
   let nextAutoSwitchAt = 0;
+  let streamLifecyclePhase: "visible" | "hiding" | "hidden" | "showing" =
+    "visible";
+  let streamLifecyclePhaseElapsedMs = 0;
+  let streamStressEnabled = false;
+  let streamStressCycles = 0;
+  let streamStressDelayMs = 0;
   let disposed = false;
   let videoRect = fitVideoRect(
     WIDTH,
@@ -136,7 +145,8 @@ export function createVideoTest(
         ? `VIDEO SRC/EVENT TEST  [5]  ${eventSources[eventIndex]?.file ?? "unavailable"}` +
           `  [UP/DOWN: src]  [A: auto ${autoSwitch ? "on" : "off"}]  [E: normal]  [T: alpha]`
         : `VIDEO TEST  [5]  ${fileName}  [UP/DOWN: change video]` +
-          `  [M: mask ${maskEnabled ? "on" : "off"}]  [E: src events]  [T: alpha]`;
+          `  [M: mask ${maskEnabled ? "on" : "off"}]  [F: fade/in]` +
+          `  [S: stress ${streamStressEnabled ? "on" : "off"}]  [E: src events]  [T: alpha]`;
   };
 
   const updateEventPanel = (): void => {
@@ -250,9 +260,75 @@ export function createVideoTest(
     });
     sprite = new NativeVideoSprite(video, spriteOptions);
     videoGroup.addChild(sprite);
+    streamLifecyclePhase = "visible";
+    streamLifecyclePhaseElapsedMs = 0;
+    streamStressDelayMs = 0;
+    videoGroup.visible = true;
+    videoGroup.alpha = 1;
     measuredUploadFps = null;
     previousPresentedFrames = 0;
     videoScene.resize(viewport.width, viewport.height);
+  };
+
+  const beginFadeInLifecycle = (): boolean => {
+    // Roulette keeps this exact NativeVideo/VideoSprite pair alive. Its prior
+    // wheel-chart state suspends presentation and fades the container out;
+    // fade in makes that container visible and resumes presentation.
+    if (alphaMode || streamLifecyclePhase !== "visible") return false;
+    if (video.stats.presentedFrames === 0) return false;
+    streamLifecyclePhase = "hiding";
+    streamLifecyclePhaseElapsedMs = 0;
+    streamStressDelayMs = 0;
+    sprite.setPresentationSuspended(true);
+    return true;
+  };
+
+  const updateFadeInLifecycle = (deltaMS: number): void => {
+    if (streamLifecyclePhase === "visible") {
+      if (streamStressEnabled) {
+        streamStressDelayMs = Math.max(0, streamStressDelayMs - deltaMS);
+        if (streamStressDelayMs === 0 && !beginFadeInLifecycle()) {
+          streamStressDelayMs = STREAM_STRESS_DELAY_MS;
+        }
+      }
+      return;
+    }
+
+    streamLifecyclePhaseElapsedMs += deltaMS;
+    if (streamLifecyclePhase === "hiding") {
+      videoGroup.alpha = Math.max(
+        0,
+        1 - streamLifecyclePhaseElapsedMs / STREAM_FADE_DURATION_MS,
+      );
+      if (streamLifecyclePhaseElapsedMs < STREAM_FADE_DURATION_MS) return;
+      videoGroup.alpha = 0;
+      videoGroup.visible = false;
+      streamLifecyclePhase = "hidden";
+      streamLifecyclePhaseElapsedMs = 0;
+      return;
+    }
+
+    if (streamLifecyclePhase === "hidden") {
+      if (streamLifecyclePhaseElapsedMs < STREAM_HIDDEN_DURATION_MS) return;
+      // This is the alternate path: show first, fade in, then
+      // resume frame presentation without recreating the stream.
+      videoGroup.visible = true;
+      sprite.setPresentationSuspended(false);
+      streamLifecyclePhase = "showing";
+      streamLifecyclePhaseElapsedMs = 0;
+      return;
+    }
+
+    videoGroup.alpha = Math.min(
+      1,
+      streamLifecyclePhaseElapsedMs / STREAM_FADE_DURATION_MS,
+    );
+    if (streamLifecyclePhaseElapsedMs < STREAM_FADE_DURATION_MS) return;
+    videoGroup.alpha = 1;
+    streamLifecyclePhase = "visible";
+    streamLifecyclePhaseElapsedMs = 0;
+    streamStressCycles++;
+    if (streamStressEnabled) streamStressDelayMs = STREAM_STRESS_DELAY_MS;
   };
 
   const beginEventSource = (nextIndex: number, replacement: boolean): void => {
@@ -345,6 +421,17 @@ export function createVideoTest(
       updateEventPanel();
       return true;
     }
+    if (normalized === "f") {
+      return beginFadeInLifecycle();
+    }
+    if (normalized === "s") {
+      streamStressEnabled = !streamStressEnabled;
+      if (streamStressEnabled && streamLifecyclePhase === "visible") {
+        streamStressDelayMs = 0;
+      }
+      updateMaskState();
+      return true;
+    }
     if (eventMode && (normalized === "up" || normalized === "down")) {
       beginEventSource(eventIndex + (normalized === "up" ? -1 : 1), true);
       return true;
@@ -362,6 +449,7 @@ export function createVideoTest(
       maskTime += deltaMS / 1000;
       redrawMask();
     }
+    updateFadeInLifecycle(deltaMS);
     const stats = video.stats;
     const audioDiagnostics = nativeAudioEngine.diagnostics;
     if (stats.presentedFrames !== previousPresentedFrames) {
@@ -417,6 +505,7 @@ export function createVideoTest(
       ` | audio queue/underruns: ${audioDiagnostics.queuedMs.toFixed(0)} ms/` +
       `${audioDiagnostics.underruns}` +
       ` | ${(stats.bytesPerFrame / 1_000_000).toFixed(2)} MB/frame` +
+      ` | stream ${streamLifecyclePhase} #${streamStressCycles}` +
       ` | ${audioState} | ${state}`;
   };
 
@@ -427,6 +516,7 @@ export function createVideoTest(
     disposed = true;
     videoScene.update = (): void => undefined;
     eventMonitor?.dispose();
+    streamStressEnabled = false;
     videoGroup.mask = null;
     maskGraphics.destroy();
     video.destroy();

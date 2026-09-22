@@ -353,6 +353,8 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
                 InstanceMethod("getCurrentTexture", &Renderer::GetCurrentTexture),
                 InstanceMethod("getCurrentTextureView", &Renderer::GetCurrentTextureView),
                 InstanceMethod("acquireVideoFrame", &Renderer::AcquireVideoFrame),
+                InstanceMethod("retireVideoFrame", &Renderer::RetireVideoFrame),
+                InstanceMethod("completeVideoFrameReleases", &Renderer::CompleteVideoFrameReleases),
                 InstanceMethod("swap", &Renderer::Swap),
                 InstanceMethod("resize", &Renderer::Resize),
                 InstanceMethod("destroy", &Renderer::Destroy),
@@ -410,6 +412,8 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
         wgpu::TextureViewDescriptor yViewDescriptor;
         wgpu::TextureViewDescriptor uvViewDescriptor;
         bool active = false;
+        bool retired = false;
+        bool releaseQueued = false;
         uint64_t beganAtPresentation = 0;
     };
     std::unordered_map<std::string, VideoTextureEntry> videoTextures_;
@@ -680,6 +684,11 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
                         .first;
         }
         VideoTextureEntry& entry = found->second;
+        if (entry.releaseQueued) {
+            Napi::Error::New(env, "Shared NV12 surface is awaiting GPU completion")
+                .ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
         if (!entry.active) {
             // Dawn descriptors are C-compatible aggregates. Explicitly clear
             // the chain pointer and optional synchronization fields before
@@ -695,6 +704,7 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
             entry.active = true;
             entry.beganAtPresentation = presentationSerial_;
         }
+        entry.retired = false;
         currentVideoTextureKey_ = key;
         Napi::Object result = Napi::Object::New(env);
         gProcs->deviceAddRef(context_->device.Get());
@@ -713,6 +723,77 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
 #endif
     }
 
+    // Marks an imported surface as no longer referenced by a VideoSprite. It
+    // remains inside Dawn's access scope until swap has submitted all commands
+    // and JavaScript observes queue.onSubmittedWorkDone().
+    Napi::Value RetireVideoFrame(const Napi::CallbackInfo& info) {
+#if defined(_WIN32)
+        Napi::Env env = info.Env();
+        if (info.Length() != 1 || !info[0].IsObject()) {
+            Napi::TypeError::New(env, "retireVideoFrame expects one descriptor object")
+                .ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        Napi::Object options = info[0].As<Napi::Object>();
+        const int64_t sessionId = options.Get("sessionId").As<Napi::Number>().Int64Value();
+        const int64_t surfaceId = options.Get("surfaceId").As<Napi::Number>().Int64Value();
+        const std::string key = std::to_string(sessionId) + ":" + std::to_string(surfaceId);
+        const auto found = videoTextures_.find(key);
+        if (found == videoTextures_.end() || !found->second.active)
+            return Napi::Boolean::New(env, false);
+        found->second.retired = true;
+        if (currentVideoTextureKey_ == key)
+            currentVideoTextureKey_.clear();
+        return Napi::Boolean::New(env, true);
+#else
+        return Napi::Boolean::New(info.Env(), false);
+#endif
+    }
+
+    // Ends access only after JavaScript has observed completion of every
+    // queue submission that could still reference these bind groups.
+    Napi::Value CompleteVideoFrameReleases(const Napi::CallbackInfo& info) {
+        Napi::Env env = info.Env();
+        if (info.Length() != 1 || !info[0].IsArray()) {
+            Napi::TypeError::New(env, "completeVideoFrameReleases expects an array")
+                .ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        Napi::Array completed = Napi::Array::New(env);
+#if defined(_WIN32)
+        uint32_t completedIndex = 0;
+        Napi::Array candidates = info[0].As<Napi::Array>();
+        for (uint32_t index = 0; index < candidates.Length(); ++index) {
+            Napi::Value candidate = candidates.Get(index);
+            if (!candidate.IsObject())
+                continue;
+            Napi::Object surface = candidate.As<Napi::Object>();
+            if (!surface.Get("sessionId").IsNumber() || !surface.Get("surfaceId").IsNumber())
+                continue;
+            const int64_t sessionId = surface.Get("sessionId").As<Napi::Number>().Int64Value();
+            const int64_t surfaceId = surface.Get("surfaceId").As<Napi::Number>().Int64Value();
+            const std::string key = std::to_string(sessionId) + ":" + std::to_string(surfaceId);
+            const auto found = videoTextures_.find(key);
+            if (found == videoTextures_.end())
+                continue;
+            VideoTextureEntry& entry = found->second;
+            if (!entry.active || !entry.releaseQueued)
+                continue;
+            wgpu::SharedTextureMemoryEndAccessState end = {};
+            if (entry.memory.EndAccess(entry.texture, &end) != wgpu::Status::Success)
+                continue;
+            entry.active = false;
+            entry.retired = false;
+            entry.releaseQueued = false;
+            Napi::Object released = Napi::Object::New(env);
+            released.Set("sessionId", Napi::Number::New(env, entry.sessionId));
+            released.Set("surfaceId", Napi::Number::New(env, entry.surfaceId));
+            completed.Set(completedIndex++, released);
+        }
+#endif
+        return completed;
+    }
+
     Napi::Value Swap(const Napi::CallbackInfo& info) {
         if (!configured_ || surface_ == nullptr) {
             Napi::Error::New(info.Env(), "WebGPU surface is not configured")
@@ -723,21 +804,19 @@ class Renderer final : public Napi::ObjectWrap<Renderer> {
 #if defined(_WIN32)
         uint32_t releasedIndex = 0;
         for (auto& [key, entry] : videoTextures_) {
-            if (!entry.active || key == currentVideoTextureKey_)
+            if (!entry.active || entry.releaseQueued ||
+                (key == currentVideoTextureKey_ && !entry.retired))
                 continue;
             // Pixi may have built this submit from the prior bind group before
             // its onRender hook installed the replacement texture. Retain one
             // full present after replacement before ending the stale access.
             if (entry.beganAtPresentation + 1 >= presentationSerial_)
                 continue;
-            wgpu::SharedTextureMemoryEndAccessState end = {};
-            if (entry.memory.EndAccess(entry.texture, &end) == wgpu::Status::Success) {
-                Napi::Object lease = Napi::Object::New(info.Env());
-                lease.Set("sessionId", Napi::Number::New(info.Env(), entry.sessionId));
-                lease.Set("surfaceId", Napi::Number::New(info.Env(), entry.surfaceId));
-                released.Set(releasedIndex++, lease);
-                entry.active = false;
-            }
+            entry.releaseQueued = true;
+            Napi::Object lease = Napi::Object::New(info.Env());
+            lease.Set("sessionId", Napi::Number::New(info.Env(), entry.sessionId));
+            lease.Set("surfaceId", Napi::Number::New(info.Env(), entry.surfaceId));
+            released.Set(releasedIndex++, lease);
         }
 #endif
         gProcs->surfacePresent(surface_);

@@ -22,7 +22,25 @@ export function acquireNativeVideoGpuTexture(
 } {
   const renderer = VIDEO_RENDERERS.get(device);
   if (!renderer?.acquireVideoFrame) {
-    throw new Error("Native D3D12 video interop is unavailable for this device");
+    throw new Error(
+      "Native D3D12 video interop is unavailable for this device",
+    );
   }
   return renderer.acquireVideoFrame(frame);
+}
+
+/**
+ * Stops presenting an imported surface without ending its Dawn access scope.
+ * The renderer releases it only after the queue has completed all submissions.
+ */
+export function retireNativeVideoGpuTexture(
+  device: GPUDevice,
+  frame: GpuNativeVideoFrame,
+): boolean {
+  return (
+    VIDEO_RENDERERS.get(device)?.retireVideoFrame?.({
+      sessionId: frame.sessionId,
+      surfaceId: frame.surfaceId,
+    }) ?? false
+  );
 }

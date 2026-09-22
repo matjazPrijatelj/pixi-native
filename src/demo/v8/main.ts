@@ -126,15 +126,10 @@ resizeBackground();
 app.stage.addChild(background);
 
 const videos = [
-  { file: "jerneja_en_doubleZero.mp4", fps: 30 },
-  { file: "Big_Buck_Bunny_1080_30s.mp4", fps: 24 },
   { file: "Sync_Check-720p30fps.mp4", fps: 30 },
   { file: "Big_Buck_Bunny_720_10s_20MB.mp4", fps: 30 },
-  { file: "Big_Buck_Bunny_1080_10s_5MB.mp4", fps: 60 },
-  {
-    file: "cutting_orange_tuil_8s_3484kbps_2160p_59.94fps_h264.mp4",
-    fps: 60_000 / 1_001,
-  },
+  { file: "jerneja_en_doubleZero.mp4", fps: 30 },
+  { file: "4k_60fps.mp4", fps: 60 },
   {
     file: "water_netflix_15000kbps_2160p_59.94fps_h264.mp4",
     fps: 19_001 / 317,

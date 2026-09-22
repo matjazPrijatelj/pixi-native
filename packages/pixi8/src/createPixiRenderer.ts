@@ -115,10 +115,26 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
     app,
     native,
     present: () => {
-      const releasedSurfaces = native.renderer.swap();
-      if (releasedSurfaces?.length) {
-        releaseNativeVideoGpuSurfaces(releasedSurfaces);
-      }
+      const pendingSurfaces = native.renderer.swap();
+      if (!pendingSurfaces?.length || !native.device) return;
+      // EndAccess invalidates the imported texture immediately. Pixi bind-group
+      // caching can keep the stale view in a submitted command buffer, so wait
+      // for every current submission before returning the decoder surface.
+      void native.device.queue
+        .onSubmittedWorkDone()
+        .then(() => {
+          const releasedSurfaces =
+            native.renderer.completeVideoFrameReleases?.(pendingSurfaces);
+          if (releasedSurfaces?.length) {
+            releaseNativeVideoGpuSurfaces(releasedSurfaces);
+          }
+        })
+        .catch((error) => {
+          console.error(
+            "[pixi-native] Unable to complete shared NV12 surface release",
+            error,
+          );
+        });
     },
     destroyApplication: () => {
       // Pixi 8's default Application.destroy order releases the stage

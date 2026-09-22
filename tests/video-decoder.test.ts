@@ -614,6 +614,37 @@ test("NativeVideo restarts with CPU delivery after a shared GPU import failure",
   video.destroy();
 });
 
+test("NativeVideo waits for renderer-owned GPU surfaces before CPU fallback", async () => {
+  const factory = new FakeAudioVideoFactory();
+  const video = new NativeVideo(
+    "video-with-audio.mp4",
+    { width: 2, height: 2, fps: 30 },
+    factory,
+  );
+
+  await video.play();
+  factory.audios[0].currentTime = 0.5;
+  const frame = createGpuFrame(500_000, 2);
+  factory.decoders[0].enqueue(frame);
+  const selected = video.takeLatestFrame();
+  assert.ok(selected && isGpuNativeVideoFrame(selected));
+  video.fallbackFromGpuFrame(selected, new Error("test import failure"), [
+    selected,
+  ]);
+
+  assert.deepEqual(factory.decoders[0].releasedSurfaceIds, []);
+  assert.equal(factory.decoders[0].closed, false);
+  assert.equal(factory.decoders.length, 1);
+
+  video.releaseGpuSurface(7, 2);
+
+  assert.deepEqual(factory.decoders[0].releasedSurfaceIds, [2]);
+  assert.equal(factory.decoders[0].closed, true);
+  assert.equal(factory.decoders.length, 2);
+  assert.equal(factory.options[1].startTime, 0.5);
+  video.destroy();
+});
+
 test("NativeVideo requests native catch-up when a file frame is too late", async () => {
   const factory = new FakeAudioVideoFactory();
   const video = new NativeVideo(

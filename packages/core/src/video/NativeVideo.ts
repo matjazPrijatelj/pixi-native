@@ -800,6 +800,10 @@ type NativeVideoEventHandler =
 
 const activeVideos = new Set<WeakRef<NativeVideo>>();
 
+function gpuSurfaceKey(sessionId: number, surfaceId: number): string {
+  return `${sessionId}:${surfaceId}`;
+}
+
 export function setNativeVideoModalState(active: boolean): void {
   for (const reference of activeVideos) {
     const video = reference.deref();
@@ -935,6 +939,10 @@ export class NativeVideo extends EventTarget {
   private reconnectAtMs = 0;
   private livePresentationDeadlineMs = 0;
   private frameAwaitingPresentation = false;
+  private pendingGpuFallback?: {
+    readonly position: number;
+    readonly surfaceKeys: Set<string>;
+  };
   private presentationDiagnosticsLogged = false;
   private readonly registryReference: WeakRef<NativeVideo>;
   private metadataPromise?: Promise<void>;
@@ -1325,21 +1333,65 @@ export class NativeVideo extends EventTarget {
 
   /** @internal Returns a surface after the native renderer ended Dawn access. */
   public releaseGpuSurface(sessionId: number, surfaceId: number): boolean {
-    return this.decoder?.releaseGpuSurface?.(sessionId, surfaceId) ?? false;
+    const released =
+      this.decoder?.releaseGpuSurface?.(sessionId, surfaceId) ?? false;
+    if (released) this.completeGpuFallbackSurface(sessionId, surfaceId);
+    return released;
   }
 
   /** @internal Restarts through the CPU delivery path if Dawn cannot import a shared surface. */
-  public fallbackFromGpuFrame(frame: GpuNativeVideoFrame, cause: unknown): void {
-    this.releaseFrame(frame);
+  public fallbackFromGpuFrame(
+    frame: GpuNativeVideoFrame,
+    cause: unknown,
+    rendererOwnedFrames: readonly GpuNativeVideoFrame[] = [],
+  ): void {
     this.frameAwaitingPresentation = false;
     if (this.destroyed || this.isPaused) return;
 
     setNativeVideoGpuInteropSupported(false);
-    const position = this.currentTime;
     console.warn(
       "[pixi-native] Shared NV12 import failed; restarting video with CPU delivery",
       asError(cause),
     );
+    const surfaceKeys = new Set(
+      rendererOwnedFrames.map((ownedFrame) =>
+        gpuSurfaceKey(ownedFrame.sessionId, ownedFrame.surfaceId),
+      ),
+    );
+    const failedFrameKey = gpuSurfaceKey(frame.sessionId, frame.surfaceId);
+    if (!surfaceKeys.has(failedFrameKey)) this.releaseFrame(frame);
+
+    if (surfaceKeys.size > 0) {
+      if (this.pendingGpuFallback) {
+        for (const key of surfaceKeys) {
+          this.pendingGpuFallback.surfaceKeys.add(key);
+        }
+      } else {
+        this.pendingGpuFallback = {
+          position: this.currentTime,
+          surfaceKeys,
+        };
+      }
+      return;
+    }
+
+    this.restartWithCpuFallback(this.currentTime);
+  }
+
+  private completeGpuFallbackSurface(
+    sessionId: number,
+    surfaceId: number,
+  ): void {
+    const pending = this.pendingGpuFallback;
+    if (!pending) return;
+    pending.surfaceKeys.delete(gpuSurfaceKey(sessionId, surfaceId));
+    if (pending.surfaceKeys.size > 0) return;
+    this.pendingGpuFallback = undefined;
+    this.restartWithCpuFallback(pending.position);
+  }
+
+  private restartWithCpuFallback(position: number): void {
+    if (this.destroyed || this.isPaused) return;
     try {
       this.startDecoder(position);
     } catch (error) {
@@ -1366,6 +1418,7 @@ export class NativeVideo extends EventTarget {
     this.playbackGeneration++;
     this.sourceGeneration++;
     this.reconnectAtMs = 0;
+    this.pendingGpuFallback = undefined;
     this.stopDecoder();
     this.stopAudio();
     this.isPaused = true;

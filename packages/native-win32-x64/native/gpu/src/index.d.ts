@@ -2792,6 +2792,14 @@ interface Renderer {
     yView: GPUTextureView;
     uvView: GPUTextureView;
   };
+  retireVideoFrame(descriptor: {
+    sessionId: number;
+    surfaceId: number;
+  }): boolean;
+  completeVideoFrameReleases(surfaces: Array<{
+    sessionId: number;
+    surfaceId: number;
+  }>): Array<{ sessionId: number; surfaceId: number }>;
   swap(): Array<{ sessionId: number; surfaceId: number }>;
   resize();
   destroy();

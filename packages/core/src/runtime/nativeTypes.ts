@@ -67,6 +67,19 @@ export interface NodeWindowRenderer {
     readonly yView: GPUTextureView;
     readonly uvView: GPUTextureView;
   };
+  retireVideoFrame?(descriptor: {
+    readonly sessionId: number;
+    readonly surfaceId: number;
+  }): boolean;
+  completeVideoFrameReleases?(
+    surfaces: ReadonlyArray<{
+      readonly sessionId: number;
+      readonly surfaceId: number;
+    }>,
+  ): ReadonlyArray<{
+    readonly sessionId: number;
+    readonly surfaceId: number;
+  }>;
   swap(): ReadonlyArray<{
     readonly sessionId: number;
     readonly surfaceId: number;
@@ -81,6 +94,15 @@ export interface NodeRenderSurface {
     readonly sessionId: number;
     readonly surfaceId: number;
   }> | void;
+  completeVideoFrameReleases?(
+    surfaces: ReadonlyArray<{
+      readonly sessionId: number;
+      readonly surfaceId: number;
+    }>,
+  ): ReadonlyArray<{
+    readonly sessionId: number;
+    readonly surfaceId: number;
+  }>;
   destroy(): void;
 }
 

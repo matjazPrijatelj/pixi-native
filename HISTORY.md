@@ -2,6 +2,12 @@
 
 ## 2026-09-22
 
+- Added a VideoTest runtime regression for Roulette's stream lifecycle: it
+  keeps one `NativeVideo` and `VideoSprite`, fades presentation out while
+  suspended, then simulates `BETS_CLOSED` by restoring visibility and
+  presentation. `B` runs one cycle and `S` repeats it after a presented frame,
+  exercising shared-NV12 texture retirement and re-acquisition without source
+  replacement or decoder teardown.
 - Added the Windows GPU NV12 presentation path: D3D11VA decoder array slices
   are copied on-GPU into a bounded pool of one-layer shared D3D11 textures,
   imported by Dawn/D3D12, and sampled as Y and UV planes by the existing Pixi

@@ -21,7 +21,10 @@ import {
   type GpuNativeVideoFrame,
   type NativeVideoFrame,
 } from "@pixi-native/core";
-import { acquireNativeVideoGpuTexture } from "@pixi-native/core/video/gpuInterop.js";
+import {
+  acquireNativeVideoGpuTexture,
+  retireNativeVideoGpuTexture,
+} from "@pixi-native/core/video/gpuInterop.js";
 import {
   getPackedAlphaVideoLayout,
   type PackedAlphaVideoLayout,
@@ -258,12 +261,14 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
   private gpuSource: ExternalSource | undefined;
   private gpuYView: TextureView | undefined;
   private gpuUvView: TextureView | undefined;
+  private gpuDevice: GPUDevice | undefined;
   private readonly gpuViewsBySurface = new Map<
     string,
     { readonly y: TextureView; readonly uv: TextureView }
   >();
   private gpuFrameAwaitingRelease: GpuNativeVideoFrame | undefined;
   private needsClear = false;
+  private presentationSuspended = false;
   private readonly handleVideoEmptied = (): void => {
     this.needsClear = true;
   };
@@ -367,10 +372,7 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
   public override destroy(): void {
     if (this.destroyed) return;
     this.video.removeEventListener("emptied", this.handleVideoEmptied);
-    if (this.gpuFrameAwaitingRelease) {
-      this.video.releaseFrame(this.gpuFrameAwaitingRelease);
-      this.gpuFrameAwaitingRelease = undefined;
-    }
+    this.setPresentationSuspended(true);
     for (const views of this.gpuViewsBySurface.values()) {
       views.y.destroy();
       views.uv.destroy();
@@ -388,7 +390,22 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     this.uvSource.destroy();
   }
 
+  /** Stops frame upload while retaining a live decoder connection. */
+  public setPresentationSuspended(suspended: boolean): void {
+    if (this.presentationSuspended === suspended) return;
+    this.presentationSuspended = suspended;
+    if (!suspended) return;
+    if (this.gpuFrameAwaitingRelease) {
+      this.retireGpuFrame(this.gpuFrameAwaitingRelease);
+      this.gpuFrameAwaitingRelease = undefined;
+    }
+    // Replace the imported texture in the shader before the next submission.
+    // The stream container can then fade out without binding shared NV12 memory.
+    this.restoreCpuResources();
+  }
+
   private uploadLatestFrame(renderer: Renderer): void {
+    if (this.presentationSuspended) return;
     const isClear = this.needsClear;
     const frame = isClear ? this.emptyFrame : this.video.takeLatestFrame();
     if (!frame) return;
@@ -400,14 +417,20 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
         try {
           this.presentGpuFrame(webGpuRenderer, renderer, frame);
         } catch (error) {
+          const rendererOwnedFrames: GpuNativeVideoFrame[] = [];
           if (previousGpuFrame) {
-            this.video.releaseFrame(previousGpuFrame);
+            if (this.retireGpuFrame(previousGpuFrame)) {
+              rendererOwnedFrames.push(previousGpuFrame);
+            }
             this.gpuFrameAwaitingRelease = undefined;
           }
-          this.video.fallbackFromGpuFrame(frame, error);
+          if (this.retireGpuFrame(frame)) rendererOwnedFrames.push(frame);
+          this.restoreCpuResources();
+          this.video.fallbackFromGpuFrame(frame, error, rendererOwnedFrames);
           return;
         }
       } else {
+        if (previousGpuFrame) this.retireGpuFrame(previousGpuFrame);
         this.restoreCpuResources();
         uploadNv12FrameWebGpu(
           webGpuRenderer,
@@ -433,14 +456,15 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     } else {
       throw new Error("NativeVideoSprite requires WebGPU or WebGL");
     }
-    // A replaced shared surface remains leased until renderer.swap() ends its
-    // Dawn access scope and returns the exact session/surface pair. CPU and
-    // clear transitions have no later native replacement, so release directly.
-    if (previousGpuFrame && this.gpuFrameAwaitingRelease !== frame) {
-      this.video.releaseFrame(previousGpuFrame);
-    }
+    // Imported NV12 surfaces remain renderer-owned until all submitted work
+    // has completed and the native renderer can safely end their access scope.
     if (isClear) this.needsClear = false;
     else this.video.markFramePresented();
+  }
+
+  private retireGpuFrame(frame: GpuNativeVideoFrame): boolean {
+    if (!this.gpuDevice) return false;
+    return retireNativeVideoGpuTexture(this.gpuDevice, frame);
   }
 
   private presentGpuFrame(
@@ -448,6 +472,7 @@ export class NativeVideoSprite extends Mesh<MeshGeometry, Shader> {
     pixiRenderer: Renderer,
     frame: GpuNativeVideoFrame,
   ): void {
+    this.gpuDevice = renderer.gpu.device;
     const imported = acquireNativeVideoGpuTexture(renderer.gpu.device, frame);
     if (!this.gpuSource) {
       this.gpuSource = new ExternalSource({
