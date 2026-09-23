@@ -191,6 +191,10 @@ await video.play();
 `paused`, `ended`, `backend`, `error`, `audioError`, `reconnecting`,
 `reconnectAttempts`, and `stats`.
 
+Changing `playbackRate` during file playback keeps the video decoder and its
+queued or renderer-owned frames alive. Only the audio voice is restarted at
+the current media time; silent video rebases its presentation clock in place.
+
 Without `PIXI_NATIVE_VIDEO_BACKEND`, CPU NV12 delivery (including WebGL) uses
 the bundled FFmpeg CLI, while Pixi 8 WebGPU's `gpu-nv12` delivery uses the
 in-process libavcodec decoder. Set `PIXI_NATIVE_VIDEO_BACKEND=cli` or `lib` to

@@ -1013,7 +1013,8 @@ export class NativeVideo extends EventTarget {
     if (value === this.playbackRateValue) return;
     const position = this.currentTime;
     this.playbackRateValue = value;
-    if (!this.isPaused) void this.restartPlayback(position);
+    if (!this.isPaused && this.decoder)
+      void this.restartAudioForPlaybackRate(position);
   }
 
   public get paused(): boolean {
@@ -1373,10 +1374,12 @@ export class NativeVideo extends EventTarget {
     this.stopDecoder();
     const decoder = this.dependencies.createDecoder({
       ...this.options,
+      // Decoded frame timestamps remain in media time. Playback speed is
+      // applied by the audio master clock or the local presentation clock.
+      playbackRate: undefined,
       fps: this.decoderFrameRate(),
       startTime,
       endTime: this.segmentEnd,
-      playbackRate: this.playbackRateValue,
       sourcePaced:
         this.options.ffmpeg?.inputPacing === "source" ||
         this.options.mediaType === "live",
@@ -1544,6 +1547,25 @@ export class NativeVideo extends EventTarget {
       this.stopDecoder();
       this.stopAudio();
       this.emit("error");
+    }
+  }
+
+  /** Changes file playback speed without discarding decoded or GPU-owned video frames. */
+  private async restartAudioForPlaybackRate(startTime: number): Promise<void> {
+    const generation = ++this.playbackGeneration;
+    this.positionSeconds = startTime;
+    this.hasEnded = false;
+    this.playbackClockStartSeconds = startTime;
+    this.playbackClockStartedAtMs = performance.now();
+
+    if (!this.shouldUseAudio()) return;
+
+    try {
+      await this.startAudio(startTime, generation);
+    } catch (error) {
+      if (!this.isPlaybackGenerationActive(generation)) return;
+      this.lastAudioError = asError(error);
+      this.stopAudio();
     }
   }
 

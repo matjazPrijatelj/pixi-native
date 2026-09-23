@@ -84,6 +84,10 @@ The public video API supports:
 - seeking through `currentTime` for file sources;
 - browser-style media events, decoder state, and frame statistics.
 
+Changing a file video's playback rate does not reopen its video decoder. The
+audio voice restarts at the same media position with the new rate, while a
+silent video continues from a rebased presentation clock.
+
 Windows uses D3D11VA when available and falls back to CPU decoding. Linux uses
 VA-API when available and has the same CPU fallback. Both platform packages
 contain the project's minimal FFmpeg and FFprobe executables.

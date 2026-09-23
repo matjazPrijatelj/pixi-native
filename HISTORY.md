@@ -2,6 +2,9 @@
 
 ## 2026-09-22
 
+- Kept the active file-video decoder, queued frames, and renderer-owned GPU
+  surfaces alive across `playbackRate` changes. Only audio restarts at the
+  current media time; silent playback rebases its presentation clock.
 - Changed automatic video implementation selection to match delivery cost:
   CPU NV12 (including WebGL and WebGPU fallback) now uses the smoother CLI
   pipeline, while Pixi 8 WebGPU's GPU-NV12 path uses in-process libavcodec.

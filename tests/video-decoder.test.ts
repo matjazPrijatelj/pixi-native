@@ -896,16 +896,79 @@ test("a stalled live camera reconnects independently and recovers on presentatio
   }
 });
 
-test("playbackRate restarts file audio and video at the same media time", async () => {
+test("playbackRate restarts only file audio at the same media time", async () => {
   const factory = new FakeAudioVideoFactory();
   const video = new NativeVideo("video.mp4", { width: 2, height: 2 }, factory);
   await video.play();
+  const decoder = factory.decoders[0];
+  decoder.decoded = 4;
+  decoder.enqueue(createFrame(1_200_000), createFrame(1_250_000));
   factory.audios[0].currentTime = 1.25;
   video.playbackRate = 0.94;
   await new Promise<void>((resolve) => setImmediate(resolve));
-  assert.equal(factory.options.at(-1)?.startTime, 1.25);
-  assert.equal(factory.options.at(-1)?.playbackRate, 0.94);
+
+  assert.equal(factory.decoders.length, 1);
+  assert.equal(decoder.closed, false);
+  assert.equal(decoder.queuedFrames(), 2);
+  assert.equal(video.stats.decodedFrames, 4);
+  assert.equal(factory.audios.length, 2);
+  assert.equal(factory.audios[0].destroyed, true);
+  assert.equal(factory.audios[1].currentTime, 1.25);
   assert.equal(factory.audioPlaybackRates.at(-1), 0.94);
+  video.destroy();
+});
+
+test("playbackRate rebases the clock without restarting a silent file decoder", async () => {
+  const factory = new FakeDecoderFactory();
+  const video = new NativeVideo(
+    "video.mp4",
+    { width: 2, height: 2, audio: false },
+    factory,
+  );
+  await video.play();
+  const decoder = factory.decoders[0];
+  decoder.decoded = 3;
+
+  video.playbackRate = 1.25;
+
+  assert.equal(factory.decoders.length, 1);
+  assert.equal(decoder.closed, false);
+  assert.equal(video.playbackRate, 1.25);
+  assert.equal(video.stats.decodedFrames, 3);
+  video.destroy();
+});
+
+test("initial playbackRate controls audio without configuring the video decoder", async () => {
+  const factory = new FakeAudioVideoFactory();
+  const video = new NativeVideo(
+    "video.mp4",
+    { width: 2, height: 2, playbackRate: 0.94 },
+    factory,
+  );
+
+  await video.play();
+
+  assert.equal(factory.options[0].playbackRate, undefined);
+  assert.equal(factory.audioPlaybackRates[0], 0.94);
+  video.destroy();
+});
+
+test("rapid playbackRate changes keep one decoder and only the latest audio", async () => {
+  const factory = new FakeAudioVideoFactory();
+  const video = new NativeVideo("video.mp4", { width: 2, height: 2 }, factory);
+  await video.play();
+  factory.audios[0].currentTime = 2;
+
+  video.playbackRate = 0.94;
+  video.playbackRate = 0.8;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(factory.decoders.length, 1);
+  assert.equal(factory.decoders[0].closed, false);
+  assert.deepEqual(factory.audioPlaybackRates, [1, 0.94, 0.8]);
+  assert.equal(factory.audios[1].destroyed, true);
+  assert.equal(factory.audios[2].destroyed, false);
+  assert.equal(video.playbackRate, 0.8);
   video.destroy();
 });
 
